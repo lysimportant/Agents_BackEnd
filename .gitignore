@@ -27,7 +27,7 @@ backend/data/*.db-shm
 backend/uploads/*
 !backend/data/.gitkeep
 !backend/uploads/.gitkeep
-backups/
+# Workspace-local tool state
 .aionrs/
 .runtime-services.json
 
