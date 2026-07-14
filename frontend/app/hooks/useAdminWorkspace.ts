@@ -1,0 +1,632 @@
+'use client';
+
+import type { ChangeEvent, FormEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type {
+  Article,
+  ArticleForm,
+  AuthUser,
+  FileForm,
+  LoginForm,
+  ManagedFile,
+  Menu,
+  MenuForm,
+  PageKey,
+  User,
+  UserForm,
+} from '../types/admin';
+import { API_BASE_URL, MAX_UPLOAD_SIZE, emptyArticleForm, emptyFileForm, emptyMenuForm, emptyUserForm } from '../lib/constants';
+import { requestWithSession } from '../lib/api';
+import { buildMenuTree } from '../lib/menu';
+
+async function parseError(response: Response, fallback: string) {
+  try {
+    const payload = await response.json();
+    return payload.error ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function useAdminWorkspace() {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [loginForm, setLoginForm] = useState<LoginForm>({ username: 'MH', password: '123' });
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  const [users, setUsers] = useState<User[]>([]);
+  const [menus, setMenus] = useState<Menu[]>([]);
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [files, setFiles] = useState<ManagedFile[]>([]);
+  const [recycleFiles, setRecycleFiles] = useState<ManagedFile[]>([]);
+  const [userForm, setUserForm] = useState<UserForm>(emptyUserForm);
+  const [menuForm, setMenuForm] = useState<MenuForm>(emptyMenuForm);
+  const [articleForm, setArticleForm] = useState<ArticleForm>(emptyArticleForm);
+  const [fileForm, setFileForm] = useState<FileForm>(emptyFileForm);
+  const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
+  const [editingUserId, setEditingUserId] = useState<number | null>(null);
+  const [editingMenuId, setEditingMenuId] = useState<number | null>(null);
+  const [editingArticleId, setEditingArticleId] = useState<number | null>(null);
+  const [editingFileId, setEditingFileId] = useState<number | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [selectedMenuIds, setSelectedMenuIds] = useState<number[]>([]);
+  const [activePage, setActivePage] = useState<PageKey>('dashboard');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSavingUser, setIsSavingUser] = useState(false);
+  const [isSavingMenu, setIsSavingMenu] = useState(false);
+  const [isSavingArticle, setIsSavingArticle] = useState(false);
+  const [isSavingFile, setIsSavingFile] = useState(false);
+  const [isSavingPermission, setIsSavingPermission] = useState(false);
+  const [error, setError] = useState('');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [articleKeyword, setArticleKeyword] = useState('');
+  const [articleStatus, setArticleStatus] = useState('全部');
+  const [fileKeyword, setFileKeyword] = useState('');
+
+  const menuTree = useMemo(() => buildMenuTree(menus), [menus]);
+  const selectedUser = users.find((user) => user.id === selectedUserId);
+  const filteredArticles = useMemo(() => {
+    const keyword = articleKeyword.trim().toLowerCase();
+    return articles.filter((article) => {
+      const matchesKeyword = !keyword || [article.title, article.category, article.author, article.summary, article.ownerName ?? ''].some((value) => value.toLowerCase().includes(keyword));
+      const matchesStatus = articleStatus === '全部' || article.status === articleStatus;
+      return matchesKeyword && matchesStatus;
+    });
+  }, [articleKeyword, articleStatus, articles]);
+  const filteredFiles = useMemo(() => {
+    const keyword = fileKeyword.trim().toLowerCase();
+    if (!keyword) {
+      return files;
+    }
+    return files.filter((file) => [file.displayName, file.originalName, file.category, file.description, file.ownerName ?? ''].some((value) => value.toLowerCase().includes(keyword)));
+  }, [fileKeyword, files]);
+
+  const loadUserMenus = async (userId: number) => {
+    const response = await requestWithSession(`${API_BASE_URL}/api/users/${userId}/menus`);
+    if (!response.ok) {
+      throw new Error(await parseError(response, '加载用户权限失败'));
+    }
+    const data = (await response.json()) as Menu[];
+    setSelectedMenuIds(data.map((menu) => menu.id));
+  };
+
+  const loadRecycleFiles = async () => {
+    const response = await requestWithSession(`${API_BASE_URL}/api/files/recycle-bin`);
+    if (!response.ok) {
+      throw new Error(await parseError(response, '加载回收站失败'));
+    }
+    const payload = await response.json() as unknown;
+    const recycleData = Array.isArray(payload) ? payload as ManagedFile[] : [];
+    setRecycleFiles(recycleData);
+    return recycleData;
+  };
+
+  const loadData = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const [usersResponse, menusResponse, articlesResponse, filesResponse] = await Promise.all([
+        requestWithSession(`${API_BASE_URL}/api/users`),
+        requestWithSession(`${API_BASE_URL}/api/menus`),
+        requestWithSession(`${API_BASE_URL}/api/articles`),
+        requestWithSession(`${API_BASE_URL}/api/files`),
+      ]);
+      if (!usersResponse.ok) {
+        throw new Error(await parseError(usersResponse, '加载用户失败'));
+      }
+      if (!menusResponse.ok) {
+        throw new Error(await parseError(menusResponse, '加载菜单失败'));
+      }
+      if (!articlesResponse.ok) {
+        throw new Error(await parseError(articlesResponse, '加载文章失败'));
+      }
+      if (!filesResponse.ok) {
+        throw new Error(await parseError(filesResponse, '加载文件失败'));
+      }
+
+      const [usersPayload, menusPayload, articlesPayload, filesPayload] = await Promise.all([
+        usersResponse.json() as Promise<unknown>,
+        menusResponse.json() as Promise<unknown>,
+        articlesResponse.json() as Promise<unknown>,
+        filesResponse.json() as Promise<unknown>,
+      ]);
+      const usersData = Array.isArray(usersPayload) ? usersPayload as User[] : [];
+      const menusData = Array.isArray(menusPayload) ? menusPayload as Menu[] : [];
+      const articlesData = Array.isArray(articlesPayload) ? articlesPayload as Article[] : [];
+      const filesData = Array.isArray(filesPayload) ? filesPayload as ManagedFile[] : [];
+      setUsers(usersData);
+      setMenus(menusData);
+      setArticles(articlesData);
+      setFiles(filesData);
+
+      const nextSelectedUserId = selectedUserId && usersData.some((user) => user.id === selectedUserId) ? selectedUserId : usersData[0]?.id ?? null;
+      setSelectedUserId(nextSelectedUserId);
+      if (nextSelectedUserId) {
+        await loadUserMenus(nextSelectedUserId);
+      } else {
+        setSelectedMenuIds([]);
+      }
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : '加载数据失败');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    // 会话检查绝不能阻塞登录页：网络、Cookie 或代理异常时自动释放到登录页。
+    const safetyTimer = window.setTimeout(() => {
+      controller.abort(new DOMException('会话检查超时', 'AbortError'));
+      if (active) {
+        setAuthUser(null);
+        setIsCheckingSession(false);
+      }
+    }, 6_000);
+
+    async function restoreSession() {
+      try {
+        const response = await requestWithSession(`${API_BASE_URL}/api/auth/session`, {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        if (!response.ok || !active) {
+          return;
+        }
+        const payload = (await response.json()) as { user?: AuthUser };
+        setAuthUser(payload.user ?? null);
+      } catch {
+        if (active) {
+          setAuthUser(null);
+        }
+      } finally {
+        window.clearTimeout(safetyTimer);
+        if (active) {
+          setIsCheckingSession(false);
+        }
+      }
+    }
+
+    restoreSession();
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearTimeout(safetyTimer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (authUser) {
+      loadData();
+    }
+  }, [authUser]);
+
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsLoggingIn(true);
+    setLoginError('');
+    try {
+      const response = await requestWithSession(`${API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(loginForm),
+      });
+      if (!response.ok) {
+        throw new Error(await parseError(response, '登录失败'));
+      }
+      const payload = (await response.json()) as { user: AuthUser };
+      setAuthUser(payload.user);
+      setLoginForm({ username: 'MH', password: '123' });
+    } catch (loginErrorValue) {
+      setLoginError(loginErrorValue instanceof Error ? loginErrorValue.message : '登录失败');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await requestWithSession(`${API_BASE_URL}/api/auth/logout`, { method: 'POST' });
+    setAuthUser(null);
+    setActivePage('dashboard');
+    setUsers([]);
+    setMenus([]);
+    setArticles([]);
+    setFiles([]);
+    setRecycleFiles([]);
+    setSelectedUserId(null);
+    setSelectedMenuIds([]);
+  };
+
+  const resetUserForm = () => {
+    setUserForm(emptyUserForm);
+    setEditingUserId(null);
+  };
+
+  const resetMenuForm = () => {
+    setMenuForm(emptyMenuForm);
+    setEditingMenuId(null);
+  };
+
+  const resetArticleForm = () => {
+    setArticleForm(emptyArticleForm);
+    setEditingArticleId(null);
+  };
+
+  const resetFileForm = () => {
+    setFileForm(emptyFileForm);
+    setSelectedUploadFile(null);
+    setEditingFileId(null);
+  };
+
+  const handleSubmitUser = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSavingUser(true);
+    setError('');
+    try {
+      const response = await requestWithSession(`${API_BASE_URL}/api/users${editingUserId ? `/${editingUserId}` : ''}`, {
+        method: editingUserId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userForm),
+      });
+      if (!response.ok) {
+        throw new Error(await parseError(response, '保存用户失败'));
+      }
+      resetUserForm();
+      await loadData();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : '保存用户失败');
+    } finally {
+      setIsSavingUser(false);
+    }
+  };
+
+  const handleEditUser = (user: User) => {
+    setEditingUserId(user.id);
+    setUserForm({
+      username: user.username,
+      name: user.name,
+      role: user.role,
+      department: user.department,
+      status: user.status,
+      shift: user.shift,
+      phone: user.phone,
+      email: user.email,
+      canLogin: user.canLogin !== false,
+      password: '',
+    });
+  };
+
+  const handleDeleteUser = async (userId: number) => {
+    if (!window.confirm('确认删除该用户吗？')) {
+      return;
+    }
+    const response = await requestWithSession(`${API_BASE_URL}/api/users/${userId}`, { method: 'DELETE' });
+    if (!response.ok) {
+      setError(await parseError(response, '删除用户失败'));
+      return;
+    }
+    if (selectedUserId === userId) {
+      setSelectedUserId(null);
+      setSelectedMenuIds([]);
+    }
+    await loadData();
+  };
+
+  const handleSelectUser = async (userId: number) => {
+    setSelectedUserId(userId);
+    try {
+      await loadUserMenus(userId);
+    } catch (selectError) {
+      setError(selectError instanceof Error ? selectError.message : '加载用户权限失败');
+    }
+  };
+
+  const handleToggleMenuPermission = (menuId: number) => {
+    setSelectedMenuIds((current) => (current.includes(menuId) ? current.filter((id) => id !== menuId) : [...current, menuId]));
+  };
+
+  const handleSavePermissions = async () => {
+    if (!selectedUserId) {
+      return;
+    }
+    setIsSavingPermission(true);
+    setError('');
+    try {
+      const response = await requestWithSession(`${API_BASE_URL}/api/users/${selectedUserId}/menus`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ menuIds: selectedMenuIds }),
+      });
+      if (!response.ok) {
+        throw new Error(await parseError(response, '保存权限失败'));
+      }
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : '保存权限失败');
+    } finally {
+      setIsSavingPermission(false);
+    }
+  };
+
+  const handleSubmitMenu = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSavingMenu(true);
+    setError('');
+    try {
+      const response = await requestWithSession(`${API_BASE_URL}/api/menus${editingMenuId ? `/${editingMenuId}` : ''}`, {
+        method: editingMenuId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(menuForm),
+      });
+      if (!response.ok) {
+        throw new Error(await parseError(response, '保存菜单失败'));
+      }
+      resetMenuForm();
+      await loadData();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : '保存菜单失败');
+    } finally {
+      setIsSavingMenu(false);
+    }
+  };
+
+  const handleEditMenu = (menu: Menu) => {
+    setEditingMenuId(menu.id);
+    setMenuForm({ name: menu.name, code: menu.code, path: menu.path, icon: menu.icon, parentId: menu.parentId, sort: menu.sort, status: menu.status });
+  };
+
+  const handleDeleteMenu = async (menuId: number) => {
+    if (!window.confirm('确认删除该菜单吗？')) {
+      return;
+    }
+    const response = await requestWithSession(`${API_BASE_URL}/api/menus/${menuId}`, { method: 'DELETE' });
+    if (!response.ok) {
+      setError(await parseError(response, '删除菜单失败'));
+      return;
+    }
+    setSelectedMenuIds((current) => current.filter((id) => id !== menuId));
+    await loadData();
+  };
+
+  const handleSubmitArticle = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSavingArticle(true);
+    setError('');
+    try {
+      const response = await requestWithSession(`${API_BASE_URL}/api/articles${editingArticleId ? `/${editingArticleId}` : ''}`, {
+        method: editingArticleId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(articleForm),
+      });
+      if (!response.ok) {
+        throw new Error(await parseError(response, '保存文章失败'));
+      }
+      resetArticleForm();
+      await loadData();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : '保存文章失败');
+    } finally {
+      setIsSavingArticle(false);
+    }
+  };
+
+  const handleEditArticle = (article: Article) => {
+    setEditingArticleId(article.id);
+    setArticleForm({
+      title: article.title,
+      category: article.category,
+      author: article.author,
+      status: article.status,
+      summary: article.summary,
+      content: article.content,
+      isPrivate: Boolean(article.isPrivate),
+    });
+  };
+
+  const handleToggleArticleStatus = async (article: Article) => {
+    const nextArticle = { ...article, status: article.status === '已发布' ? '草稿' : '已发布' } as Article;
+    const response = await requestWithSession(`${API_BASE_URL}/api/articles/${article.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: nextArticle.title,
+        category: nextArticle.category,
+        author: nextArticle.author,
+        status: nextArticle.status,
+        summary: nextArticle.summary,
+        content: nextArticle.content,
+        isPrivate: Boolean(nextArticle.isPrivate),
+      }),
+    });
+    if (!response.ok) {
+      setError(await parseError(response, '更新文章状态失败'));
+      return;
+    }
+    await loadData();
+  };
+
+  const handleDeleteArticle = async (articleId: number) => {
+    const response = await requestWithSession(`${API_BASE_URL}/api/articles/${articleId}`, { method: 'DELETE' });
+    if (!response.ok) {
+      setError(await parseError(response, '删除文章失败'));
+      return;
+    }
+    await loadData();
+  };
+
+  const handleSelectUploadFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    if (file && file.size > MAX_UPLOAD_SIZE) {
+      setError('上传文件不能超过 10MB');
+      event.target.value = '';
+      setSelectedUploadFile(null);
+      return;
+    }
+    setSelectedUploadFile(file);
+  };
+
+  const handleSubmitFile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSavingFile(true);
+    setError('');
+    try {
+      let response: Response;
+      if (editingFileId) {
+        response = await requestWithSession(`${API_BASE_URL}/api/files/${editingFileId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(fileForm),
+        });
+      } else {
+        if (!selectedUploadFile) {
+          throw new Error('请选择要上传的文件');
+        }
+        const formData = new FormData();
+        formData.append('file', selectedUploadFile);
+        formData.append('displayName', fileForm.displayName);
+        formData.append('category', fileForm.category);
+        formData.append('description', fileForm.description);
+        formData.append('isPrivate', fileForm.isPrivate ? 'true' : 'false');
+        response = await requestWithSession(`${API_BASE_URL}/api/files`, { method: 'POST', body: formData });
+      }
+      if (!response.ok) {
+        throw new Error(await parseError(response, editingFileId ? '保存文件元数据失败' : '上传文件失败'));
+      }
+      resetFileForm();
+      await loadData();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : '保存文件失败');
+    } finally {
+      setIsSavingFile(false);
+    }
+  };
+
+  const handleEditFile = (file: ManagedFile) => {
+    setEditingFileId(file.id);
+    setFileForm({
+      displayName: file.displayName,
+      category: file.category,
+      description: file.description,
+      isPrivate: Boolean(file.isPrivate),
+    });
+    setSelectedUploadFile(null);
+  };
+
+  const handleDownloadFile = (fileId: number) => {
+    window.open(`${API_BASE_URL}/api/files/${fileId}/download`, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleDeleteFile = async (fileId: number) => {
+    setError('');
+    const response = await requestWithSession(`${API_BASE_URL}/api/files/${fileId}`, { method: 'DELETE' });
+    if (!response.ok) {
+      setError(await parseError(response, '移入回收站失败'));
+      return;
+    }
+    try {
+      await Promise.all([loadData(), loadRecycleFiles()]);
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : '文件已移入回收站，但列表刷新失败');
+    }
+  };
+
+  const handleRestoreFile = async (fileId: number) => {
+    setError('');
+    const response = await requestWithSession(`${API_BASE_URL}/api/files/${fileId}/restore`, { method: 'POST' });
+    if (!response.ok) {
+      setError(await parseError(response, '恢复文件失败'));
+      return;
+    }
+    try {
+      await Promise.all([loadData(), loadRecycleFiles()]);
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : '文件已恢复，但列表刷新失败');
+    }
+  };
+
+  const handleNavigate = (page: PageKey) => {
+    setActivePage(page);
+    setMobileSidebarOpen(false);
+  };
+
+  return {
+    authUser,
+    isCheckingSession,
+    loginForm,
+    loginError,
+    isLoggingIn,
+    users,
+    menus,
+    articles,
+    files,
+    recycleFiles,
+    userForm,
+    menuForm,
+    articleForm,
+    fileForm,
+    selectedUploadFile,
+    editingUserId,
+    editingMenuId,
+    editingArticleId,
+    editingFileId,
+    selectedUserId,
+    selectedUser,
+    selectedMenuIds,
+    activePage,
+    isLoading,
+    isSavingUser,
+    isSavingMenu,
+    isSavingArticle,
+    isSavingFile,
+    isSavingPermission,
+    error,
+    sidebarCollapsed,
+    mobileSidebarOpen,
+    articleKeyword,
+    articleStatus,
+    fileKeyword,
+    filteredArticles,
+    filteredFiles,
+    menuTree,
+    setLoginForm,
+    setUserForm,
+    setMenuForm,
+    setArticleForm,
+    setFileForm,
+    setArticleKeyword,
+    setArticleStatus,
+    setFileKeyword,
+    loadData,
+    handleLogin,
+    handleLogout,
+    resetUserForm,
+    resetMenuForm,
+    resetArticleForm,
+    resetFileForm,
+    handleSubmitUser,
+    handleEditUser,
+    handleDeleteUser,
+    handleSelectUser,
+    handleToggleMenuPermission,
+    handleSavePermissions,
+    handleSubmitMenu,
+    handleEditMenu,
+    handleDeleteMenu,
+    handleSubmitArticle,
+    handleEditArticle,
+    handleToggleArticleStatus,
+    handleDeleteArticle,
+    handleSelectUploadFile,
+    handleSubmitFile,
+    handleEditFile,
+    handleDownloadFile,
+    handleDeleteFile,
+    handleRestoreFile,
+    loadRecycleFiles,
+    handleNavigate,
+    setSidebarCollapsed,
+    setMobileSidebarOpen,
+  };
+}

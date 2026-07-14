@@ -1,0 +1,41 @@
+# Go
+backend/collector-backend.exe
+backend/*.exe
+backend/*.log
+backend/.*.log
+backend/.tmp-*/
+
+# Next.js / Node
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/*.log
+frontend/.*.log
+frontend/.frontend-runtime.json
+/node_modules/
+/.acceptance-*/
+/package.json
+/package-lock.json
+/findings.md
+/progress.md
+/task_plan.md
+
+# Local data, uploads, backups and runtime state
+backend/data/*.db
+backend/data/*.db-wal
+backend/data/*.db-shm
+backend/uploads/*
+!backend/data/.gitkeep
+!backend/uploads/.gitkeep
+backups/
+.aionrs/
+.runtime-services.json
+
+# Environment and editor files
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
