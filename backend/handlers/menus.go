@@ -1,37 +1,48 @@
-package menu_handlers
+package handlers
 
 import (
 	"net/http"
-	"strconv"
 
+	"collector-backend/middleware"
 	"collector-backend/models"
+	"collector-backend/utils"
 	"github.com/gin-gonic/gin"
 )
 
-type Store interface {
+type MenuStore interface {
 	ListMenus() []models.Menu
+	ListUserMenus(userID int) ([]models.Menu, string)
 	CreateMenu(request models.MenuRequest) (models.Menu, string)
 	UpdateMenu(id int, request models.MenuRequest) (models.Menu, string)
 	DeleteMenu(id int) string
 }
 
-type Handler struct {
-	store Store
+type MenuHandler struct {
+	store MenuStore
 }
 
-func New(store Store) *Handler {
-	return &Handler{store: store}
+func NewMenuHandler(store MenuStore) *MenuHandler {
+	return &MenuHandler{store: store}
 }
 
-func (h *Handler) List(c *gin.Context) {
-	menus := h.store.ListMenus()
+func (h *MenuHandler) List(c *gin.Context) {
+	user, exists := middleware.CurrentUser(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
+		return
+	}
+	menus, message := h.store.ListUserMenus(user.ID)
+	if message != "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": message})
+		return
+	}
 	if menus == nil {
 		menus = []models.Menu{}
 	}
 	c.JSON(http.StatusOK, menus)
 }
 
-func (h *Handler) Create(c *gin.Context) {
+func (h *MenuHandler) Create(c *gin.Context) {
 	var request models.MenuRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -45,8 +56,8 @@ func (h *Handler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, menu)
 }
 
-func (h *Handler) Update(c *gin.Context) {
-	id, ok := parseID(c)
+func (h *MenuHandler) Update(c *gin.Context) {
+	id, ok := utils.ParseID(c)
 	if !ok {
 		return
 	}
@@ -67,8 +78,8 @@ func (h *Handler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, menu)
 }
 
-func (h *Handler) Delete(c *gin.Context) {
-	id, ok := parseID(c)
+func (h *MenuHandler) Delete(c *gin.Context) {
+	id, ok := utils.ParseID(c)
 	if !ok {
 		return
 	}
@@ -82,13 +93,4 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
-}
-
-func parseID(c *gin.Context) (int, bool) {
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 ID"})
-		return 0, false
-	}
-	return id, true
 }

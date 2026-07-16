@@ -5,8 +5,10 @@ import {
   AppstoreOutlined,
   BoldOutlined,
   DeleteOutlined,
+  DownOutlined,
   EditOutlined,
   EyeOutlined,
+  ExportOutlined,
   FileTextOutlined,
   PictureOutlined,
   PlayCircleOutlined,
@@ -21,20 +23,22 @@ import {
   StrikethroughOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons';
-import { Button, Card, Empty, Input, Modal, Popconfirm, Select, Space, Statistic, Switch, Tag, Tooltip } from 'antd';
+import { Alert, Button, Card, Dropdown, Empty, Input, Modal, Popconfirm, Select, Space, Statistic, Switch, Tag, Tooltip } from 'antd';
 import type { Article, ArticleForm } from '../types/admin';
 import { API_BASE_URL, articleStatusOptions, MAX_UPLOAD_SIZE } from '../lib/constants';
 import { requestWithSession } from '../lib/api';
+import { articleExportOptions, exportArticle, type ArticleExportFormat } from '../lib/articleExport';
 
 type ArticlesPageProps = {
   filteredArticles: Article[];
+  canManage: boolean;
   articleForm: ArticleForm;
   editingArticleId: number | null;
   articleKeyword: string;
   articleStatus: string;
   isSavingArticle: boolean;
   onArticleFormChange: (form: ArticleForm) => void;
-  onSubmitArticle: (event: FormEvent<HTMLFormElement>) => void;
+  onSubmitArticle: (event: FormEvent<HTMLFormElement>) => Promise<boolean>;
   onResetArticleForm: () => void;
   onArticleKeywordChange: (keyword: string) => void;
   onArticleStatusChange: (status: string) => void;
@@ -46,35 +50,59 @@ type ArticlesPageProps = {
 
 export function ArticlesPage(props: ArticlesPageProps) {
   const {
-    filteredArticles, articleForm, editingArticleId, articleKeyword, articleStatus, isSavingArticle,
+    filteredArticles, canManage, articleForm, editingArticleId, articleKeyword, articleStatus, isSavingArticle,
     onArticleFormChange, onSubmitArticle, onResetArticleForm, onArticleKeywordChange,
     onArticleStatusChange, onResetFilters, onEditArticle, onToggleArticleStatus, onDeleteArticle,
   } = props;
   const [previewArticle, setPreviewArticle] = useState<Article | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editorArticleId, setEditorArticleId] = useState<number | null>(null);
+  const [exportingArticle, setExportingArticle] = useState<{ articleId: number; format: ArticleExportFormat } | null>(null);
+  const [exportFeedback, setExportFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const isEditing = editorArticleId !== null;
   const published = filteredArticles.filter((article) => article.status === '已发布').length;
 
   const openNew = () => { onResetArticleForm(); setEditorArticleId(null); setIsEditorOpen(true); };
   const openEdit = (article: Article) => { setEditorArticleId(article.id); setIsEditorOpen(true); onEditArticle(article); };
   const closeEditor = () => { onResetArticleForm(); setEditorArticleId(null); setIsEditorOpen(false); };
-  const submit = (event: FormEvent<HTMLFormElement>) => { onSubmitArticle(event); };
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    if (await onSubmitArticle(event)) {
+      setEditorArticleId(null);
+      setIsEditorOpen(false);
+    }
+  };
+  const handleExport = async (article: Article, format: ArticleExportFormat) => {
+    setExportFeedback(null);
+    setExportingArticle({ articleId: article.id, format });
+    try {
+      const message = await exportArticle(article, format);
+      setExportFeedback({ type: 'success', message });
+    } catch (error) {
+      setExportFeedback({ type: 'error', message: error instanceof Error ? error.message : `《${article.title}》导出失败，请重试。` });
+    } finally {
+      setExportingArticle(null);
+    }
+  };
 
-  return <div className="page-stack article-workspace">
-    <Card className="article-hero" bordered={false}>
-      <div><p className="page-kicker">内容管理 / 写作中心</p><h1>文章管理</h1><span>在富文本编辑器中创作、预览、保存和发布文章；所有操作均直连后端接口。</span></div>
-      <Space><Button type="primary" icon={<PlusOutlined />} onClick={openNew}>写文章</Button><Button icon={<AppstoreOutlined />} onClick={onResetFilters}>重置筛选</Button></Space>
+  return <section className="page-stack article-workspace" aria-labelledby="articles-page-title">
+    <Card className="article-hero" variant="borderless">
+      <div><p className="page-kicker">内容管理 / 写作中心</p><h1 id="articles-page-title">文章管理</h1><span>在富文本编辑器中创作、预览、保存和发布文章；所有操作均直连后端接口。</span></div>
+      <Space className="article-hero-actions" size={12} wrap>
+        {canManage && <Button className="article-create-button" icon={<PlusOutlined />} onClick={openNew}>新建文章</Button>}
+        <Button className="article-clear-filter-button" icon={<AppstoreOutlined />} onClick={onResetFilters}>清空筛选条件</Button>
+      </Space>
     </Card>
+
+    {exportFeedback && <Alert className="article-export-feedback" type={exportFeedback.type} title={exportFeedback.message} showIcon closable={{ onClose: () => setExportFeedback(null) }} />}
 
     <div className="article-stat-grid"><Card><Statistic title="当前结果" value={filteredArticles.length} prefix={<FileTextOutlined />} /></Card><Card><Statistic title="已发布" value={published} suffix="篇" prefix={<SendOutlined />} /></Card><Card><Statistic title="草稿 / 下架" value={filteredArticles.length - published} suffix="篇" prefix={<EditOutlined />} /></Card></div>
 
     <Card className="article-browser-card" title="文章库" extra={<Space className="article-filter-bar"><Input allowClear value={articleKeyword} onChange={(event) => onArticleKeywordChange(event.target.value)} placeholder="标题、分类、作者、摘要" prefix={<FileTextOutlined />} /><Select value={articleStatus} onChange={onArticleStatusChange} options={[{ value: '全部', label: '全部状态' }, ...articleStatusOptions.map((status) => ({ value: status, label: status }))]} /><Button onClick={onResetFilters}>重置</Button></Space>}>
-      {filteredArticles.length === 0 ? <Empty description="暂无匹配文章"><Button type="primary" onClick={openNew}>创建第一篇文章</Button></Empty> : <div className="article-card-list">{filteredArticles.map((article) => <ArticleCard key={article.id} article={article} onPreview={setPreviewArticle} onEdit={openEdit} onToggle={onToggleArticleStatus} onDelete={onDeleteArticle} />)}</div>}
+      {filteredArticles.length === 0 ? <Empty description="暂无匹配文章">{canManage && <Button type="primary" onClick={openNew}>创建第一篇文章</Button>}</Empty> : <div className="article-card-list" aria-label="文章列表">{filteredArticles.map((article) => <ArticleCard key={article.id} article={article} canManage={canManage} exportingFormat={exportingArticle?.articleId === article.id ? exportingArticle.format : null} exportDisabled={Boolean(exportingArticle)} onExport={handleExport} onPreview={setPreviewArticle} onEdit={openEdit} onToggle={onToggleArticleStatus} onDelete={onDeleteArticle} />)}</div>}
     </Card>
 
-    <Modal open={isEditorOpen} title={isEditing ? '编辑文章' : '新建文章'} footer={null} width="min(1160px, 96vw)" destroyOnClose onCancel={closeEditor}>
-      <form className="rich-editor-form" onSubmit={submit}>
+    {canManage && <Modal open={isEditorOpen} title={isEditing ? '编辑文章' : '新建文章'} footer={null} width="min(1160px, 96vw)" destroyOnHidden onCancel={closeEditor}>
+      <form className="rich-editor-form" onSubmit={(event) => void submit(event)}>
         <div className="rich-editor-meta">
           <label>标题<Input required size="large" value={articleForm.title} onChange={(event) => onArticleFormChange({ ...articleForm, title: event.target.value })} placeholder="请输入清晰、有辨识度的文章标题" /></label>
           <label>分类<Input required value={articleForm.category} onChange={(event) => onArticleFormChange({ ...articleForm, category: event.target.value })} placeholder="例如：通知公告" /></label>
@@ -92,18 +120,48 @@ export function ArticlesPage(props: ArticlesPageProps) {
         <RichTextEditor value={articleForm.content} onChange={(content) => onArticleFormChange({ ...articleForm, content })} />
         <div className="rich-editor-actions"><Button onClick={closeEditor}>取消</Button><Button htmlType="submit" type="primary" loading={isSavingArticle} icon={<SaveOutlined />}>{isEditing ? '保存修改' : '保存文章'}</Button></div>
       </form>
-    </Modal>
+    </Modal>}
 
     <ArticlePreview article={previewArticle} onClose={() => setPreviewArticle(null)} />
-  </div>;
+  </section>;
 }
 
-type ArticleCardProps = { article: Article; onPreview: (article: Article) => void; onEdit: (article: Article) => void; onToggle: (article: Article) => void; onDelete: (articleId: number) => void };
-function ArticleCard({ article, onPreview, onEdit, onToggle, onDelete }: ArticleCardProps) {
+type ArticleCardProps = {
+  article: Article;
+  canManage: boolean;
+  exportingFormat: ArticleExportFormat | null;
+  exportDisabled: boolean;
+  onExport: (article: Article, format: ArticleExportFormat) => Promise<void>;
+  onPreview: (article: Article) => void;
+  onEdit: (article: Article) => void;
+  onToggle: (article: Article) => void;
+  onDelete: (articleId: number) => void;
+};
+function ArticleCard({ article, canManage, exportingFormat, exportDisabled, onExport, onPreview, onEdit, onToggle, onDelete }: ArticleCardProps) {
   const isPublished = article.status === '已发布';
-  return <article className="article-library-card">
-    <div className="article-library-main"><div className="article-library-title"><h3>{article.title}</h3><Space size={6} wrap><Tag color={isPublished ? 'success' : article.status === '下架' ? 'default' : 'processing'}>{article.status}</Tag><Tag color={article.isPrivate ? 'warning' : 'blue'}>{article.isPrivate ? '私密' : '公开'}</Tag></Space></div><p>{article.summary || '暂无摘要，打开文章后可补充内容概览。'}</p><div className="article-library-meta"><span>{article.category}</span><span>作者：{article.author}</span><span>归属：{article.ownerName || '未知'}</span><span>浏览 {article.views}</span><span>{new Date(article.updatedAt).toLocaleString()}</span></div></div>
-    <Space wrap className="article-library-actions"><Tooltip title="在安全预览窗口中查看排版"><Button icon={<EyeOutlined />} onClick={() => onPreview(article)}>预览</Button></Tooltip><Button icon={<EditOutlined />} onClick={() => onEdit(article)}>编辑</Button><Button type={isPublished ? 'default' : 'primary'} icon={<SendOutlined />} onClick={() => onToggle(article)}>{isPublished ? '下架' : '发布'}</Button><Popconfirm title="确认删除此文章？此操作不可恢复。" okText="删除" cancelText="取消" onConfirm={() => onDelete(article.id)}><Button danger icon={<DeleteOutlined />}>删除</Button></Popconfirm></Space>
+  const isIndexable = isPublished && !article.isPrivate;
+  const titleId = `article-title-${article.id}`;
+  return <article className="article-library-card" aria-labelledby={titleId} itemScope={isIndexable} itemType={isIndexable ? 'https://schema.org/Article' : undefined}>
+    <div className="article-library-main"><div className="article-library-title"><h3 id={titleId} itemProp={isIndexable ? 'headline' : undefined}>{article.title}</h3><Space size={6} wrap><Tag color={isPublished ? 'success' : article.status === '下架' ? 'default' : 'processing'}>{article.status}</Tag><Tag color={article.isPrivate ? 'warning' : 'blue'}>{article.isPrivate ? '私密' : '公开'}</Tag></Space></div><p itemProp={isIndexable ? 'description' : undefined}>{article.summary || '暂无摘要，打开文章后可补充内容概览。'}</p><div className="article-library-meta"><span itemProp={isIndexable ? 'articleSection' : undefined}>{article.category}</span><span itemProp={isIndexable ? 'author' : undefined}>作者：{article.author}</span><span>归属：{article.ownerName || '未知'}</span><span>浏览 {article.views}</span><time itemProp={isIndexable ? 'dateModified' : undefined} dateTime={article.updatedAt}>{new Date(article.updatedAt).toLocaleString()}</time></div></div>
+    <Space wrap className="article-library-actions">
+      <Tooltip title="在安全预览窗口中查看排版"><Button icon={<EyeOutlined />} onClick={() => onPreview(article)}>预览</Button></Tooltip>
+      <Dropdown
+        rootClassName="article-export-dropdown"
+        trigger={['click']}
+        disabled={exportDisabled}
+        menu={{
+          items: articleExportOptions.map((option) => ({ key: option.key, label: option.label })),
+          onClick: ({ key }) => void onExport(article, key as ArticleExportFormat),
+        }}
+      >
+        <Button type="primary" className="article-export-button" icon={<ExportOutlined />} loading={Boolean(exportingFormat)} aria-label={`导出《${article.title}》完整内容`}>
+          {exportingFormat ? '正在导出' : '导出全文'} {!exportingFormat && <DownOutlined />}
+        </Button>
+      </Dropdown>
+      {canManage && <Button icon={<EditOutlined />} onClick={() => onEdit(article)}>编辑</Button>}
+      {canManage && <Button type={isPublished ? 'default' : 'primary'} icon={<SendOutlined />} onClick={() => onToggle(article)}>{isPublished ? '下架' : '发布'}</Button>}
+      {canManage && <Popconfirm title="确认删除此文章？此操作不可恢复。" okText="删除" cancelText="取消" onConfirm={() => onDelete(article.id)}><Button danger icon={<DeleteOutlined />}>删除</Button></Popconfirm>}
+    </Space>
   </article>;
 }
 
@@ -137,7 +195,11 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
   };
   const insertExternalImage = () => {
     const url = normalizeExternalUrl(window.prompt('请输入图片 URL（https://…）') ?? '');
-    if (url) insertHTML(`<figure class="article-media image-media"><img src="${escapeHtmlAttribute(url)}" alt="文章图片" loading="lazy" /><figcaption>图片</figcaption></figure><p><br /></p>`);
+    if (url) {
+      const description = (window.prompt('请输入图片说明（用于替代文本和内容检索）') ?? '').trim() || '文章配图';
+      const safeDescription = escapeHtmlAttribute(description);
+      insertHTML(`<figure class="article-media image-media"><img src="${escapeHtmlAttribute(url)}" alt="${safeDescription}" title="${safeDescription}" loading="lazy" decoding="async" /><figcaption>${safeDescription}</figcaption></figure><p><br /></p>`);
+    }
   };
   const insertExternalVideo = () => {
     const url = normalizeExternalUrl(window.prompt('请输入视频 URL（mp4 / webm / ogg，https://…）') ?? '');
@@ -170,7 +232,7 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
       const source = `${API_BASE_URL}/api/files/${uploaded.id}/preview`;
       const label = escapeHtmlAttribute(uploaded.displayName || file.name);
       if (kind === 'image') {
-        insertHTML(`<figure class="article-media image-media"><img src="${source}" alt="${label}" loading="lazy" /><figcaption>${label}</figcaption></figure><p><br /></p>`);
+        insertHTML(`<figure class="article-media image-media"><img src="${source}" alt="${label}" title="${label}" loading="lazy" decoding="async" /><figcaption>${label}</figcaption></figure><p><br /></p>`);
       } else {
         insertHTML(`<figure class="article-media video-media"><video controls preload="metadata" src="${source}">当前浏览器不支持视频播放。</video><figcaption>${label}</figcaption></figure><p><br /></p>`);
       }
@@ -220,6 +282,18 @@ function ToolbarButton({ label, icon, text, onClick }: { label: string; icon?: R
 function ArticlePreview({ article, onClose }: { article: Article | null; onClose: () => void }) {
   const safeContent = article ? sanitizeArticleHtml(article.content || '<p>暂无正文内容。</p>') : '';
   const [imageSource, setImageSource] = useState<string | null>(null);
+  const isIndexable = Boolean(article && article.status === '已发布' && !article.isPrivate);
+  const structuredData = article && isIndexable ? JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: article.title,
+    description: article.summary || undefined,
+    articleSection: article.category,
+    author: { '@type': 'Person', name: article.author },
+    datePublished: article.createdAt,
+    dateModified: article.updatedAt,
+    isAccessibleForFree: true,
+  }).replace(/</g, '\\u003c') : '';
   const handlePreviewContentClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     const image = (event.target as HTMLElement).closest('img');
     if (image instanceof HTMLImageElement && image.currentSrc) {
@@ -228,11 +302,13 @@ function ArticlePreview({ article, onClose }: { article: Article | null; onClose
   };
 
   return <>
-    <Modal className="article-preview-modal" open={Boolean(article)} title={article?.title} footer={<Button onClick={onClose}>关闭预览</Button>} width="min(1320px, 97vw)" onCancel={onClose} destroyOnClose>
-      <article className="article-preview">
-        <div className="article-preview-meta"><Tag color="blue">{article?.category}</Tag><Tag color={article?.isPrivate ? 'warning' : 'default'}>{article?.isPrivate ? '私密' : '公开'}</Tag><span>作者：{article?.author}</span><span>归属：{article?.ownerName || '未知'}</span><span>{article && new Date(article.updatedAt).toLocaleString()}</span><span>点击图片可放大、缩放和拖动查看</span></div>
+    <Modal className="article-preview-modal" open={Boolean(article)} title="文章预览" footer={<Button onClick={onClose}>关闭预览</Button>} width="min(1320px, 97vw)" onCancel={onClose} destroyOnHidden>
+      <article className="article-preview" itemScope={isIndexable} itemType={isIndexable ? 'https://schema.org/Article' : undefined}>
+        {structuredData && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: structuredData }} />}
+        <h1 className="article-preview-title" itemProp={isIndexable ? 'headline' : undefined}>{article?.title}</h1>
+        <div className="article-preview-meta"><Tag color="blue"><span itemProp={isIndexable ? 'articleSection' : undefined}>{article?.category}</span></Tag><Tag color={article?.isPrivate ? 'warning' : 'default'}>{article?.isPrivate ? '私密' : '公开'}</Tag><span itemProp={isIndexable ? 'author' : undefined}>作者：{article?.author}</span><span>归属：{article?.ownerName || '未知'}</span>{article && <time itemProp={isIndexable ? 'dateModified' : undefined} dateTime={article.updatedAt}>{new Date(article.updatedAt).toLocaleString()}</time>}<span>点击图片可放大、缩放和拖动查看</span></div>
         {article?.summary && <p className="article-preview-summary">{article.summary}</p>}
-        <div className="article-preview-content" onClick={handlePreviewContentClick} dangerouslySetInnerHTML={{ __html: safeContent }} />
+        <div className="article-preview-content" itemProp={isIndexable ? 'articleBody' : undefined} onClick={handlePreviewContentClick} dangerouslySetInnerHTML={{ __html: safeContent }} />
       </article>
     </Modal>
     <ImageZoomPreview source={imageSource} onClose={() => setImageSource(null)} />
@@ -244,9 +320,11 @@ function ImageZoomPreview({ source, onClose }: { source: string | null; onClose:
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ x: number; y: number; originX: number; originY: number } | null>(null);
   useEffect(() => { setScale(1); setOffset({ x: 0, y: 0 }); }, [source]);
-  const adjustScale = (amount: number) => setScale((current) => Math.max(0.35, Math.min(5, Number((current + amount).toFixed(2)))));
+  // Keep a lower bound so the preview remains recoverable, but do not cap
+  // the upper bound: large source images may need more than a few hundred %.
+  const adjustScale = (amount: number) => setScale((current) => Math.max(0.1, Number((current + amount).toFixed(2))));
   const reset = () => { setScale(1); setOffset({ x: 0, y: 0 }); };
-  return <Modal className="article-image-zoom-modal" open={Boolean(source)} title="图片放大预览" footer={null} width="min(1500px, 98vw)" onCancel={onClose} destroyOnClose>
+  return <Modal className="article-image-zoom-modal" open={Boolean(source)} title="图片放大预览" footer={null} width="min(1500px, 98vw)" onCancel={onClose} destroyOnHidden>
     <div className="image-zoom-toolbar">
       <Space>
         <Button aria-label="缩小图片" icon={<MinusOutlined />} onClick={() => adjustScale(-0.25)}>缩小</Button>
@@ -278,12 +356,17 @@ function sanitizeArticleHtml(input: string) {
       const isSafeMediaSource = /^(https?:\/\/|\/api\/files\/)/i.test(value) || value.startsWith(`${API_BASE_URL}/api/files/`);
       if (node.tagName === 'A' && name === 'href' && /^(https?:|mailto:|#)/i.test(value)) return;
       if ((node.tagName === 'IMG' || node.tagName === 'VIDEO' || node.tagName === 'SOURCE') && name === 'src' && isSafeMediaSource) return;
-      if (node.tagName === 'IMG' && name === 'alt') return;
+      if (node.tagName === 'IMG' && ['alt', 'title', 'loading', 'decoding'].includes(name)) return;
       if (node.tagName === 'VIDEO' && (name === 'controls' || name === 'preload')) return;
       if ((node.tagName === 'FIGURE' || node.tagName === 'DIV') && name === 'class' && /^article-media\s+(image-media|video-media)$/.test(value)) return;
       node.removeAttribute(attribute.name);
     });
     if (node.tagName === 'A') { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer'); }
+    if (node.tagName === 'IMG') {
+      if (!node.getAttribute('alt')?.trim()) node.setAttribute('alt', '文章内容图片');
+      node.setAttribute('loading', 'lazy');
+      node.setAttribute('decoding', 'async');
+    }
   });
   return template.innerHTML;
 }

@@ -29,7 +29,17 @@ backend/uploads/*
 !backend/uploads/.gitkeep
 # Workspace-local tool state
 .aionrs/
+_task-*/
+.workspace-temp/
+.task-backups/
+.task-logs/
+.task-tmp/
 .runtime-services.json
+
+# Regenerable local build and test artifacts
+backend/*.exe~
+backend/.tmp-*/
+frontend/tsconfig.tsbuildinfo
 
 # Environment and editor files
 .env

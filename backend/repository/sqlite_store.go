@@ -18,6 +18,8 @@ type SQLiteStore struct {
 	db *sql.DB
 }
 
+const userSelectColumns = `u.id,u.username,u.name,u.role_id,u.role,COALESCE(r.code,''),u.department_id,u.department,u.status,u.shift,u.phone,u.email,u.age,u.description,u.avatar_url,u.can_login,u.password_hash,u.created_at,u.updated_at`
+
 func NewSQLiteStore(db *sql.DB) *SQLiteStore {
 	return &SQLiteStore{db: db}
 }
@@ -26,7 +28,72 @@ func (s *SQLiteStore) MigrateAndSeed() error {
 	if err := s.migrate(); err != nil {
 		return err
 	}
-	return s.seed()
+	// Menus are reconciled before department defaults so newly seeded
+	// departments can receive their dashboard/all-menu baseline safely.
+	if err := s.reconcileApplicationMenus(); err != nil {
+		return err
+	}
+	if err := s.seedDepartments(); err != nil {
+		return err
+	}
+	if err := s.seedRoles(); err != nil {
+		return err
+	}
+	if err := s.seed(); err != nil {
+		return err
+	}
+	if err := s.reconcileLegacyUserRoles(); err != nil {
+		return err
+	}
+	return s.assignMHAdminInvariants()
+}
+
+type applicationMenuSeed struct {
+	Name, Code, Path, Icon, ParentCode string
+	Sort                               int
+}
+
+func (s *SQLiteStore) reconcileApplicationMenus() error {
+	seeds := []applicationMenuSeed{
+		{Name: "工作台", Code: "dashboard", Path: "dashboard", Icon: "dashboard", Sort: 10},
+		{Name: "系统管理", Code: "system", Icon: "setting", Sort: 20},
+		{Name: "用户管理", Code: "users", Path: "users", Icon: "team", ParentCode: "system", Sort: 21},
+		{Name: "部门管理", Code: "departments", Path: "departments", Icon: "apartment", ParentCode: "system", Sort: 22},
+		{Name: "角色管理", Code: "roles", Path: "roles", Icon: "shield", ParentCode: "system", Sort: 23},
+		{Name: "菜单管理", Code: "menus", Path: "menus", Icon: "menu", ParentCode: "system", Sort: 24},
+		{Name: "内容管理", Code: "content", Icon: "folder", Sort: 30},
+		{Name: "文章管理", Code: "articles", Path: "articles", Icon: "file-text", ParentCode: "content", Sort: 31},
+		{Name: "文件管理", Code: "files", Path: "files", Icon: "folder-open", ParentCode: "content", Sort: 32},
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	ids := map[string]int{}
+	now := timeText(time.Now())
+	for _, seed := range seeds {
+		var existingID int
+		err = tx.QueryRow(`SELECT id FROM menus WHERE code=?`, seed.Code).Scan(&existingID)
+		if err == nil {
+			ids[seed.Code] = existingID
+			continue
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		var parentID any
+		if seed.ParentCode != "" {
+			parentID = ids[seed.ParentCode]
+		}
+		result, execErr := tx.Exec(`INSERT INTO menus(name,code,path,icon,parent_id,sort,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`, seed.Name, seed.Code, seed.Path, seed.Icon, parentID, seed.Sort, "启用", now, now)
+		if execErr != nil {
+			return execErr
+		}
+		id, _ := result.LastInsertId()
+		ids[seed.Code] = int(id)
+	}
+	return tx.Commit()
 }
 
 func (s *SQLiteStore) migrate() error {
@@ -39,20 +106,51 @@ func (s *SQLiteStore) migrate() error {
 			unit TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS departments (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			code TEXT NOT NULL UNIQUE,
+			parent_id INTEGER,
+			leader TEXT NOT NULL DEFAULT '',
+			phone TEXT NOT NULL DEFAULT '',
+			email TEXT NOT NULL DEFAULT '',
+			sort INTEGER NOT NULL DEFAULT 0,
+			status TEXT NOT NULL DEFAULT '启用',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			FOREIGN KEY (parent_id) REFERENCES departments(id)
+		)`,
+		`CREATE TABLE IF NOT EXISTS roles (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			code TEXT NOT NULL UNIQUE,
+			description TEXT NOT NULL DEFAULT '',
+			sort INTEGER NOT NULL DEFAULT 0,
+			status TEXT NOT NULL DEFAULT '启用',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
 		`CREATE TABLE IF NOT EXISTS users (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			username TEXT NOT NULL UNIQUE,
 			name TEXT NOT NULL,
+			role_id INTEGER,
 			role TEXT NOT NULL,
+			department_id INTEGER,
 			department TEXT NOT NULL DEFAULT '',
 			status TEXT NOT NULL,
 			shift TEXT NOT NULL DEFAULT '',
 			phone TEXT NOT NULL DEFAULT '',
 			email TEXT NOT NULL DEFAULT '',
+			age INTEGER NOT NULL DEFAULT 0,
+			description TEXT NOT NULL DEFAULT '',
+			avatar_url TEXT NOT NULL DEFAULT '',
 			can_login INTEGER NOT NULL DEFAULT 1,
 			password_hash TEXT NOT NULL,
 			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
+			updated_at TEXT NOT NULL,
+			FOREIGN KEY (department_id) REFERENCES departments(id),
+			FOREIGN KEY (role_id) REFERENCES roles(id)
 		)`,
 		`CREATE TABLE IF NOT EXISTS menus (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,6 +168,20 @@ func (s *SQLiteStore) migrate() error {
 			user_id INTEGER NOT NULL,
 			menu_id INTEGER NOT NULL,
 			PRIMARY KEY (user_id, menu_id)
+		)`,
+		`CREATE TABLE IF NOT EXISTS department_menus (
+			department_id INTEGER NOT NULL,
+			menu_id INTEGER NOT NULL,
+			PRIMARY KEY (department_id, menu_id),
+			FOREIGN KEY (department_id) REFERENCES departments(id),
+			FOREIGN KEY (menu_id) REFERENCES menus(id)
+		)`,
+		`CREATE TABLE IF NOT EXISTS role_menus (
+			role_id INTEGER NOT NULL,
+			menu_id INTEGER NOT NULL,
+			PRIMARY KEY (role_id, menu_id),
+			FOREIGN KEY (role_id) REFERENCES roles(id),
+			FOREIGN KEY (menu_id) REFERENCES menus(id)
 		)`,
 		`CREATE TABLE IF NOT EXISTS sessions (
 			id TEXT PRIMARY KEY,
@@ -120,7 +232,12 @@ func (s *SQLiteStore) migrate() error {
 	}{
 		{"data_points", "metric", "ALTER TABLE data_points ADD COLUMN metric TEXT NOT NULL DEFAULT ''"},
 		{"data_points", "unit", "ALTER TABLE data_points ADD COLUMN unit TEXT NOT NULL DEFAULT ''"},
+		{"users", "role_id", "ALTER TABLE users ADD COLUMN role_id INTEGER"},
+		{"users", "department_id", "ALTER TABLE users ADD COLUMN department_id INTEGER"},
 		{"users", "can_login", "ALTER TABLE users ADD COLUMN can_login INTEGER NOT NULL DEFAULT 1"},
+		{"users", "age", "ALTER TABLE users ADD COLUMN age INTEGER NOT NULL DEFAULT 0"},
+		{"users", "description", "ALTER TABLE users ADD COLUMN description TEXT NOT NULL DEFAULT ''"},
+		{"users", "avatar_url", "ALTER TABLE users ADD COLUMN avatar_url TEXT NOT NULL DEFAULT ''"},
 		{"articles", "owner_id", "ALTER TABLE articles ADD COLUMN owner_id INTEGER NOT NULL DEFAULT 0"},
 		{"articles", "is_private", "ALTER TABLE articles ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0"},
 		{"files", "owner_id", "ALTER TABLE files ADD COLUMN owner_id INTEGER NOT NULL DEFAULT 0"},
@@ -128,6 +245,18 @@ func (s *SQLiteStore) migrate() error {
 	}
 	for _, migration := range columnMigrations {
 		if err := s.ensureColumn(migration.table, migration.column, migration.ddl); err != nil {
+			return err
+		}
+	}
+	indexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_departments_parent_id ON departments(parent_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_users_department_id ON users(department_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_department_menus_menu_id ON department_menus(menu_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_role_menus_menu_id ON role_menus(menu_id)`,
+	}
+	for _, statement := range indexes {
+		if _, err := s.db.Exec(statement); err != nil {
 			return err
 		}
 	}
@@ -144,6 +273,11 @@ func (s *SQLiteStore) migrate() error {
 		SET owner_id = COALESCE((SELECT id FROM users WHERE role = '系统管理员' ORDER BY id LIMIT 1), 1)
 		WHERE owner_id = 0 OR owner_id IS NULL
 	`); err != nil {
+		return err
+	}
+	// Older databases allowed the UI to persist can_login=1 alongside a
+	// stopped status. Normalize that legacy flag while retaining the account.
+	if _, err := s.db.Exec(`UPDATE users SET can_login=0,updated_at=? WHERE status='停用' AND can_login<>0`, timeText(time.Now().UTC())); err != nil {
 		return err
 	}
 	return nil
@@ -173,79 +307,30 @@ func (s *SQLiteStore) ensureColumn(table, column, ddl string) error {
 }
 
 func (s *SQLiteStore) seed() error {
-	var userCount int
-	if err := s.db.QueryRow(`SELECT COUNT(1) FROM users`).Scan(&userCount); err != nil {
+	var mhCount int
+	if err := s.db.QueryRow(`SELECT COUNT(1) FROM users WHERE lower(username)=lower('MH')`).Scan(&mhCount); err != nil {
 		return err
 	}
-	if userCount == 0 {
+	if mhCount == 0 {
 		now := timeText(time.Now())
-		passwordHash, err := auth.HashPassword("admin123")
+		passwordHash, err := auth.HashPassword("123")
 		if err != nil {
 			return err
 		}
+		var rootID int
+		if err := s.db.QueryRow(`SELECT id FROM departments WHERE code='huajian'`).Scan(&rootID); err != nil {
+			return err
+		}
+		var roleID int
+		if err := s.db.QueryRow(`SELECT id FROM roles WHERE code='system-admin'`).Scan(&roleID); err != nil {
+			return err
+		}
 		if _, err := s.db.Exec(
-			`INSERT INTO users (username,name,role,department,status,shift,phone,email,can_login,password_hash,created_at,updated_at)
-			 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-			"admin", "系统管理员", "系统管理员", "管理中心", "在岗", "全天", "", "", 1, passwordHash, now, now,
+			`INSERT INTO users (username,name,role_id,role,department_id,department,status,shift,phone,email,age,description,avatar_url,can_login,password_hash,created_at,updated_at)
+			 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			"MH", "MH", roleID, "系统管理员", rootID, "HuaJian技术有限公司", "在岗", "常白班", "", "mh@example.com", 0, "", "", 1, passwordHash, now, now,
 		); err != nil {
 			return err
-		}
-	}
-
-	var menuCount int
-	if err := s.db.QueryRow(`SELECT COUNT(1) FROM menus`).Scan(&menuCount); err != nil {
-		return err
-	}
-	if menuCount == 0 {
-		now := timeText(time.Now())
-		menus := []models.Menu{
-			{Name: "工作台", Code: "dashboard", Path: "/", Icon: "DashboardOutlined", Sort: 1, Status: "启用"},
-			{Name: "数据采集", Code: "collection", Path: "/collection", Icon: "CloudDownloadOutlined", Sort: 2, Status: "启用"},
-			{Name: "文件管理", Code: "files", Path: "/files", Icon: "FolderOpenOutlined", Sort: 3, Status: "启用"},
-			{Name: "文章管理", Code: "articles", Path: "/articles", Icon: "FileTextOutlined", Sort: 4, Status: "启用"},
-			{Name: "用户管理", Code: "users", Path: "/users", Icon: "TeamOutlined", Sort: 5, Status: "启用"},
-			{Name: "菜单管理", Code: "menus", Path: "/menus", Icon: "MenuOutlined", Sort: 6, Status: "启用"},
-		}
-		for _, menu := range menus {
-			if _, err := s.db.Exec(
-				`INSERT INTO menus (name,code,path,icon,parent_id,sort,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)`,
-				menu.Name, menu.Code, menu.Path, menu.Icon, nil, menu.Sort, menu.Status, now, now,
-			); err != nil {
-				return err
-			}
-		}
-	}
-
-	var adminID int
-	if err := s.db.QueryRow(`SELECT id FROM users WHERE username='admin' LIMIT 1`).Scan(&adminID); err == nil {
-		var assigned int
-		if err := s.db.QueryRow(`SELECT COUNT(1) FROM user_menus WHERE user_id=?`, adminID).Scan(&assigned); err != nil {
-			return err
-		}
-		if assigned == 0 {
-			rows, err := s.db.Query(`SELECT id FROM menus`)
-			if err != nil {
-				return err
-			}
-			menuIDs := make([]int, 0)
-			for rows.Next() {
-				var menuID int
-				if err := rows.Scan(&menuID); err != nil {
-					rows.Close()
-					return err
-				}
-				menuIDs = append(menuIDs, menuID)
-			}
-			if err := rows.Err(); err != nil {
-				rows.Close()
-				return err
-			}
-			rows.Close()
-			for _, menuID := range menuIDs {
-				if _, err := s.db.Exec(`INSERT OR IGNORE INTO user_menus (user_id, menu_id) VALUES (?, ?)`, adminID, menuID); err != nil {
-					return err
-				}
-			}
 		}
 	}
 	return nil
@@ -293,7 +378,11 @@ func (s *SQLiteStore) ReconcileUploadFiles(uploadDir string) error {
 }
 
 func (s *SQLiteStore) findAdminUser() (models.User, bool) {
-	return scanUser(s.db.QueryRow(`SELECT id,username,name,role,department,status,shift,phone,email,can_login,password_hash,created_at,updated_at FROM users WHERE role='系统管理员' ORDER BY id LIMIT 1`))
+	return scanUser(s.db.QueryRow(`
+		SELECT `+userSelectColumns+`
+		FROM users u LEFT JOIN roles r ON r.id=u.role_id
+		WHERE r.code=? ORDER BY u.id LIMIT 1
+	`, systemAdminRoleCode))
 }
 
 func (s *SQLiteStore) ListDataPoints() []models.DataPoint {
@@ -336,7 +425,10 @@ func (s *SQLiteStore) CreateDataPoint(request models.CreateDataPointRequest) mod
 }
 
 func (s *SQLiteStore) ListUsers() []models.User {
-	rows, err := s.db.Query(`SELECT id,username,name,role,department,status,shift,phone,email,can_login,password_hash,created_at,updated_at FROM users ORDER BY id`)
+	rows, err := s.db.Query(`
+		SELECT ` + userSelectColumns + `
+		FROM users u LEFT JOIN roles r ON r.id=u.role_id ORDER BY u.id
+	`)
 	if err != nil {
 		return []models.User{}
 	}
@@ -351,11 +443,88 @@ func (s *SQLiteStore) ListUsers() []models.User {
 }
 
 func (s *SQLiteStore) FindUserByID(id int) (models.User, bool) {
-	return scanUser(s.db.QueryRow(`SELECT id,username,name,role,department,status,shift,phone,email,can_login,password_hash,created_at,updated_at FROM users WHERE id=?`, id))
+	return scanUser(s.db.QueryRow(`
+		SELECT `+userSelectColumns+`
+		FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.id=?
+	`, id))
 }
 
 func (s *SQLiteStore) FindUserByUsername(username string) (models.User, bool) {
-	return scanUser(s.db.QueryRow(`SELECT id,username,name,role,department,status,shift,phone,email,can_login,password_hash,created_at,updated_at FROM users WHERE username=?`, username))
+	return scanUser(s.db.QueryRow(`
+		SELECT `+userSelectColumns+`
+		FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE lower(u.username)=lower(?)
+	`, strings.TrimSpace(username)))
+}
+
+func (s *SQLiteStore) UpdateUserProfile(id int, request models.UserProfileRequest) (models.User, string) {
+	existing, ok := s.FindUserByID(id)
+	if !ok {
+		return models.User{}, "用户不存在"
+	}
+	name, email, phone := existing.Name, existing.Email, existing.Phone
+	age, description, avatarURL := existing.Age, existing.Description, existing.AvatarURL
+	if request.Name != nil {
+		name = strings.TrimSpace(*request.Name)
+		if name == "" {
+			return models.User{}, "姓名不能为空"
+		}
+	}
+	if request.Email != nil {
+		email = strings.TrimSpace(*request.Email)
+	}
+	if request.Phone != nil {
+		phone = strings.TrimSpace(*request.Phone)
+	}
+	if request.Age != nil {
+		age = *request.Age
+	}
+	if age < 0 || age > 150 {
+		return models.User{}, "年龄必须在 0 到 150 之间"
+	}
+	if request.Description != nil {
+		description = strings.TrimSpace(*request.Description)
+	}
+	if request.AvatarURL != nil {
+		avatarURL = strings.TrimSpace(*request.AvatarURL)
+	}
+	if _, err := s.db.Exec(
+		`UPDATE users SET name=?,phone=?,email=?,age=?,description=?,avatar_url=?,updated_at=? WHERE id=?`,
+		name, phone, email, age, description, avatarURL, timeText(time.Now().UTC()), id,
+	); err != nil {
+		return models.User{}, "更新个人资料失败"
+	}
+	user, _ := s.FindUserByID(id)
+	return user, ""
+}
+
+func (s *SQLiteStore) ListRoleUsers(roleID int) ([]models.User, string) {
+	if _, ok := s.FindRoleByID(roleID); !ok {
+		return nil, "角色不存在"
+	}
+	return s.listUsersByRelation("role_id", roleID), ""
+}
+
+func (s *SQLiteStore) ListDepartmentUsers(departmentID int) ([]models.User, string) {
+	if _, ok := s.FindDepartmentByID(departmentID); !ok {
+		return nil, "部门不存在"
+	}
+	return s.listUsersByRelation("department_id", departmentID), ""
+}
+
+func (s *SQLiteStore) listUsersByRelation(column string, id int) []models.User {
+	// column is selected only from the two constants above; it is never user input.
+	rows, err := s.db.Query(`SELECT `+userSelectColumns+` FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.`+column+`=? ORDER BY u.id`, id)
+	if err != nil {
+		return []models.User{}
+	}
+	defer rows.Close()
+	users := []models.User{}
+	for rows.Next() {
+		if user, ok := scanUser(rows); ok {
+			users = append(users, user)
+		}
+	}
+	return users
 }
 
 func (s *SQLiteStore) CreateUser(request models.UserRequest, passwordHash string) (models.User, string) {
@@ -371,10 +540,34 @@ func (s *SQLiteStore) CreateUser(request models.UserRequest, passwordHash string
 	if status == "" {
 		status = "在岗"
 	}
+	departmentID, departmentName, message := s.resolveDepartment(request.DepartmentID, request.Department)
+	if message != "" {
+		return models.User{}, message
+	}
+	roleID, roleName, message := s.resolveRole(request.RoleID, request.Role)
+	if message != "" {
+		return models.User{}, message
+	}
+	age, description, avatarURL := 0, "", ""
+	if request.Age != nil {
+		age = *request.Age
+	}
+	if request.Description != nil {
+		description = strings.TrimSpace(*request.Description)
+	}
+	if request.AvatarURL != nil {
+		avatarURL = strings.TrimSpace(*request.AvatarURL)
+	}
+	if age < 0 || age > 150 {
+		return models.User{}, "年龄必须在 0 到 150 之间"
+	}
+	if status == "停用" {
+		canLogin = false
+	}
 	result, err := s.db.Exec(
-		`INSERT INTO users (username,name,role,department,status,shift,phone,email,can_login,password_hash,created_at,updated_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-		request.Username, request.Name, request.Role, request.Department, status, request.Shift, request.Phone, request.Email, boolToInt(canLogin), passwordHash, timeText(now), timeText(now),
+		`INSERT INTO users (username,name,role_id,role,department_id,department,status,shift,phone,email,age,description,avatar_url,can_login,password_hash,created_at,updated_at)
+			 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		strings.TrimSpace(request.Username), request.Name, roleID, roleName, departmentID, departmentName, status, request.Shift, request.Phone, request.Email, age, description, avatarURL, boolToInt(canLogin), passwordHash, timeText(now), timeText(now),
 	)
 	if err != nil {
 		return models.User{}, "创建用户失败"
@@ -388,6 +581,24 @@ func (s *SQLiteStore) UpdateUser(id int, request models.UserRequest, passwordHas
 	existing, ok := s.FindUserByID(id)
 	if !ok {
 		return models.User{}, "用户不存在"
+	}
+	if strings.EqualFold(existing.Username, "MH") {
+		root, exists := s.findDepartmentByCode("huajian")
+		if !exists {
+			return models.User{}, "根部门不存在"
+		}
+		canLogin := true
+		systemRole, exists := s.findRoleByCode(systemAdminRoleCode)
+		if !exists {
+			return models.User{}, "系统管理员角色不存在"
+		}
+		request.Username = "MH"
+		request.RoleID = &systemRole.ID
+		request.Role = systemRole.Name
+		request.DepartmentID = &root.ID
+		request.Department = root.Name
+		request.Status = "在岗"
+		request.CanLogin = &canLogin
 	}
 	if other, exists := s.FindUserByUsername(request.Username); exists && other.ID != id {
 		return models.User{}, "用户名已存在"
@@ -404,26 +615,77 @@ func (s *SQLiteStore) UpdateUser(id int, request models.UserRequest, passwordHas
 	if status == "" {
 		status = existing.Status
 	}
+	if status == "停用" {
+		canLogin = false
+	}
+	age := existing.Age
+	if request.Age != nil {
+		age = *request.Age
+	}
+	if age < 0 || age > 150 {
+		return models.User{}, "年龄必须在 0 到 150 之间"
+	}
+	description := existing.Description
+	if request.Description != nil {
+		description = strings.TrimSpace(*request.Description)
+	}
+	avatarURL := existing.AvatarURL
+	if request.AvatarURL != nil {
+		avatarURL = strings.TrimSpace(*request.AvatarURL)
+	}
+	departmentID, departmentName, message := s.resolveDepartment(request.DepartmentID, request.Department)
+	if message != "" {
+		return models.User{}, message
+	}
+	roleID, roleName, message := s.resolveRole(request.RoleID, request.Role)
+	if message != "" {
+		return models.User{}, message
+	}
 	now := time.Now().UTC()
 	if _, err := s.db.Exec(
-		`UPDATE users SET username=?, name=?, role=?, department=?, status=?, shift=?, phone=?, email=?, can_login=?, password_hash=?, updated_at=? WHERE id=?`,
-		request.Username, request.Name, request.Role, request.Department, status, request.Shift, request.Phone, request.Email, boolToInt(canLogin), hash, timeText(now), id,
+		`UPDATE users SET username=?, name=?, role_id=?, role=?, department_id=?, department=?, status=?, shift=?, phone=?, email=?, age=?, description=?, avatar_url=?, can_login=?, password_hash=?, updated_at=? WHERE id=?`,
+		strings.TrimSpace(request.Username), request.Name, roleID, roleName, departmentID, departmentName, status, request.Shift, request.Phone, request.Email, age, description, avatarURL, boolToInt(canLogin), hash, timeText(now), id,
 	); err != nil {
 		return models.User{}, "更新用户失败"
+	}
+	if !canLogin || status == "停用" {
+		_, _ = s.db.Exec(`DELETE FROM sessions WHERE user_id=?`, id)
 	}
 	user, _ := s.FindUserByID(id)
 	return user, ""
 }
 
-func (s *SQLiteStore) DeleteUser(id int) bool {
-	result, err := s.db.Exec(`DELETE FROM users WHERE id=?`, id)
-	if err != nil {
-		return false
+func (s *SQLiteStore) DeleteUser(id int) string {
+	user, ok := s.FindUserByID(id)
+	if !ok {
+		return "用户不存在"
 	}
-	_, _ = s.db.Exec(`DELETE FROM user_menus WHERE user_id=?`, id)
-	_, _ = s.db.Exec(`DELETE FROM sessions WHERE user_id=?`, id)
+	if strings.EqualFold(user.Username, "MH") {
+		return "默认管理员 MH 不能删除"
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return "删除用户失败"
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM user_menus WHERE user_id=?`, id); err != nil {
+		return "删除用户失败"
+	}
+	if _, err := tx.Exec(`DELETE FROM sessions WHERE user_id=?`, id); err != nil {
+		return "删除用户失败"
+	}
+	result, err := tx.Exec(`DELETE FROM users WHERE id=?`, id)
+	if err != nil {
+		return "删除用户失败"
+	}
 	affected, _ := result.RowsAffected()
-	return affected > 0
+	if affected == 0 {
+		return "用户不存在"
+	}
+	if err := tx.Commit(); err != nil {
+		return "删除用户失败"
+	}
+	return ""
 }
 
 func (s *SQLiteStore) ListMenus() []models.Menu {
@@ -446,8 +708,18 @@ func (s *SQLiteStore) FindMenuByID(id int) (models.Menu, bool) {
 }
 
 func (s *SQLiteStore) CreateMenu(request models.MenuRequest) (models.Menu, string) {
+	if request.ParentID != nil {
+		if _, ok := s.FindMenuByID(*request.ParentID); !ok {
+			return models.Menu{}, "父级菜单不存在"
+		}
+	}
 	now := time.Now().UTC()
-	result, err := s.db.Exec(
+	tx, err := s.db.Begin()
+	if err != nil {
+		return models.Menu{}, "创建菜单失败"
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(
 		`INSERT INTO menus (name,code,path,icon,parent_id,sort,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)`,
 		request.Name, request.Code, request.Path, request.Icon, request.ParentID, request.Sort, request.Status, timeText(now), timeText(now),
 	)
@@ -455,6 +727,21 @@ func (s *SQLiteStore) CreateMenu(request models.MenuRequest) (models.Menu, strin
 		return models.Menu{}, "创建菜单失败"
 	}
 	id, _ := result.LastInsertId()
+	if _, err := tx.Exec(`
+		INSERT OR IGNORE INTO department_menus(department_id,menu_id)
+		SELECT id,? FROM departments WHERE code IN ('huajian','board-office')
+	`, id); err != nil {
+		return models.Menu{}, "创建菜单失败"
+	}
+	if _, err := tx.Exec(`
+		INSERT OR IGNORE INTO role_menus(role_id,menu_id)
+		SELECT id,? FROM roles WHERE code=?
+	`, id, systemAdminRoleCode); err != nil {
+		return models.Menu{}, "创建菜单失败"
+	}
+	if err := tx.Commit(); err != nil {
+		return models.Menu{}, "创建菜单失败"
+	}
 	menu, _ := s.FindMenuByID(int(id))
 	return menu, ""
 }
@@ -462,6 +749,28 @@ func (s *SQLiteStore) CreateMenu(request models.MenuRequest) (models.Menu, strin
 func (s *SQLiteStore) UpdateMenu(id int, request models.MenuRequest) (models.Menu, string) {
 	if _, ok := s.FindMenuByID(id); !ok {
 		return models.Menu{}, "菜单不存在"
+	}
+	if request.ParentID != nil {
+		if *request.ParentID == id {
+			return models.Menu{}, "父级菜单不能是自身"
+		}
+		if _, ok := s.FindMenuByID(*request.ParentID); !ok {
+			return models.Menu{}, "父级菜单不存在"
+		}
+		var cyclic int
+		if err := s.db.QueryRow(`
+			WITH RECURSIVE descendants(id) AS (
+				SELECT id FROM menus WHERE parent_id=?
+				UNION
+				SELECT m.id FROM menus m INNER JOIN descendants d ON m.parent_id=d.id
+			)
+			SELECT COUNT(1) FROM descendants WHERE id=?
+		`, id, *request.ParentID).Scan(&cyclic); err != nil {
+			return models.Menu{}, "校验菜单层级失败"
+		}
+		if cyclic > 0 {
+			return models.Menu{}, "父级菜单不能是当前菜单的下级"
+		}
 	}
 	now := time.Now().UTC()
 	if _, err := s.db.Exec(
@@ -478,14 +787,37 @@ func (s *SQLiteStore) DeleteMenu(id int) string {
 	if _, ok := s.FindMenuByID(id); !ok {
 		return "菜单不存在"
 	}
-	result, err := s.db.Exec(`DELETE FROM menus WHERE id=?`, id)
+	var childCount int
+	if err := s.db.QueryRow(`SELECT COUNT(1) FROM menus WHERE parent_id=?`, id).Scan(&childCount); err != nil {
+		return "删除菜单失败"
+	}
+	if childCount > 0 {
+		return "请先删除子菜单"
+	}
+	tx, err := s.db.Begin()
 	if err != nil {
 		return "删除菜单失败"
 	}
-	_, _ = s.db.Exec(`DELETE FROM user_menus WHERE menu_id=?`, id)
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM user_menus WHERE menu_id=?`, id); err != nil {
+		return "删除菜单失败"
+	}
+	if _, err := tx.Exec(`DELETE FROM department_menus WHERE menu_id=?`, id); err != nil {
+		return "删除菜单失败"
+	}
+	if _, err := tx.Exec(`DELETE FROM role_menus WHERE menu_id=?`, id); err != nil {
+		return "删除菜单失败"
+	}
+	result, err := tx.Exec(`DELETE FROM menus WHERE id=?`, id)
+	if err != nil {
+		return "删除菜单失败"
+	}
 	affected, _ := result.RowsAffected()
 	if affected == 0 {
 		return "菜单不存在"
+	}
+	if err := tx.Commit(); err != nil {
+		return "删除菜单失败"
 	}
 	return ""
 }
@@ -495,14 +827,33 @@ func (s *SQLiteStore) ListUserMenus(userID int) ([]models.Menu, string) {
 		return nil, "用户不存在"
 	}
 	rows, err := s.db.Query(`
+		WITH RECURSIVE directly_granted(menu_id) AS (
+			SELECT menu_id FROM user_menus WHERE user_id=?
+			UNION
+			SELECT dm.menu_id
+			FROM department_menus dm
+			INNER JOIN users u ON u.department_id=dm.department_id
+			INNER JOIN departments d ON d.id=dm.department_id
+			WHERE u.id=? AND d.status='启用'
+			UNION
+			SELECT rm.menu_id
+			FROM role_menus rm
+			INNER JOIN users u ON u.role_id=rm.role_id
+			INNER JOIN roles r ON r.id=rm.role_id
+			WHERE u.id=? AND r.status='启用'
+		), effective_menus(menu_id) AS (
+			SELECT menu_id FROM directly_granted
+			UNION
+			SELECT m.parent_id
+			FROM menus m INNER JOIN effective_menus em ON m.id=em.menu_id
+			WHERE m.parent_id IS NOT NULL
+		)
 		SELECT m.id,m.name,m.code,m.path,m.icon,m.parent_id,m.sort,m.status,m.created_at,m.updated_at
-		FROM menus m
-		INNER JOIN user_menus um ON um.menu_id = m.id
-		WHERE um.user_id = ?
+		FROM menus m INNER JOIN effective_menus em ON em.menu_id=m.id
 		ORDER BY m.sort, m.id
-	`, userID)
+	`, userID, userID, userID)
 	if err != nil {
-		return []models.Menu{}, ""
+		return nil, "查询用户权限失败"
 	}
 	defer rows.Close()
 	menus := []models.Menu{}
@@ -518,6 +869,12 @@ func (s *SQLiteStore) UpdateUserMenus(userID int, menuIDs []int) ([]int, string)
 	if _, ok := s.FindUserByID(userID); !ok {
 		return nil, "用户不存在"
 	}
+	ids := uniqueIDs(menuIDs)
+	for _, menuID := range ids {
+		if _, ok := s.FindMenuByID(menuID); !ok {
+			return nil, "菜单不存在"
+		}
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, "更新菜单失败"
@@ -526,12 +883,7 @@ func (s *SQLiteStore) UpdateUserMenus(userID int, menuIDs []int) ([]int, string)
 		_ = tx.Rollback()
 		return nil, "更新菜单失败"
 	}
-	ids := uniqueIDs(menuIDs)
 	for _, menuID := range ids {
-		if _, ok := s.FindMenuByID(menuID); !ok {
-			_ = tx.Rollback()
-			return nil, "菜单不存在"
-		}
 		if _, err := tx.Exec(`INSERT INTO user_menus (user_id, menu_id) VALUES (?, ?)`, userID, menuID); err != nil {
 			_ = tx.Rollback()
 			return nil, "更新菜单失败"
@@ -774,11 +1126,21 @@ type scanner interface {
 
 func scanUser(row scanner) (models.User, bool) {
 	var u models.User
+	var roleID sql.NullInt64
+	var departmentID sql.NullInt64
 	var canLogin int
 	var c, up string
-	err := row.Scan(&u.ID, &u.Username, &u.Name, &u.Role, &u.Department, &u.Status, &u.Shift, &u.Phone, &u.Email, &canLogin, &u.PasswordHash, &c, &up)
+	err := row.Scan(&u.ID, &u.Username, &u.Name, &roleID, &u.Role, &u.RoleCode, &departmentID, &u.Department, &u.Status, &u.Shift, &u.Phone, &u.Email, &u.Age, &u.Description, &u.AvatarURL, &canLogin, &u.PasswordHash, &c, &up)
 	if err != nil {
 		return models.User{}, false
+	}
+	if roleID.Valid {
+		id := int(roleID.Int64)
+		u.RoleID = &id
+	}
+	if departmentID.Valid {
+		id := int(departmentID.Int64)
+		u.DepartmentID = &id
 	}
 	u.CanLogin = intToBool(canLogin)
 	u.CreatedAt = parseTime(c)

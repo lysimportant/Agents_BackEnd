@@ -1,14 +1,24 @@
 import type { CSSProperties } from 'react';
 
-export type PageKey = 'dashboard' | 'users' | 'menus' | 'articles' | 'files';
+export type PageKey = 'dashboard' | 'users' | 'departments' | 'roles' | 'menus' | 'articles' | 'files';
 
 export type AuthUser = {
   id: number;
   username: string;
   name: string;
   role: string;
+  roleId: number | null;
+  roleCode: string;
   department: string;
-  canLogin?: boolean;
+  departmentId: number | null;
+  status: string;
+  phone: string;
+  email: string;
+  age: number;
+  description: string;
+  avatarUrl: string;
+  canLogin: boolean;
+  actionPermissions?: string[];
 };
 
 export type User = {
@@ -16,14 +26,29 @@ export type User = {
   username: string;
   name: string;
   role: string;
+  roleId: number | null;
+  roleCode: string;
   department: string;
+  departmentId: number | null;
   status: string;
   shift: string;
   phone: string;
   email: string;
+  age: number;
+  description: string;
+  avatarUrl: string;
   canLogin: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ProfileForm = {
+  name: string;
+  email: string;
+  phone: string;
+  age: number;
+  description: string;
+  avatarUrl: string;
 };
 
 export type Menu = {
@@ -42,6 +67,59 @@ export type Menu = {
 export type MenuNode = Menu & {
   depth: number;
   children: MenuNode[];
+};
+
+export type Department = {
+  id: number;
+  name: string;
+  code: string;
+  parentId: number | null;
+  leader: string;
+  phone: string;
+  email: string;
+  sort: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DepartmentForm = {
+  name: string;
+  code: string;
+  parentId: number | null;
+  leader: string;
+  phone: string;
+  email: string;
+  sort: number;
+  status: string;
+};
+
+export type Role = {
+  id: number;
+  name: string;
+  code: string;
+  description: string;
+  sort: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RoleForm = {
+  name: string;
+  code: string;
+  description: string;
+  sort: number;
+  status: string;
+};
+
+export type UserPermissionDetails = {
+  departmentMenuIds: number[];
+  roleMenuIds: number[];
+  userMenuIds: number[];
+  effectiveMenuIds: number[];
+  roleActionCodes: string[];
+  effectiveActionCodes: string[];
 };
 
 export type Article = {
@@ -86,7 +164,9 @@ export type UserForm = {
   username: string;
   name: string;
   role: string;
+  roleId: number | null;
   department: string;
+  departmentId: number | null;
   status: string;
   shift: string;
   phone: string;

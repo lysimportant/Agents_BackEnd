@@ -1,15 +1,15 @@
-package article_handlers
+package handlers
 
 import (
 	"net/http"
-	"strconv"
 
 	"collector-backend/middleware"
 	"collector-backend/models"
+	"collector-backend/utils"
 	"github.com/gin-gonic/gin"
 )
 
-type Store interface {
+type ArticleStore interface {
 	ListArticles() []models.Article
 	FindArticleByID(id int) (models.Article, bool)
 	CreateArticle(article models.Article) models.Article
@@ -17,15 +17,15 @@ type Store interface {
 	DeleteArticle(id int) bool
 }
 
-type Handler struct {
-	store Store
+type ArticleHandler struct {
+	store ArticleStore
 }
 
-func New(store Store) *Handler {
-	return &Handler{store: store}
+func NewArticleHandler(store ArticleStore) *ArticleHandler {
+	return &ArticleHandler{store: store}
 }
 
-func (h *Handler) List(c *gin.Context) {
+func (h *ArticleHandler) List(c *gin.Context) {
 	user, _ := middleware.CurrentUser(c)
 	articles := h.store.ListArticles()
 	visible := make([]models.Article, 0, len(articles))
@@ -37,8 +37,8 @@ func (h *Handler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, visible)
 }
 
-func (h *Handler) Get(c *gin.Context) {
-	id, ok := parseID(c)
+func (h *ArticleHandler) Get(c *gin.Context) {
+	id, ok := utils.ParseID(c)
 	if !ok {
 		return
 	}
@@ -51,7 +51,7 @@ func (h *Handler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, article)
 }
 
-func (h *Handler) Create(c *gin.Context) {
+func (h *ArticleHandler) Create(c *gin.Context) {
 	var request models.ArticleRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -77,8 +77,8 @@ func (h *Handler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, article)
 }
 
-func (h *Handler) Update(c *gin.Context) {
-	id, ok := parseID(c)
+func (h *ArticleHandler) Update(c *gin.Context) {
+	id, ok := utils.ParseID(c)
 	if !ok {
 		return
 	}
@@ -105,8 +105,8 @@ func (h *Handler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, updated)
 }
 
-func (h *Handler) Delete(c *gin.Context) {
-	id, ok := parseID(c)
+func (h *ArticleHandler) Delete(c *gin.Context) {
+	id, ok := utils.ParseID(c)
 	if !ok {
 		return
 	}
@@ -128,22 +128,9 @@ func (h *Handler) Delete(c *gin.Context) {
 }
 
 func canAccessArticle(user models.User, article models.Article) bool {
-	return !article.IsPrivate || article.OwnerID == user.ID || isAdmin(user)
+	return !article.IsPrivate || article.OwnerID == user.ID || utils.IsAdmin(user)
 }
 
 func canMutateArticle(user models.User, article models.Article) bool {
-	return article.OwnerID == user.ID || isAdmin(user)
-}
-
-func isAdmin(user models.User) bool {
-	return user.Role == "系统管理员"
-}
-
-func parseID(c *gin.Context) (int, bool) {
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 ID"})
-		return 0, false
-	}
-	return id, true
+	return article.OwnerID == user.ID || utils.IsAdmin(user)
 }

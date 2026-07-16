@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type DataPoint struct {
 	ID        int       `json:"id"`
@@ -22,12 +25,18 @@ type User struct {
 	ID           int       `json:"id"`
 	Username     string    `json:"username"`
 	Name         string    `json:"name"`
+	RoleID       *int      `json:"roleId"`
 	Role         string    `json:"role"`
+	RoleCode     string    `json:"roleCode"`
+	DepartmentID *int      `json:"departmentId"`
 	Department   string    `json:"department"`
 	Status       string    `json:"status"`
 	Shift        string    `json:"shift"`
 	Phone        string    `json:"phone"`
 	Email        string    `json:"email"`
+	Age          int       `json:"age"`
+	Description  string    `json:"description"`
+	AvatarURL    string    `json:"avatarUrl"`
 	CanLogin     bool      `json:"canLogin"`
 	PasswordHash string    `json:"-"`
 	CreatedAt    time.Time `json:"createdAt"`
@@ -35,12 +44,26 @@ type User struct {
 }
 
 type AuthUser struct {
-	ID         int    `json:"id"`
-	Username   string `json:"username"`
-	Name       string `json:"name"`
-	Role       string `json:"role"`
-	Department string `json:"department"`
-	CanLogin   bool   `json:"canLogin"`
+	ID                int      `json:"id"`
+	Username          string   `json:"username"`
+	Name              string   `json:"name"`
+	RoleID            *int     `json:"roleId"`
+	Role              string   `json:"role"`
+	RoleCode          string   `json:"roleCode"`
+	DepartmentID      *int     `json:"departmentId"`
+	Department        string   `json:"department"`
+	Status            string   `json:"status"`
+	Phone             string   `json:"phone"`
+	Email             string   `json:"email"`
+	Age               int      `json:"age"`
+	Description       string   `json:"description"`
+	AvatarURL         string   `json:"avatarUrl"`
+	CanLogin          bool     `json:"canLogin"`
+	ActionPermissions []string `json:"actionPermissions"`
+}
+
+func (u User) LoginAllowed() bool {
+	return u.CanLogin && strings.TrimSpace(u.Status) != "停用"
 }
 
 type LoginRequest struct {
@@ -67,20 +90,87 @@ type Menu struct {
 }
 
 type UserRequest struct {
-	Username   string `json:"username" binding:"required"`
-	Name       string `json:"name" binding:"required"`
-	Role       string `json:"role" binding:"required"`
-	Department string `json:"department"`
-	Status     string `json:"status"`
-	Shift      string `json:"shift"`
-	Phone      string `json:"phone"`
-	Email      string `json:"email"`
-	CanLogin   *bool  `json:"canLogin"`
-	Password   string `json:"password"`
+	Username     string  `json:"username" binding:"required"`
+	Name         string  `json:"name" binding:"required"`
+	RoleID       *int    `json:"roleId"`
+	Role         string  `json:"role"`
+	DepartmentID *int    `json:"departmentId"`
+	Department   string  `json:"department"`
+	Status       string  `json:"status"`
+	Shift        string  `json:"shift"`
+	Phone        string  `json:"phone"`
+	Email        string  `json:"email"`
+	Age          *int    `json:"age"`
+	Description  *string `json:"description"`
+	AvatarURL    *string `json:"avatarUrl"`
+	CanLogin     *bool   `json:"canLogin"`
+	Password     string  `json:"password"`
+}
+
+type UserProfileRequest struct {
+	Name        *string `json:"name"`
+	Email       *string `json:"email"`
+	Phone       *string `json:"phone"`
+	Age         *int    `json:"age"`
+	Description *string `json:"description"`
+	AvatarURL   *string `json:"avatarUrl"`
 }
 
 type UserMenusRequest struct {
 	MenuIDs []int `json:"menuIds" binding:"required"`
+}
+
+type UserPermissionDetail struct {
+	DepartmentMenuIDs    []int    `json:"departmentMenuIds"`
+	RoleMenuIDs          []int    `json:"roleMenuIds"`
+	UserMenuIDs          []int    `json:"userMenuIds"`
+	EffectiveMenuIDs     []int    `json:"effectiveMenuIds"`
+	RoleActionCodes      []string `json:"roleActionCodes"`
+	EffectiveActionCodes []string `json:"effectiveActionCodes"`
+}
+
+type Role struct {
+	ID          int       `json:"id"`
+	Name        string    `json:"name"`
+	Code        string    `json:"code"`
+	Description string    `json:"description"`
+	Sort        int       `json:"sort"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+type RoleRequest struct {
+	Name        string `json:"name" binding:"required"`
+	Code        string `json:"code" binding:"required"`
+	Description string `json:"description"`
+	Sort        int    `json:"sort"`
+	Status      string `json:"status" binding:"required"`
+}
+
+type Department struct {
+	ID        int       `json:"id"`
+	Name      string    `json:"name"`
+	Code      string    `json:"code"`
+	ParentID  *int      `json:"parentId"`
+	Leader    string    `json:"leader"`
+	Phone     string    `json:"phone"`
+	Email     string    `json:"email"`
+	Sort      int       `json:"sort"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type DepartmentRequest struct {
+	Name     string `json:"name" binding:"required"`
+	Code     string `json:"code" binding:"required"`
+	ParentID *int   `json:"parentId"`
+	Leader   string `json:"leader"`
+	Phone    string `json:"phone"`
+	Email    string `json:"email"`
+	Sort     int    `json:"sort"`
+	Status   string `json:"status" binding:"required"`
 }
 
 type MenuRequest struct {

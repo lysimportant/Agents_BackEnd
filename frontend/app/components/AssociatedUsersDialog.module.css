@@ -1,0 +1,47 @@
+.summary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 14px;
+  color: var(--text-secondary);
+}
+
+.summary strong {
+  color: var(--theme-primary);
+  font-size: 24px;
+}
+
+.error {
+  margin-bottom: 14px;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.identity > span,
+.contact,
+.status {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.identity strong,
+.identity small,
+.contact span,
+.contact small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identity small,
+.contact small,
+.status small {
+  color: var(--text-secondary);
+  font-size: 11px;
+}

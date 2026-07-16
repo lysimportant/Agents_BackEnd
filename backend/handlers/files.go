@@ -1,4 +1,4 @@
-package file_handlers
+package handlers
 
 import (
 	"fmt"
@@ -6,18 +6,18 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
 	"collector-backend/middleware"
 	"collector-backend/models"
+	"collector-backend/utils"
 	"github.com/gin-gonic/gin"
 )
 
 const MaxUploadSize = 32 << 20
 
-type Store interface {
+type FileStore interface {
 	ListFiles(includeDeleted bool) []models.ManagedFile
 	FindFileByID(id int) (models.ManagedFile, bool)
 	FindDeletedFileByID(id int) (models.ManagedFile, bool)
@@ -29,16 +29,16 @@ type Store interface {
 	HardDeleteFile(id int, uploadDir string) bool
 }
 
-type Handler struct {
-	store     Store
+type FileHandler struct {
+	store     FileStore
 	uploadDir string
 }
 
-func New(store Store, uploadDir string) *Handler {
-	return &Handler{store: store, uploadDir: uploadDir}
+func NewFileHandler(store FileStore, uploadDir string) *FileHandler {
+	return &FileHandler{store: store, uploadDir: uploadDir}
 }
 
-func (h *Handler) List(c *gin.Context) {
+func (h *FileHandler) List(c *gin.Context) {
 	user, _ := middleware.CurrentUser(c)
 	files := h.store.ListFiles(false)
 	visible := make([]models.ManagedFile, 0, len(files))
@@ -50,7 +50,7 @@ func (h *Handler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, visible)
 }
 
-func (h *Handler) ListRecycleBin(c *gin.Context) {
+func (h *FileHandler) ListRecycleBin(c *gin.Context) {
 	user, _ := middleware.CurrentUser(c)
 	files := h.store.ListFiles(true)
 	visible := make([]models.ManagedFile, 0, len(files))
@@ -62,8 +62,8 @@ func (h *Handler) ListRecycleBin(c *gin.Context) {
 	c.JSON(http.StatusOK, visible)
 }
 
-func (h *Handler) Get(c *gin.Context) {
-	id, ok := parseID(c)
+func (h *FileHandler) Get(c *gin.Context) {
+	id, ok := utils.ParseID(c)
 	if !ok {
 		return
 	}
@@ -79,7 +79,7 @@ func (h *Handler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, file)
 }
 
-func (h *Handler) Upload(c *gin.Context) {
+func (h *FileHandler) Upload(c *gin.Context) {
 	user, ok := middleware.CurrentUser(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
@@ -109,10 +109,10 @@ func (h *Handler) Upload(c *gin.Context) {
 	}
 	category := strings.TrimSpace(c.PostForm("category"))
 	description := strings.TrimSpace(c.PostForm("description"))
-	isPrivate := parseBool(c.PostForm("isPrivate"))
+	isPrivate := utils.ParseBool(c.PostForm("isPrivate"))
 
 	ext := filepath.Ext(fileHeader.Filename)
-	storageName := fmt.Sprintf("%d_%s%s", time.Now().UnixNano(), sanitizeName(displayName), ext)
+	storageName := fmt.Sprintf("%d_%s%s", time.Now().UnixNano(), utils.SanitizeFileName(displayName), ext)
 	path := filepath.Join(h.uploadDir, storageName)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建上传目录失败"})
@@ -157,8 +157,8 @@ func (h *Handler) Upload(c *gin.Context) {
 	c.JSON(http.StatusCreated, created)
 }
 
-func (h *Handler) UpdateMetadata(c *gin.Context) {
-	id, ok := parseID(c)
+func (h *FileHandler) UpdateMetadata(c *gin.Context) {
+	id, ok := utils.ParseID(c)
 	if !ok {
 		return
 	}
@@ -185,8 +185,8 @@ func (h *Handler) UpdateMetadata(c *gin.Context) {
 	c.JSON(http.StatusOK, updated)
 }
 
-func (h *Handler) UpdateContent(c *gin.Context) {
-	id, ok := parseID(c)
+func (h *FileHandler) UpdateContent(c *gin.Context) {
+	id, ok := utils.ParseID(c)
 	if !ok {
 		return
 	}
@@ -220,8 +220,8 @@ func (h *Handler) UpdateContent(c *gin.Context) {
 	c.JSON(http.StatusOK, updated)
 }
 
-func (h *Handler) Delete(c *gin.Context) {
-	id, ok := parseID(c)
+func (h *FileHandler) Delete(c *gin.Context) {
+	id, ok := utils.ParseID(c)
 	if !ok {
 		return
 	}
@@ -242,8 +242,8 @@ func (h *Handler) Delete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func (h *Handler) Restore(c *gin.Context) {
-	id, ok := parseID(c)
+func (h *FileHandler) Restore(c *gin.Context) {
+	id, ok := utils.ParseID(c)
 	if !ok {
 		return
 	}
@@ -265,8 +265,8 @@ func (h *Handler) Restore(c *gin.Context) {
 	c.JSON(http.StatusOK, restored)
 }
 
-func (h *Handler) PermanentlyDelete(c *gin.Context) {
-	id, ok := parseID(c)
+func (h *FileHandler) PermanentlyDelete(c *gin.Context) {
+	id, ok := utils.ParseID(c)
 	if !ok {
 		return
 	}
@@ -287,20 +287,20 @@ func (h *Handler) PermanentlyDelete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func (h *Handler) Download(c *gin.Context) {
+func (h *FileHandler) Download(c *gin.Context) {
 	h.serveFile(c, true)
 }
 
-func (h *Handler) Preview(c *gin.Context) {
+func (h *FileHandler) Preview(c *gin.Context) {
 	h.serveFile(c, false)
 }
 
-func (h *Handler) Thumbnail(c *gin.Context) {
+func (h *FileHandler) Thumbnail(c *gin.Context) {
 	h.serveFile(c, false)
 }
 
-func (h *Handler) serveFile(c *gin.Context, asAttachment bool) {
-	id, ok := parseID(c)
+func (h *FileHandler) serveFile(c *gin.Context, asAttachment bool) {
+	id, ok := utils.ParseID(c)
 	if !ok {
 		return
 	}
@@ -330,55 +330,9 @@ func (h *Handler) serveFile(c *gin.Context, asAttachment bool) {
 }
 
 func canAccessFile(user models.User, file models.ManagedFile) bool {
-	return !file.IsPrivate || file.OwnerID == user.ID || isAdmin(user)
+	return !file.IsPrivate || file.OwnerID == user.ID || utils.IsAdmin(user)
 }
 
 func canMutateFile(user models.User, file models.ManagedFile) bool {
-	return file.OwnerID == user.ID || isAdmin(user)
-}
-
-func isAdmin(user models.User) bool {
-	return user.Role == "系统管理员"
-}
-
-func parseID(c *gin.Context) (int, bool) {
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 ID"})
-		return 0, false
-	}
-	return id, true
-}
-
-func parseBool(value string) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
-	}
-}
-
-func sanitizeName(name string) string {
-	name = strings.Map(func(r rune) rune {
-		switch {
-		case r >= 'a' && r <= 'z':
-			return r
-		case r >= 'A' && r <= 'Z':
-			return r
-		case r >= '0' && r <= '9':
-			return r
-		case r == '-' || r == '_':
-			return r
-		default:
-			return '_'
-		}
-	}, name)
-	if name == "" {
-		return "file"
-	}
-	if len(name) > 40 {
-		return name[:40]
-	}
-	return name
+	return file.OwnerID == user.ID || utils.IsAdmin(user)
 }

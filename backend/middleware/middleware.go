@@ -6,6 +6,8 @@ import (
 
 	"collector-backend/auth"
 	"collector-backend/models"
+	"collector-backend/permissions"
+	"collector-backend/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -13,12 +15,19 @@ const userContextKey = "currentUser"
 
 type UserStore interface {
 	FindUserByID(id int) (models.User, bool)
+	ListUserMenus(userID int) ([]models.Menu, string)
+	ListUserActionPermissions(userID int) ([]string, string)
 }
 
 func CORS(allowedOrigins []string) gin.HandlerFunc {
 	allowed := make(map[string]bool, len(allowedOrigins))
+	allowAnyOrigin := false
 	for _, origin := range allowedOrigins {
 		origin = strings.TrimSpace(origin)
+		if origin == "*" {
+			allowAnyOrigin = true
+			continue
+		}
 		if origin != "" {
 			allowed[origin] = true
 		}
@@ -26,8 +35,9 @@ func CORS(allowedOrigins []string) gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 		origin := strings.TrimSpace(c.GetHeader("Origin"))
+		originAllowed := origin != "" && (allowAnyOrigin || allowed[origin])
 		if origin != "" {
-			if !allowed[origin] {
+			if !originAllowed {
 				if c.Request.Method == http.MethodOptions {
 					c.AbortWithStatus(http.StatusForbidden)
 					return
@@ -42,7 +52,7 @@ func CORS(allowedOrigins []string) gin.HandlerFunc {
 		}
 
 		if c.Request.Method == http.MethodOptions {
-			if origin != "" && !allowed[origin] {
+			if origin != "" && !originAllowed {
 				c.AbortWithStatus(http.StatusForbidden)
 				return
 			}
@@ -64,7 +74,7 @@ func RequireAuth(userStore UserStore, sessionService *auth.Service) gin.HandlerF
 		}
 
 		user, found := userStore.FindUserByID(userID)
-		if !found || !user.CanLogin {
+		if !found || !user.LoginAllowed() {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
 			c.Abort()
 			return
@@ -82,4 +92,71 @@ func CurrentUser(c *gin.Context) (models.User, bool) {
 	}
 	user, ok := value.(models.User)
 	return user, ok
+}
+
+func RequireMenu(userStore UserStore, code string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, exists := CurrentUser(c)
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
+			return
+		}
+		menus, message := userStore.ListUserMenus(user.ID)
+		if message != "" {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": message})
+			return
+		}
+		for _, menu := range menus {
+			if menu.Code == code && menu.Status == "启用" {
+				c.Next()
+				return
+			}
+		}
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "无权访问该功能"})
+	}
+}
+
+func RequireAction(userStore UserStore, code string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, exists := CurrentUser(c)
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
+			return
+		}
+		if !permissions.IsKnown(code) {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "动作权限配置错误"})
+			return
+		}
+		// Write permissions are deliberately non-delegable. Role names and
+		// menu grants must never turn a normal account into an administrator.
+		if !permissions.IsReadOnly(code) && user.RoleCode != permissions.SystemAdminRoleCode {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "仅系统管理员可执行此操作"})
+			return
+		}
+		codes, message := userStore.ListUserActionPermissions(user.ID)
+		if message != "" {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": message})
+			return
+		}
+		if permissions.Contains(codes, code) {
+			c.Next()
+			return
+		}
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "无权执行该操作"})
+	}
+}
+
+func RequireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, exists := CurrentUser(c)
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
+			return
+		}
+		if !utils.IsAdmin(user) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "仅系统管理员可执行此操作"})
+			return
+		}
+		c.Next()
+	}
 }

@@ -3,7 +3,7 @@
 最小可运行版本：
 
 - `backend`: Go + Gin + SQLite API 服务
-- `frontend`: Next.js + TypeScript 若依式后台管理界面
+- `frontend`: Next.js + TypeScript 企业后台管理界面
 
 ## 启动后端
 
@@ -24,13 +24,13 @@ go run .
 | `SQLITE_PATH` | `data/app.db` | SQLite 文件路径 |
 | `UPLOAD_DIR` | `uploads` | 上传文件目录 |
 | `SERVER_ADDRESS` | `:8080` | HTTP 监听地址 |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | 允许携带凭证的来源白名单，多个来源用逗号分隔；不接受 `*` |
+| `CORS_ALLOWED_ORIGINS` | `*` | 开发默认接受任意 Origin；凭证模式下响应会回显请求的实际 Origin，而不是返回字面量 `*`。生产环境应覆盖为逗号分隔的明确域名 |
 | `COOKIE_SAMESITE` | `Lax` | 可选 `Lax`、`Strict`、`None` |
 | `COOKIE_SECURE` | `false` | HTTPS 跨站部署时设为 `true` |
 | `SESSION_COOKIE_NAME` | `sessionId` | 会话 Cookie 名称 |
 | `SESSION_TTL_HOURS` | `8` | 会话有效小时数 |
 
-跨站前后端部署通常需要同时设置 `COOKIE_SAMESITE=None`、`COOKIE_SECURE=true`，并将前端完整 Origin 加入 `CORS_ALLOWED_ORIGINS`。凭证模式下不会使用通配符来源，允许来源响应会包含 `Access-Control-Allow-Credentials: true` 和 `Vary: Origin`。
+跨站前后端部署通常需要同时设置 `COOKIE_SAMESITE=None`、`COOKIE_SECURE=true`。开发默认的 `CORS_ALLOWED_ORIGINS=*` 会回显请求的实际 Origin，以兼容携带凭证的请求和任意本地前端端口；公网生产环境应将其覆盖为明确 Origin 白名单。允许来源响应会包含 `Access-Control-Allow-Credentials: true` 和 `Vary: Origin`。
 
 ## 启动前端
 
@@ -61,6 +61,17 @@ npm run dev
 - `GET /api/auth/session`: 校验并恢复当前会话
 - `POST /api/auth/logout`: 退出登录并清除会话
 
+登录和会话响应中的 `user` 会返回当前用户的角色、部门、状态、个人资料及 `actionPermissions` 动作权限数组。`status` 为 `停用` 或 `canLogin=false` 的用户不能登录；用户被停用后，已有会话也会立即失效。恢复为在岗状态时仍需由管理员明确设置 `canLogin=true`。
+
+### 动作权限与按钮
+
+动作权限使用稳定的 `resource.action` 编码，前端应按 `actionPermissions` 控制 CRUD 按钮，后端仍会对每个接口独立校验，不能只依赖按钮隐藏：
+
+- 查询/查看：`dashboard.query|view`、`users.query|view`、`departments.query|view`、`roles.query|view`、`menus.query|view`、`articles.query|view`、`files.query|view`。
+- 写动作：`dashboard.create`；各管理资源的 `create`、`update`、`delete`；以及 `users.permissions.update`、`departments.permissions.update`、`roles.permissions.update`、`files.restore`、`files.permanent-delete`。
+- `roleCode=system-admin` 固定拥有全部动作；其他角色固定只有查询/查看动作，菜单授权或角色显示名称不能授予写权限。
+- 除本人维护 `/api/profile` 的个人资料外，所有业务 CRUD、权限配置、文件恢复及彻底删除只允许 `system-admin`。
+
 ### 基础接口
 
 - `GET /health`: 健康检查
@@ -74,16 +85,26 @@ npm run dev
 - `PUT /api/users/:id`: 更新用户
 - `DELETE /api/users/:id`: 删除用户
 
-用户 JSON 字段：`username`、`name`、`role`、`department`、`status`、`shift`、`phone`、`email`、`password`。
+用户 JSON 字段：`username`、`name`、`roleId`、`role`、`roleCode`、`departmentId`、`department`、`status`、`shift`、`phone`、`email`、`age`、`description`、`avatarUrl`、`canLogin`、`password`。`roleId`、`departmentId` 分别关联角色和部门；`role`、`department` 作为兼容名称字段保留，`roleCode` 是只读的安全标识。
 
 说明：
 
 - 新增用户时 `password` 必填，后端会写入 bcrypt 哈希。
 - 编辑用户时密码表单不回显，`password` 留空表示不修改原密码。
+- `status=停用` 会强制关闭 `canLogin` 并使已有会话失效；登录与会话恢复都会再次校验账号状态。
+
+### 个人资料
+
+- `GET /api/profile`: 获取当前登录用户资料
+- `PUT /api/profile`: 更新当前登录用户资料
+- `GET /api/users/:id/profile`: 本人或系统管理员获取指定用户资料
+- `PUT /api/users/:id/profile`: 本人或系统管理员更新指定用户资料
+
+资料更新 Body 可包含 `name`、`email`、`phone`、`age`、`description`、`avatarUrl`。该接口不会修改账号、密码、角色、部门、状态或登录权限；`age` 允许 `0` 到 `150`。
 
 ### 菜单管理
 
-- `GET /api/menus`: 获取菜单列表
+- `GET /api/menus`: 获取当前用户的有效菜单（直属部门、角色和个人附加权限的并集，并自动包含已授权子菜单的所有父级）
 - `POST /api/menus`: 新增菜单
 - `PUT /api/menus/:id`: 更新菜单
 - `DELETE /api/menus/:id`: 删除菜单
@@ -92,8 +113,39 @@ npm run dev
 
 ### 用户菜单权限
 
-- `GET /api/users/:id/menus`: 查询用户已分配菜单
-- `PUT /api/users/:id/menus`: 保存用户菜单权限，Body 示例：`{"menuIds":[1,2,3]}`
+- `GET /api/users/:id/menus`: 查询用户个人附加菜单
+- `PUT /api/users/:id/menus`: 保存用户个人附加菜单，Body 示例：`{"menuIds":[1,2,3]}`
+- `GET /api/users/:id/permissions`: 查询权限明细，返回 `departmentMenuIds`、`roleMenuIds`、`userMenuIds`、`effectiveMenuIds`、`roleActionCodes` 和 `effectiveActionCodes`
+
+### 部门管理
+
+- `GET /api/departments`: 获取按 `parentId` 组织的部门列表
+- `GET /api/departments/:id`: 获取部门详情
+- `POST /api/departments`: 新增部门
+- `PUT /api/departments/:id`: 更新部门
+- `DELETE /api/departments/:id`: 删除没有下级部门和用户的部门
+- `GET /api/departments/:id/menus`: 查询部门直接分配的菜单
+- `PUT /api/departments/:id/menus`: 保存部门菜单权限，Body 示例：`{"menuIds":[1,2,3]}`
+- `GET /api/departments/:id/users`: 查询直属该部门的用户，直接返回用户数组
+
+### 角色管理
+
+- `GET /api/roles`: 获取角色列表
+- `GET /api/roles/:id`: 获取角色详情
+- `POST /api/roles`: 新增角色
+- `PUT /api/roles/:id`: 更新角色
+- `DELETE /api/roles/:id`: 删除没有关联用户的非系统角色
+- `GET /api/roles/:id/menus`: 查询角色直接权限，响应示例：`{"menuIds":[1,2,3]}`
+- `PUT /api/roles/:id/menus`: 保存角色菜单权限，Body 与响应均为 `{"menuIds":[1,2,3]}`
+- `GET /api/roles/:id/users`: 查询使用该角色的用户，直接返回用户数组
+
+角色 JSON 字段：`name`、`code`、`description`、`sort`、`status`。系统幂等创建 `system-admin`、`department-admin`、`content-editor` 和 `viewer`；非系统角色及普通部门默认具有工作台权限，`system-admin`、根部门和稳定编码为 `board-office` 的董事会办公室保留全部菜单权限。启动迁移只补齐这套基线，不删除既有部门、角色或个人菜单授权。
+
+用户的有效菜单是启用状态直属部门、启用状态角色与个人附加菜单的并集，停用部门或角色不再贡献菜单权限。HuaJian 组织结构作为幂等初始数据写入；`MH` 会关联根部门和 `system-admin` 角色，两者始终补齐全部菜单权限。启动迁移不会清空已有菜单、部门/角色/个人权限或业务数据，也不会重置已有 `MH` 的密码。
+
+默认管理员 `MH` 不可删除；通过用户接口编辑时会强制保留 `MH` 账号、`系统管理员` 角色、根部门归属和可登录状态，但仍可更新姓名、联系方式及密码。根部门的菜单权限不可缩减。
+
+用户、部门、角色和菜单的查看接口按有效菜单及查询/查看动作鉴权；所有业务新增、修改、删除以及用户/部门/角色菜单授权仅允许 `system-admin` 执行。非系统管理员不能修改 `system-admin` 角色或任何归属该角色的用户，也不能在新增或编辑用户时选择 `system-admin`；这些限制使用稳定 `roleCode` 校验，不依赖可编辑的角色名称。管理员写接口不依赖可能被误停用的管理菜单，因此仍可恢复权限配置。
 
 ### 文章管理
 
@@ -102,8 +154,13 @@ npm run dev
 - `POST /api/articles`: 新增文章
 - `PUT /api/articles/:id`: 更新文章
 - `DELETE /api/articles/:id`: 删除文章
+- `GET /api/articles/export?format=csv|pdf`: 导出当前用户可见文章；CSV 使用 UTF-8 BOM 并防止公式注入，PDF 在内存中生成
+
+文章查询、详情和导出可由具有文章菜单的普通角色使用；文章新增、修改和删除仅允许 `system-admin`。
 
 文章 JSON 字段：`title`、`category`、`author`、`status`、`summary`、`content`。状态可使用 `已发布`、`草稿`、`待审核`。
+
+前端还可将当前筛选结果导出为 Excel 兼容 CSV、打印/PDF、分页 PNG 或带 `Article` 结构化数据的 SEO HTML。公开且已发布的文章会输出文章语义信息，私密或未发布文章不会输出可索引标记。
 
 ### 文件管理
 
@@ -115,13 +172,16 @@ npm run dev
 - `DELETE /api/files/:id`: 将文件移入回收站（软删除，保留物理文件）
 - `POST /api/files/:id/restore`: 从回收站恢复文件
 
+文件查询、详情、预览和下载可由具有文件菜单的普通角色使用；上传、修改、软删除、恢复和彻底删除仅允许 `system-admin`。
+
 文件安全约束：
 
-- 单文件上传限制为 10MB。
+- 单文件上传限制为 32MB。
 - 上传后使用随机服务端存储名，API 不返回绝对路径或存储路径。
 - 原始文件名通过 `filepath.Base` 清理，下载和删除只按文件 ID 查询元数据。
 - 删除默认采用可恢复软删除：文件移入回收站但物理上传内容保留，直到用户明确授权永久清理。
 - 服务端会校验存储名和最终路径，防止路径穿越。
+- 公开图片在管理界面中带描述性替代文本与 `ImageObject` 语义；私密图片不会输出该索引标记。真正面向搜索引擎公开收录时仍需部署无需登录的公开详情 URL。
 
 示例请求：
 

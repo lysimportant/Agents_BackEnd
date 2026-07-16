@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
-	"strings"
 	"time"
 
 	"collector-backend/config"
@@ -12,11 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
-
-type UserStore interface {
-	FindUserByID(id int) (models.User, bool)
-	FindUserByUsername(username string) (models.User, bool)
-}
 
 type SessionStore interface {
 	CreateSession(id string, userID int, expiresAt time.Time) error
@@ -32,11 +26,6 @@ type Service struct {
 	secure     bool
 }
 
-type Handler struct {
-	store    UserStore
-	sessions *Service
-}
-
 func NewService(store SessionStore, cfg config.Config) *Service {
 	return &Service{
 		store:      store,
@@ -45,67 +34,6 @@ func NewService(store SessionStore, cfg config.Config) *Service {
 		sameSite:   cfg.CookieSameSite,
 		secure:     cfg.CookieSecure,
 	}
-}
-
-func NewHandler(store UserStore, sessions *Service) *Handler {
-	return &Handler{store: store, sessions: sessions}
-}
-
-func (h *Handler) Login(c *gin.Context) {
-	var request models.LoginRequest
-	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请输入账号和密码"})
-		return
-	}
-
-	username := strings.TrimSpace(request.Username)
-	if username == "" || request.Password == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请输入账号和密码"})
-		return
-	}
-
-	user, found := h.store.FindUserByUsername(username)
-	if !found || !ComparePassword(user.PasswordHash, request.Password) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "账号或密码错误"})
-		return
-	}
-	if !user.CanLogin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "该账号已禁用登录"})
-		return
-	}
-
-	sessionID, expiresAt, err := h.sessions.Create(user.ID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建会话失败"})
-		return
-	}
-
-	h.sessions.SetSessionCookie(c, sessionID, expiresAt)
-	c.JSON(http.StatusOK, gin.H{"user": ToAuthUser(user)})
-}
-
-func (h *Handler) GetSession(c *gin.Context) {
-	userID, ok := h.sessions.UserIDFromRequest(c)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
-		return
-	}
-
-	user, found := h.store.FindUserByID(userID)
-	if !found || !user.CanLogin {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"user": ToAuthUser(user)})
-}
-
-func (h *Handler) Logout(c *gin.Context) {
-	if cookie, err := c.Cookie(h.sessions.cookieName); err == nil && cookie != "" {
-		h.sessions.Delete(cookie)
-	}
-	h.sessions.ClearSessionCookie(c)
-	c.JSON(http.StatusOK, gin.H{"message": "已退出登录"})
 }
 
 func (s *Service) Create(userID int) (string, time.Time, error) {
@@ -136,6 +64,12 @@ func (s *Service) Delete(sessionID string) {
 	s.store.DeleteSession(sessionID)
 }
 
+func (s *Service) DeleteFromRequest(c *gin.Context) {
+	if sessionID, err := c.Cookie(s.cookieName); err == nil && sessionID != "" {
+		s.Delete(sessionID)
+	}
+}
+
 func HashPassword(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -156,14 +90,27 @@ func ComparePassword(passwordHash string, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password)) == nil
 }
 
-func ToAuthUser(user models.User) models.AuthUser {
+func ToAuthUser(user models.User, actionPermissions []string) models.AuthUser {
+	if actionPermissions == nil {
+		actionPermissions = []string{}
+	}
 	return models.AuthUser{
-		ID:         user.ID,
-		Username:   user.Username,
-		Name:       user.Name,
-		Role:       user.Role,
-		Department: user.Department,
-		CanLogin:   user.CanLogin,
+		ID:                user.ID,
+		Username:          user.Username,
+		Name:              user.Name,
+		RoleID:            user.RoleID,
+		Role:              user.Role,
+		RoleCode:          user.RoleCode,
+		DepartmentID:      user.DepartmentID,
+		Department:        user.Department,
+		Status:            user.Status,
+		Phone:             user.Phone,
+		Email:             user.Email,
+		Age:               user.Age,
+		Description:       user.Description,
+		AvatarURL:         user.AvatarURL,
+		CanLogin:          user.CanLogin,
+		ActionPermissions: actionPermissions,
 	}
 }
 

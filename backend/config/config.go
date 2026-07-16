@@ -23,7 +23,7 @@ func Load() Config {
 		SQLitePath:        envOrDefault("SQLITE_PATH", "data/app.db"),
 		UploadDir:         envOrDefault("UPLOAD_DIR", "uploads"),
 		ServerAddress:     envOrDefault("SERVER_ADDRESS", ":8080"),
-		AllowedOrigins:    parseOrigins(envOrDefault("CORS_ALLOWED_ORIGINS", "http://localhost:3000")),
+		AllowedOrigins:    parseOrigins(envOrDefault("CORS_ALLOWED_ORIGINS", "*")),
 		CookieSameSite:    parseSameSite(envOrDefault("COOKIE_SAMESITE", "Lax")),
 		CookieSecure:      strings.EqualFold(envOrDefault("COOKIE_SECURE", "false"), "true"),
 		SessionCookieName: envOrDefault("SESSION_COOKIE_NAME", "sessionId"),
@@ -53,7 +53,7 @@ func parseOrigins(value string) []string {
 	seen := map[string]bool{}
 	for _, part := range parts {
 		origin := strings.TrimSpace(part)
-		if origin == "" || origin == "*" || seen[origin] {
+		if origin == "" || seen[origin] {
 			continue
 		}
 		seen[origin] = true

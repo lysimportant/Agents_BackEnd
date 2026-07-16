@@ -1,0 +1,89 @@
+.loading {
+  min-height: 360px;
+  padding: 24px 4px;
+}
+
+.form {
+  display: grid;
+  gap: 20px;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-elevated);
+}
+
+.identity > div {
+  min-width: 0;
+}
+
+.identity h2,
+.identity p {
+  overflow-wrap: anywhere;
+}
+
+.identity h2 {
+  margin: 0 0 3px;
+  color: var(--text-primary);
+  font-size: 20px;
+}
+
+.identity p {
+  margin: 0 0 9px;
+  color: var(--text-secondary);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.fields label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fields :global(.ant-input-number) {
+  width: 100%;
+}
+
+.fields small {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.spanTwo {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 640px) {
+  .identity {
+    align-items: flex-start;
+  }
+
+  .fields {
+    grid-template-columns: 1fr;
+  }
+
+  .spanTwo {
+    grid-column: auto;
+  }
+}

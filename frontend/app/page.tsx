@@ -3,10 +3,12 @@
 import { ArticlesPage } from './articles/ArticlesPage';
 import { AuthPage } from './auth/AuthPage';
 import { DashboardPage } from './dashboard/DashboardPage';
+import { DepartmentsPage } from './departments/DepartmentsPage';
 import { FilesPage } from './files/FilesPage';
 import { useAdminWorkspace } from './hooks/useAdminWorkspace';
 import { MainLayout } from './layout/MainLayout';
 import { MenusPage } from './menus/MenusPage';
+import { RolesPage } from './roles/RolesPage';
 import { UsersPage } from './users/UsersPage';
 
 export default function Home() {
@@ -25,6 +27,8 @@ export default function Home() {
     );
   }
 
+  const canManage = workspace.authUser.roleCode === 'system-admin';
+
   return (
     <MainLayout
       authUser={workspace.authUser}
@@ -37,31 +41,36 @@ export default function Home() {
       onOpenMobileSidebar={() => workspace.setMobileSidebarOpen(true)}
       onCloseMobileSidebar={() => workspace.setMobileSidebarOpen(false)}
       onNavigate={workspace.handleNavigate}
+      onAuthUserUpdate={workspace.handleAuthUserUpdate}
       onLogout={workspace.handleLogout}
     >
       {workspace.activePage === 'dashboard' && (
         <DashboardPage
           usersCount={workspace.users.length}
-          activeUsers={workspace.users.filter((user) => user.status !== '离线').length}
+          activeUsers={workspace.users.filter((user) => user.canLogin && user.status !== '停用').length}
           menusCount={workspace.menus.length}
           enabledMenus={workspace.menus.filter((menu) => menu.status === '启用').length}
+          articlesCount={workspace.articles.length}
           publishedArticles={workspace.articles.filter((article) => article.status === '已发布').length}
           isLoading={workspace.isLoading}
           onRefresh={workspace.loadData}
-          onNavigateUsers={() => workspace.handleNavigate('users')}
-          onNavigateMenus={() => workspace.handleNavigate('menus')}
-          onNavigateArticles={() => workspace.handleNavigate('articles')}
         />
       )}
 
       {workspace.activePage === 'users' && (
         <UsersPage
+          canManage={canManage}
           users={workspace.users}
           menus={workspace.menus}
+          departments={workspace.departments}
+          roles={workspace.roles}
           userForm={workspace.userForm}
           editingUserId={workspace.editingUserId}
           selectedUserId={workspace.selectedUserId}
           selectedMenuIds={workspace.selectedMenuIds}
+          departmentMenuIds={workspace.departmentMenuIds}
+          roleMenuIds={workspace.roleMenuIds}
+          effectiveMenuIds={workspace.effectiveMenuIds}
           isLoading={workspace.isLoading}
           isSavingUser={workspace.isSavingUser}
           isSavingPermission={workspace.isSavingPermission}
@@ -72,13 +81,31 @@ export default function Home() {
           onSelectUser={workspace.handleSelectUser}
           onEditUser={workspace.handleEditUser}
           onDeleteUser={workspace.handleDeleteUser}
-          onToggleMenuPermission={workspace.handleToggleMenuPermission}
           onSavePermissions={workspace.handleSavePermissions}
+        />
+      )}
+
+      {workspace.activePage === 'roles' && (
+        <RolesPage
+          canManage={canManage}
+          roles={workspace.roles}
+          users={workspace.users}
+          menus={workspace.menus}
+          isLoading={workspace.isLoading}
+          isSaving={workspace.isSavingRole}
+          isSavingPermissions={workspace.isSavingRolePermission}
+          onRefresh={workspace.loadData}
+          onSave={workspace.handleSaveRole}
+          onDelete={workspace.handleDeleteRole}
+          onLoadPermissions={workspace.loadRolePermissions}
+          onLoadUsers={workspace.loadRoleUsers}
+          onSavePermissions={workspace.handleSaveRolePermissions}
         />
       )}
 
       {workspace.activePage === 'menus' && (
         <MenusPage
+          canManage={canManage}
           menus={workspace.menus}
           menuTree={workspace.menuTree}
           menuForm={workspace.menuForm}
@@ -94,8 +121,27 @@ export default function Home() {
         />
       )}
 
+      {workspace.activePage === 'departments' && (
+        <DepartmentsPage
+          canManage={canManage}
+          departments={workspace.departments}
+          users={workspace.users}
+          menus={workspace.menus}
+          isLoading={workspace.isLoading}
+          isSaving={workspace.isSavingDepartment}
+          isSavingPermissions={workspace.isSavingDepartmentPermission}
+          onRefresh={workspace.loadData}
+          onSave={workspace.handleSaveDepartment}
+          onDelete={workspace.handleDeleteDepartment}
+          onLoadPermissions={workspace.loadDepartmentPermissions}
+          onLoadUsers={workspace.loadDepartmentUsers}
+          onSavePermissions={workspace.handleSaveDepartmentPermissions}
+        />
+      )}
+
       {workspace.activePage === 'articles' && (
         <ArticlesPage
+          canManage={canManage}
           filteredArticles={workspace.filteredArticles}
           articleForm={workspace.articleForm}
           editingArticleId={workspace.editingArticleId}
@@ -119,6 +165,7 @@ export default function Home() {
 
       {workspace.activePage === 'files' && (
         <FilesPage
+          canManage={canManage}
           filteredFiles={workspace.filteredFiles}
           recycleFiles={workspace.recycleFiles}
           fileForm={workspace.fileForm}

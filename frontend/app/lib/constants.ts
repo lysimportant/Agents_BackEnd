@@ -2,16 +2,19 @@
 
 export const MAX_UPLOAD_SIZE = 32 * 1024 * 1024;
 
-export const roleOptions = ['系统管理员', '内容编辑', '数据分析师', '值班员'];
 export const statusOptions = ['在岗', '休假', '停用'];
 export const shiftOptions = ['白班', '夜班', '轮班', '弹性'];
 export const menuStatusOptions = ['启用', '停用'];
+export const departmentStatusOptions = ['启用', '停用'];
+export const roleStatusOptions = ['启用', '停用'];
 export const articleStatusOptions = ['草稿', '已发布', '归档'];
-export const pageKeys = ['dashboard', 'users', 'menus', 'articles', 'files'] as const;
+export const pageKeys = ['dashboard', 'users', 'departments', 'roles', 'menus', 'articles', 'files'] as const;
 
 export const pageTitles: Record<(typeof pageKeys)[number], string> = {
   dashboard: '工作台',
   users: '用户管理',
+  departments: '部门管理',
+  roles: '角色管理',
   menus: '菜单管理',
   articles: '文章管理',
   files: '文件管理',
@@ -20,14 +23,35 @@ export const pageTitles: Record<(typeof pageKeys)[number], string> = {
 export const emptyUserForm = {
   username: '',
   name: '',
-  role: roleOptions[0],
+  role: '',
+  roleId: null as number | null,
   department: '',
+  departmentId: null as number | null,
   status: statusOptions[0],
   shift: shiftOptions[0],
   phone: '',
   email: '',
   canLogin: true,
   password: '',
+};
+
+export const emptyDepartmentForm = {
+  name: '',
+  code: '',
+  parentId: null as number | null,
+  leader: '',
+  phone: '',
+  email: '',
+  sort: 1,
+  status: departmentStatusOptions[0],
+};
+
+export const emptyRoleForm = {
+  name: '',
+  code: '',
+  description: '',
+  sort: 1,
+  status: roleStatusOptions[0],
 };
 
 export const emptyMenuForm = {

@@ -7,20 +7,29 @@ import (
 
 	"collector-backend/auth"
 	"collector-backend/models"
+	"collector-backend/permissions"
 )
 
+const systemAdminRoleCode = permissions.SystemAdminRoleCode
+
 type MemoryStore struct {
-	mu            sync.Mutex
-	dataPoints    []models.DataPoint
-	users         []models.User
-	menus         []models.Menu
-	articles      []models.Article
-	files         []models.ManagedFile
-	userMenuIDs   map[int][]int
-	nextUserID    int
-	nextMenuID    int
-	nextArticleID int
-	nextFileID    int
+	mu                sync.Mutex
+	dataPoints        []models.DataPoint
+	users             []models.User
+	departments       []models.Department
+	roles             []models.Role
+	menus             []models.Menu
+	articles          []models.Article
+	files             []models.ManagedFile
+	userMenuIDs       map[int][]int
+	departmentMenuIDs map[int][]int
+	roleMenuIDs       map[int][]int
+	nextUserID        int
+	nextDepartmentID  int
+	nextRoleID        int
+	nextMenuID        int
+	nextArticleID     int
+	nextFileID        int
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -32,13 +41,24 @@ func NewMemoryStore() *MemoryStore {
 			{ID: 3, Source: "collector-a", Metric: "temperature", Value: 25.1, Unit: "°C", CreatedAt: now},
 		},
 		users: []models.User{
-			{ID: 1, Username: "MH", Name: "MH", Role: "系统管理员", Department: "信息中心", Status: "在岗", Shift: "常白班", Phone: "", Email: "mh@example.com", PasswordHash: auth.MustHashPassword("123"), CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
-			{ID: 2, Username: "zhang.gong", Name: "张工", Role: "产线主管", Department: "总装一线", Status: "在岗", Shift: "早班", Phone: "13800000001", Email: "zhang.gong@example.com", PasswordHash: auth.MustHashPassword("123456"), CreatedAt: now.Add(-72 * time.Hour), UpdatedAt: now.Add(-2 * time.Hour)},
-			{ID: 3, Username: "li.min", Name: "李敏", Role: "质量工程师", Department: "质量中心", Status: "巡检", Shift: "中班", Phone: "13800000002", Email: "li.min@example.com", PasswordHash: auth.MustHashPassword("123456"), CreatedAt: now.Add(-48 * time.Hour), UpdatedAt: now.Add(-90 * time.Minute)},
-			{ID: 4, Username: "wang.qiang", Name: "王强", Role: "设备维护", Department: "设备保障", Status: "待命", Shift: "夜班", Phone: "13800000003", Email: "wang.qiang@example.com", PasswordHash: auth.MustHashPassword("123456"), CreatedAt: now.Add(-36 * time.Hour), UpdatedAt: now.Add(-30 * time.Minute)},
+			{ID: 1, Username: "MH", Name: "MH", RoleID: intPtr(1), Role: "系统管理员", RoleCode: systemAdminRoleCode, DepartmentID: intPtr(1), Department: "HuaJian技术有限公司", Status: "在岗", Shift: "常白班", Phone: "", Email: "mh@example.com", Age: 0, CanLogin: true, PasswordHash: auth.MustHashPassword("123"), CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 2, Username: "zhang.gong", Name: "张工", Role: "产线主管", DepartmentID: intPtr(2), Department: "制造部", Status: "在岗", Shift: "早班", Phone: "13800000001", Email: "zhang.gong@example.com", CanLogin: true, PasswordHash: auth.MustHashPassword("123456"), CreatedAt: now.Add(-72 * time.Hour), UpdatedAt: now.Add(-2 * time.Hour)},
+			{ID: 3, Username: "li.min", Name: "李敏", Role: "质量工程师", DepartmentID: intPtr(3), Department: "质量与流程IT部", Status: "巡检", Shift: "中班", Phone: "13800000002", Email: "li.min@example.com", CanLogin: true, PasswordHash: auth.MustHashPassword("123456"), CreatedAt: now.Add(-48 * time.Hour), UpdatedAt: now.Add(-90 * time.Minute)},
+			{ID: 4, Username: "wang.qiang", Name: "王强", Role: "设备维护", DepartmentID: intPtr(2), Department: "制造部", Status: "待命", Shift: "夜班", Phone: "13800000003", Email: "wang.qiang@example.com", CanLogin: true, PasswordHash: auth.MustHashPassword("123456"), CreatedAt: now.Add(-36 * time.Hour), UpdatedAt: now.Add(-30 * time.Minute)},
+		},
+		departments: []models.Department{
+			{ID: 1, Name: "HuaJian技术有限公司", Code: "huajian", Sort: 10, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 2, Name: "制造部", Code: "manufacturing", ParentID: intPtr(1), Sort: 20, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 3, Name: "质量与流程IT部", Code: "quality-process-it", ParentID: intPtr(1), Sort: 30, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+		},
+		roles: []models.Role{
+			{ID: 1, Name: "系统管理员", Code: systemAdminRoleCode, Description: "系统最高管理权限", Sort: 10, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 2, Name: "部门管理员", Code: "department-admin", Description: "部门管理角色", Sort: 20, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 3, Name: "内容编辑", Code: "content-editor", Description: "内容编辑角色", Sort: 30, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 4, Name: "普通用户", Code: "viewer", Description: "基础访问角色", Sort: 40, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
 		},
 		menus: []models.Menu{
-			{ID: 1, Name: "生产看板", Code: "production.dashboard", Path: "/production", Icon: "数据", ParentID: nil, Sort: 10, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-3 * time.Hour)},
+			{ID: 1, Name: "工作台", Code: "dashboard", Path: "dashboard", Icon: "dashboard", ParentID: nil, Sort: 10, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-3 * time.Hour)},
 			{ID: 2, Name: "工单管理", Code: "workorder.manage", Path: "/production/workorders", Icon: "单据", ParentID: intPtr(1), Sort: 20, Status: "启用", CreatedAt: now.Add(-90 * time.Hour), UpdatedAt: now.Add(-2 * time.Hour)},
 			{ID: 3, Name: "质量追溯", Code: "quality.trace", Path: "/quality", Icon: "质检", ParentID: nil, Sort: 30, Status: "启用", CreatedAt: now.Add(-84 * time.Hour), UpdatedAt: now.Add(-90 * time.Minute)},
 			{ID: 4, Name: "设备点检", Code: "equipment.inspection", Path: "/equipment/inspection", Icon: "设备", ParentID: nil, Sort: 40, Status: "启用", CreatedAt: now.Add(-72 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
@@ -55,10 +75,23 @@ func NewMemoryStore() *MemoryStore {
 			3: {1, 3},
 			4: {1, 4},
 		},
-		nextUserID:    5,
-		nextMenuID:    5,
-		nextArticleID: 4,
-		nextFileID:    1,
+		departmentMenuIDs: map[int][]int{
+			1: {1, 2, 3, 4},
+			2: {1},
+			3: {1},
+		},
+		roleMenuIDs: map[int][]int{
+			1: {1, 2, 3, 4},
+			2: {1},
+			3: {1},
+			4: {1},
+		},
+		nextUserID:       5,
+		nextDepartmentID: 4,
+		nextRoleID:       5,
+		nextMenuID:       5,
+		nextArticleID:    4,
+		nextFileID:       1,
 	}
 }
 
@@ -101,7 +134,40 @@ func (s *MemoryStore) CreateUser(request models.UserRequest, passwordHash string
 	if _, exists := s.findUserByUsername(username); exists {
 		return models.User{}, "账号已存在"
 	}
-	user := models.User{ID: s.nextUserID, Username: username, Name: request.Name, Role: request.Role, Department: request.Department, Status: request.Status, Shift: request.Shift, Phone: request.Phone, Email: request.Email, PasswordHash: passwordHash, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	departmentID, departmentName, message := s.resolveDepartment(request.DepartmentID, request.Department)
+	if message != "" {
+		return models.User{}, message
+	}
+	roleID, roleName, roleCode, message := s.resolveRole(request.RoleID, request.Role)
+	if message != "" {
+		return models.User{}, message
+	}
+	canLogin := true
+	if request.CanLogin != nil {
+		canLogin = *request.CanLogin
+	}
+	status := strings.TrimSpace(request.Status)
+	if status == "" {
+		status = "在岗"
+	}
+	if status == "停用" {
+		canLogin = false
+	}
+	age := 0
+	if request.Age != nil {
+		age = *request.Age
+	}
+	if age < 0 || age > 150 {
+		return models.User{}, "年龄必须在 0 到 150 之间"
+	}
+	description, avatarURL := "", ""
+	if request.Description != nil {
+		description = strings.TrimSpace(*request.Description)
+	}
+	if request.AvatarURL != nil {
+		avatarURL = strings.TrimSpace(*request.AvatarURL)
+	}
+	user := models.User{ID: s.nextUserID, Username: username, Name: request.Name, RoleID: roleID, Role: roleName, RoleCode: roleCode, DepartmentID: departmentID, Department: departmentName, Status: status, Shift: request.Shift, Phone: request.Phone, Email: request.Email, Age: age, Description: description, AvatarURL: avatarURL, CanLogin: canLogin, PasswordHash: passwordHash, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	s.nextUserID++
 	s.users = append(s.users, user)
 	s.userMenuIDs[user.ID] = []int{}
@@ -115,18 +181,74 @@ func (s *MemoryStore) UpdateUser(id int, request models.UserRequest, passwordHas
 	if !found {
 		return models.User{}, "用户不存在"
 	}
+	if strings.EqualFold(s.users[index].Username, "MH") {
+		root, exists := s.findDepartmentByCode("huajian")
+		if !exists {
+			return models.User{}, "根部门不存在"
+		}
+		canLogin := true
+		systemRole, exists := s.findRoleByCode(systemAdminRoleCode)
+		if !exists {
+			return models.User{}, "系统管理员角色不存在"
+		}
+		request.Username = "MH"
+		request.RoleID = &systemRole.ID
+		request.Role = systemRole.Name
+		request.DepartmentID = &root.ID
+		request.Department = root.Name
+		request.CanLogin = &canLogin
+	}
 	username := strings.TrimSpace(request.Username)
 	if existing, exists := s.findUserByUsername(username); exists && existing.ID != id {
 		return models.User{}, "账号已存在"
 	}
+	if strings.TrimSpace(request.Status) == "" {
+		request.Status = s.users[index].Status
+	}
+	if strings.EqualFold(s.users[index].Username, "MH") {
+		request.Status = "在岗"
+	}
+	canLogin := s.users[index].CanLogin
+	if request.CanLogin != nil {
+		canLogin = *request.CanLogin
+	}
+	if request.Status == "停用" {
+		canLogin = false
+	}
+	departmentID, departmentName, message := s.resolveDepartment(request.DepartmentID, request.Department)
+	if message != "" {
+		return models.User{}, message
+	}
+	roleID, roleName, roleCode, message := s.resolveRole(request.RoleID, request.Role)
+	if message != "" {
+		return models.User{}, message
+	}
+	age := s.users[index].Age
+	if request.Age != nil {
+		age = *request.Age
+	}
+	if age < 0 || age > 150 {
+		return models.User{}, "年龄必须在 0 到 150 之间"
+	}
 	s.users[index].Username = username
 	s.users[index].Name = request.Name
-	s.users[index].Role = request.Role
-	s.users[index].Department = request.Department
+	s.users[index].RoleID = roleID
+	s.users[index].Role = roleName
+	s.users[index].RoleCode = roleCode
+	s.users[index].DepartmentID = departmentID
+	s.users[index].Department = departmentName
 	s.users[index].Status = request.Status
 	s.users[index].Shift = request.Shift
 	s.users[index].Phone = request.Phone
 	s.users[index].Email = request.Email
+	s.users[index].CanLogin = canLogin
+	s.users[index].Age = age
+	if request.Description != nil {
+		s.users[index].Description = strings.TrimSpace(*request.Description)
+	}
+	if request.AvatarURL != nil {
+		s.users[index].AvatarURL = strings.TrimSpace(*request.AvatarURL)
+	}
 	if passwordHash != "" {
 		s.users[index].PasswordHash = passwordHash
 	}
@@ -134,16 +256,365 @@ func (s *MemoryStore) UpdateUser(id int, request models.UserRequest, passwordHas
 	return s.users[index], ""
 }
 
-func (s *MemoryStore) DeleteUser(id int) bool {
+func (s *MemoryStore) DeleteUser(id int) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	index, found := s.findUserIndexByID(id)
 	if !found {
-		return false
+		return "用户不存在"
+	}
+	if strings.EqualFold(s.users[index].Username, "MH") {
+		return "默认管理员 MH 不能删除"
 	}
 	s.users = append(s.users[:index], s.users[index+1:]...)
 	delete(s.userMenuIDs, id)
-	return true
+	return ""
+}
+
+func (s *MemoryStore) UpdateUserProfile(id int, request models.UserProfileRequest) (models.User, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	index, found := s.findUserIndexByID(id)
+	if !found {
+		return models.User{}, "用户不存在"
+	}
+	name, email, phone := s.users[index].Name, s.users[index].Email, s.users[index].Phone
+	age, description, avatarURL := s.users[index].Age, s.users[index].Description, s.users[index].AvatarURL
+	if request.Name != nil {
+		name = strings.TrimSpace(*request.Name)
+		if name == "" {
+			return models.User{}, "姓名不能为空"
+		}
+	}
+	if request.Email != nil {
+		email = strings.TrimSpace(*request.Email)
+	}
+	if request.Phone != nil {
+		phone = strings.TrimSpace(*request.Phone)
+	}
+	if request.Age != nil {
+		age = *request.Age
+	}
+	if age < 0 || age > 150 {
+		return models.User{}, "年龄必须在 0 到 150 之间"
+	}
+	if request.Description != nil {
+		description = strings.TrimSpace(*request.Description)
+	}
+	if request.AvatarURL != nil {
+		avatarURL = strings.TrimSpace(*request.AvatarURL)
+	}
+	s.users[index].Name = name
+	s.users[index].Email = email
+	s.users[index].Phone = phone
+	s.users[index].Age = age
+	s.users[index].Description = description
+	s.users[index].AvatarURL = avatarURL
+	s.users[index].UpdatedAt = time.Now()
+	return s.users[index], ""
+}
+
+func (s *MemoryStore) ListRoleUsers(roleID int) ([]models.User, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, found := s.findRoleByID(roleID); !found {
+		return nil, "角色不存在"
+	}
+	users := []models.User{}
+	for _, user := range s.users {
+		if user.RoleID != nil && *user.RoleID == roleID {
+			users = append(users, user)
+		}
+	}
+	return users, ""
+}
+
+func (s *MemoryStore) ListDepartmentUsers(departmentID int) ([]models.User, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, found := s.findDepartmentByID(departmentID); !found {
+		return nil, "部门不存在"
+	}
+	users := []models.User{}
+	for _, user := range s.users {
+		if user.DepartmentID != nil && *user.DepartmentID == departmentID {
+			users = append(users, user)
+		}
+	}
+	return users, ""
+}
+
+func (s *MemoryStore) ListDepartments() []models.Department {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]models.Department(nil), s.departments...)
+}
+
+func (s *MemoryStore) FindDepartmentByID(id int) (models.Department, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.findDepartmentByID(id)
+}
+
+func (s *MemoryStore) CreateDepartment(request models.DepartmentRequest) (models.Department, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	code := strings.ToLower(strings.TrimSpace(request.Code))
+	if _, exists := s.findDepartmentByCode(code); exists {
+		return models.Department{}, "部门编码已存在"
+	}
+	if request.ParentID != nil {
+		if _, exists := s.findDepartmentByID(*request.ParentID); !exists {
+			return models.Department{}, "上级部门不存在"
+		}
+	}
+	now := time.Now()
+	department := models.Department{
+		ID: s.nextDepartmentID, Name: strings.TrimSpace(request.Name), Code: code, ParentID: request.ParentID,
+		Leader: request.Leader, Phone: request.Phone, Email: request.Email, Sort: request.Sort, Status: request.Status,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	s.nextDepartmentID++
+	s.departments = append(s.departments, department)
+	if department.Code == "board-office" {
+		s.departmentMenuIDs[department.ID] = s.allMenuIDs()
+	} else {
+		s.departmentMenuIDs[department.ID] = s.dashboardMenuIDs()
+	}
+	return department, ""
+}
+
+func (s *MemoryStore) UpdateDepartment(id int, request models.DepartmentRequest) (models.Department, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	index, exists := s.findDepartmentIndexByID(id)
+	if !exists {
+		return models.Department{}, "部门不存在"
+	}
+	code := strings.ToLower(strings.TrimSpace(request.Code))
+	if s.departments[index].Code == "huajian" && code != "huajian" {
+		return models.Department{}, "根部门编码不可修改"
+	}
+	if s.departments[index].Code == "huajian" && request.ParentID != nil {
+		return models.Department{}, "根部门不能设置上级部门"
+	}
+	if s.departments[index].Code == "huajian" && request.Status != "启用" {
+		return models.Department{}, "根部门必须保持启用"
+	}
+	if other, exists := s.findDepartmentByCode(code); exists && other.ID != id {
+		return models.Department{}, "部门编码已存在"
+	}
+	for parentID := request.ParentID; parentID != nil; {
+		if *parentID == id {
+			return models.Department{}, "上级部门不能是当前部门的下级"
+		}
+		parent, exists := s.findDepartmentByID(*parentID)
+		if !exists {
+			return models.Department{}, "上级部门不存在"
+		}
+		parentID = parent.ParentID
+	}
+	oldName := s.departments[index].Name
+	s.departments[index].Name = strings.TrimSpace(request.Name)
+	s.departments[index].Code = code
+	s.departments[index].ParentID = request.ParentID
+	s.departments[index].Leader = request.Leader
+	s.departments[index].Phone = request.Phone
+	s.departments[index].Email = request.Email
+	s.departments[index].Sort = request.Sort
+	s.departments[index].Status = request.Status
+	s.departments[index].UpdatedAt = time.Now()
+	if oldName != s.departments[index].Name {
+		for userIndex := range s.users {
+			if s.users[userIndex].DepartmentID != nil && *s.users[userIndex].DepartmentID == id {
+				s.users[userIndex].Department = s.departments[index].Name
+			}
+		}
+	}
+	return s.departments[index], ""
+}
+
+func (s *MemoryStore) DeleteDepartment(id int) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	index, exists := s.findDepartmentIndexByID(id)
+	if !exists {
+		return "部门不存在"
+	}
+	for _, department := range s.departments {
+		if department.ParentID != nil && *department.ParentID == id {
+			return "请先处理下级部门"
+		}
+	}
+	for _, user := range s.users {
+		if user.DepartmentID != nil && *user.DepartmentID == id {
+			return "请先转移该部门用户"
+		}
+	}
+	s.departments = append(s.departments[:index], s.departments[index+1:]...)
+	delete(s.departmentMenuIDs, id)
+	return ""
+}
+
+func (s *MemoryStore) ListDepartmentMenus(departmentID int) ([]models.Menu, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.findDepartmentByID(departmentID); !exists {
+		return nil, "部门不存在"
+	}
+	menus := make([]models.Menu, 0, len(s.departmentMenuIDs[departmentID]))
+	for _, menuID := range s.departmentMenuIDs[departmentID] {
+		if menu, found := s.findMenuByID(menuID); found {
+			menus = append(menus, menu)
+		}
+	}
+	return menus, ""
+}
+
+func (s *MemoryStore) UpdateDepartmentMenus(departmentID int, menuIDs []int) ([]int, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	department, exists := s.findDepartmentByID(departmentID)
+	if !exists {
+		return nil, "部门不存在"
+	}
+	for _, menuID := range menuIDs {
+		if !s.menuExists(menuID) {
+			return nil, "菜单不存在"
+		}
+	}
+	ids := uniqueIDs(menuIDs)
+	if department.Code == "huajian" {
+		allMenuIDs := make([]int, 0, len(s.menus))
+		for _, menu := range s.menus {
+			allMenuIDs = append(allMenuIDs, menu.ID)
+		}
+		if len(ids) != len(uniqueIDs(allMenuIDs)) {
+			return nil, "根部门必须保留全部菜单权限"
+		}
+	}
+	s.departmentMenuIDs[departmentID] = ids
+	return append([]int(nil), ids...), ""
+}
+
+func (s *MemoryStore) ListRoles() []models.Role {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]models.Role(nil), s.roles...)
+}
+
+func (s *MemoryStore) FindRoleByID(id int) (models.Role, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.findRoleByID(id)
+}
+
+func (s *MemoryStore) CreateRole(request models.RoleRequest) (models.Role, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	code := strings.ToLower(strings.TrimSpace(request.Code))
+	if _, exists := s.findRoleByCode(code); exists {
+		return models.Role{}, "角色编码已存在"
+	}
+	now := time.Now()
+	role := models.Role{
+		ID: s.nextRoleID, Name: strings.TrimSpace(request.Name), Code: code,
+		Description: strings.TrimSpace(request.Description), Sort: request.Sort, Status: request.Status,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	s.nextRoleID++
+	s.roles = append(s.roles, role)
+	s.roleMenuIDs[role.ID] = s.dashboardMenuIDs()
+	return role, ""
+}
+
+func (s *MemoryStore) UpdateRole(id int, request models.RoleRequest) (models.Role, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	index, exists := s.findRoleIndexByID(id)
+	if !exists {
+		return models.Role{}, "角色不存在"
+	}
+	existing := s.roles[index]
+	code := strings.ToLower(strings.TrimSpace(request.Code))
+	name := strings.TrimSpace(request.Name)
+	if existing.Code == systemAdminRoleCode {
+		if code != systemAdminRoleCode || name != "系统管理员" || request.Status != "启用" {
+			return models.Role{}, "系统管理员角色的名称、编码和状态不可修改"
+		}
+	}
+	if other, exists := s.findRoleByCode(code); exists && other.ID != id {
+		return models.Role{}, "角色编码已存在"
+	}
+	s.roles[index].Name = name
+	s.roles[index].Code = code
+	s.roles[index].Description = strings.TrimSpace(request.Description)
+	s.roles[index].Sort = request.Sort
+	s.roles[index].Status = request.Status
+	s.roles[index].UpdatedAt = time.Now()
+	for userIndex := range s.users {
+		if s.users[userIndex].RoleID != nil && *s.users[userIndex].RoleID == id {
+			s.users[userIndex].Role = name
+			s.users[userIndex].RoleCode = code
+			s.users[userIndex].UpdatedAt = time.Now()
+		}
+	}
+	return s.roles[index], ""
+}
+
+func (s *MemoryStore) DeleteRole(id int) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	index, exists := s.findRoleIndexByID(id)
+	if !exists {
+		return "角色不存在"
+	}
+	if s.roles[index].Code == systemAdminRoleCode {
+		return "系统管理员角色不能删除"
+	}
+	for _, user := range s.users {
+		if user.RoleID != nil && *user.RoleID == id {
+			return "请先转移该角色用户"
+		}
+	}
+	s.roles = append(s.roles[:index], s.roles[index+1:]...)
+	delete(s.roleMenuIDs, id)
+	return ""
+}
+
+func (s *MemoryStore) ListRoleMenuIDs(roleID int) ([]int, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.findRoleByID(roleID); !exists {
+		return nil, "角色不存在"
+	}
+	return append([]int(nil), s.roleMenuIDs[roleID]...), ""
+}
+
+func (s *MemoryStore) UpdateRoleMenus(roleID int, menuIDs []int) ([]int, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	role, exists := s.findRoleByID(roleID)
+	if !exists {
+		return nil, "角色不存在"
+	}
+	for _, menuID := range menuIDs {
+		if !s.menuExists(menuID) {
+			return nil, "菜单不存在"
+		}
+	}
+	ids := uniqueIDs(menuIDs)
+	if role.Code == systemAdminRoleCode {
+		allMenuIDs := make([]int, 0, len(s.menus))
+		for _, menu := range s.menus {
+			allMenuIDs = append(allMenuIDs, menu.ID)
+		}
+		if !sameIDs(ids, allMenuIDs) {
+			return nil, "系统管理员角色必须保留全部菜单权限"
+		}
+	}
+	s.roleMenuIDs[roleID] = ids
+	return append([]int(nil), ids...), ""
 }
 
 func (s *MemoryStore) ListMenus() []models.Menu {
@@ -167,6 +638,15 @@ func (s *MemoryStore) CreateMenu(request models.MenuRequest) (models.Menu, strin
 	menu := models.Menu{ID: s.nextMenuID, Name: request.Name, Code: request.Code, Path: request.Path, Icon: request.Icon, ParentID: request.ParentID, Sort: request.Sort, Status: request.Status, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	s.nextMenuID++
 	s.menus = append(s.menus, menu)
+	if root, exists := s.findDepartmentByCode("huajian"); exists {
+		s.departmentMenuIDs[root.ID] = append(s.departmentMenuIDs[root.ID], menu.ID)
+	}
+	if board, exists := s.findDepartmentByCode("board-office"); exists {
+		s.departmentMenuIDs[board.ID] = append(s.departmentMenuIDs[board.ID], menu.ID)
+	}
+	if systemRole, exists := s.findRoleByCode(systemAdminRoleCode); exists {
+		s.roleMenuIDs[systemRole.ID] = append(s.roleMenuIDs[systemRole.ID], menu.ID)
+	}
 	return menu, ""
 }
 
@@ -178,11 +658,18 @@ func (s *MemoryStore) UpdateMenu(id int, request models.MenuRequest) (models.Men
 		return models.Menu{}, "菜单不存在"
 	}
 	if request.ParentID != nil {
-		if *request.ParentID == id {
-			return models.Menu{}, "父级菜单不能是自身"
-		}
-		if !s.menuExists(*request.ParentID) {
-			return models.Menu{}, "父级菜单不存在"
+		for parentID := request.ParentID; parentID != nil; {
+			if *parentID == id {
+				if *request.ParentID == id {
+					return models.Menu{}, "父级菜单不能是自身"
+				}
+				return models.Menu{}, "父级菜单不能是当前菜单的下级"
+			}
+			parent, exists := s.findMenuByID(*parentID)
+			if !exists {
+				return models.Menu{}, "父级菜单不存在"
+			}
+			parentID = parent.ParentID
 		}
 	}
 	s.menus[index].Name = request.Name
@@ -210,22 +697,112 @@ func (s *MemoryStore) DeleteMenu(id int) string {
 	for userID, menuIDs := range s.userMenuIDs {
 		s.userMenuIDs[userID] = removeMenuID(menuIDs, id)
 	}
+	for departmentID, menuIDs := range s.departmentMenuIDs {
+		s.departmentMenuIDs[departmentID] = removeMenuID(menuIDs, id)
+	}
+	for roleID, menuIDs := range s.roleMenuIDs {
+		s.roleMenuIDs[roleID] = removeMenuID(menuIDs, id)
+	}
 	return ""
 }
 
 func (s *MemoryStore) ListUserMenus(userID int) ([]models.Menu, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.userExists(userID) {
+	user, exists := s.findUserByID(userID)
+	if !exists {
 		return nil, "用户不存在"
 	}
-	assignedMenus := make([]models.Menu, 0, len(s.userMenuIDs[userID]))
-	for _, menuID := range s.userMenuIDs[userID] {
+	menuIDs := append([]int(nil), s.userMenuIDs[userID]...)
+	if user.DepartmentID != nil {
+		if department, found := s.findDepartmentByID(*user.DepartmentID); found && department.Status == "启用" {
+			menuIDs = append(menuIDs, s.departmentMenuIDs[*user.DepartmentID]...)
+		}
+	}
+	if user.RoleID != nil {
+		if role, found := s.findRoleByID(*user.RoleID); found && role.Status == "启用" {
+			menuIDs = append(menuIDs, s.roleMenuIDs[*user.RoleID]...)
+		}
+	}
+	menuIDs = s.expandMenuAncestors(menuIDs)
+	assignedMenus := make([]models.Menu, 0, len(menuIDs))
+	for _, menuID := range menuIDs {
 		if menu, found := s.findMenuByID(menuID); found {
 			assignedMenus = append(assignedMenus, menu)
 		}
 	}
 	return assignedMenus, ""
+}
+
+func (s *MemoryStore) ListUserActionPermissions(userID int) ([]string, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	user, exists := s.findUserByID(userID)
+	if !exists {
+		return nil, "用户不存在"
+	}
+	if user.RoleID == nil {
+		return []string{}, ""
+	}
+	role, exists := s.findRoleByID(*user.RoleID)
+	if !exists || role.Status != "启用" {
+		return []string{}, ""
+	}
+	if role.Code == systemAdminRoleCode {
+		return permissions.AllCodes(), ""
+	}
+	return permissions.DefaultRoleCodes(), ""
+}
+
+func (s *MemoryStore) ListUserExtraMenus(userID int) ([]models.Menu, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.userExists(userID) {
+		return nil, "用户不存在"
+	}
+	menus := make([]models.Menu, 0, len(s.userMenuIDs[userID]))
+	for _, menuID := range s.userMenuIDs[userID] {
+		if menu, found := s.findMenuByID(menuID); found {
+			menus = append(menus, menu)
+		}
+	}
+	return menus, ""
+}
+
+func (s *MemoryStore) GetUserPermissionDetail(userID int) (models.UserPermissionDetail, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	user, exists := s.findUserByID(userID)
+	if !exists {
+		return models.UserPermissionDetail{}, "用户不存在"
+	}
+	departmentMenuIDs := []int{}
+	if user.DepartmentID != nil {
+		departmentMenuIDs = append(departmentMenuIDs, s.departmentMenuIDs[*user.DepartmentID]...)
+	}
+	roleMenuIDs := []int{}
+	if user.RoleID != nil {
+		roleMenuIDs = append(roleMenuIDs, s.roleMenuIDs[*user.RoleID]...)
+	}
+	userMenuIDs := append([]int(nil), s.userMenuIDs[userID]...)
+	effectiveDepartmentMenuIDs := departmentMenuIDs
+	if user.DepartmentID != nil {
+		if department, found := s.findDepartmentByID(*user.DepartmentID); !found || department.Status != "启用" {
+			effectiveDepartmentMenuIDs = nil
+		}
+	}
+	effectiveRoleMenuIDs := roleMenuIDs
+	if user.RoleID != nil {
+		if role, found := s.findRoleByID(*user.RoleID); !found || role.Status != "启用" {
+			effectiveRoleMenuIDs = nil
+		}
+	}
+	return models.UserPermissionDetail{
+		DepartmentMenuIDs: uniqueIDs(departmentMenuIDs),
+		RoleMenuIDs:       uniqueIDs(roleMenuIDs),
+		UserMenuIDs:       uniqueIDs(userMenuIDs),
+		EffectiveMenuIDs:  s.expandMenuAncestors(append(append(effectiveDepartmentMenuIDs, effectiveRoleMenuIDs...), userMenuIDs...)),
+	}, ""
 }
 
 func (s *MemoryStore) UpdateUserMenus(userID int, menuIDs []int) ([]int, string) {
@@ -375,6 +952,98 @@ func (s *MemoryStore) userExists(id int) bool {
 	return found
 }
 
+func (s *MemoryStore) findDepartmentByID(id int) (models.Department, bool) {
+	for _, department := range s.departments {
+		if department.ID == id {
+			return department, true
+		}
+	}
+	return models.Department{}, false
+}
+
+func (s *MemoryStore) findDepartmentByCode(code string) (models.Department, bool) {
+	for _, department := range s.departments {
+		if strings.EqualFold(department.Code, strings.TrimSpace(code)) {
+			return department, true
+		}
+	}
+	return models.Department{}, false
+}
+
+func (s *MemoryStore) findDepartmentIndexByID(id int) (int, bool) {
+	for index, department := range s.departments {
+		if department.ID == id {
+			return index, true
+		}
+	}
+	return -1, false
+}
+
+func (s *MemoryStore) resolveDepartment(departmentID *int, legacyName string) (*int, string, string) {
+	if departmentID != nil {
+		department, exists := s.findDepartmentByID(*departmentID)
+		if !exists {
+			return nil, "", "部门不存在"
+		}
+		id := department.ID
+		return &id, department.Name, ""
+	}
+	name := strings.TrimSpace(legacyName)
+	for _, department := range s.departments {
+		if department.Name == name {
+			id := department.ID
+			return &id, department.Name, ""
+		}
+	}
+	return nil, name, ""
+}
+
+func (s *MemoryStore) findRoleByID(id int) (models.Role, bool) {
+	for _, role := range s.roles {
+		if role.ID == id {
+			return role, true
+		}
+	}
+	return models.Role{}, false
+}
+
+func (s *MemoryStore) findRoleByCode(code string) (models.Role, bool) {
+	for _, role := range s.roles {
+		if strings.EqualFold(role.Code, strings.TrimSpace(code)) {
+			return role, true
+		}
+	}
+	return models.Role{}, false
+}
+
+func (s *MemoryStore) findRoleIndexByID(id int) (int, bool) {
+	for index, role := range s.roles {
+		if role.ID == id {
+			return index, true
+		}
+	}
+	return -1, false
+}
+
+func (s *MemoryStore) resolveRole(roleID *int, legacyName string) (*int, string, string, string) {
+	if roleID != nil {
+		role, exists := s.findRoleByID(*roleID)
+		if !exists {
+			return nil, "", "", "角色不存在"
+		}
+		id := role.ID
+		return &id, role.Name, role.Code, ""
+	}
+	name := strings.TrimSpace(legacyName)
+	for _, role := range s.roles {
+		if role.Name == name {
+			id := role.ID
+			return &id, role.Name, role.Code, ""
+		}
+	}
+	return nil, "", "", "角色不存在"
+}
+
 func (s *MemoryStore) findMenuByID(id int) (models.Menu, bool) {
 	for _, menu := range s.menus {
 		if menu.ID == id {
@@ -382,6 +1051,23 @@ func (s *MemoryStore) findMenuByID(id int) (models.Menu, bool) {
 		}
 	}
 	return models.Menu{}, false
+}
+
+func (s *MemoryStore) dashboardMenuIDs() []int {
+	for _, menu := range s.menus {
+		if menu.Code == "dashboard" {
+			return []int{menu.ID}
+		}
+	}
+	return []int{}
+}
+
+func (s *MemoryStore) allMenuIDs() []int {
+	ids := make([]int, 0, len(s.menus))
+	for _, menu := range s.menus {
+		ids = append(ids, menu.ID)
+	}
+	return ids
 }
 
 func (s *MemoryStore) findMenuIndexByID(id int) (int, bool) {
@@ -396,6 +1082,23 @@ func (s *MemoryStore) findMenuIndexByID(id int) (int, bool) {
 func (s *MemoryStore) menuExists(id int) bool {
 	_, found := s.findMenuByID(id)
 	return found
+}
+
+func (s *MemoryStore) expandMenuAncestors(menuIDs []int) []int {
+	expanded := uniqueIDs(menuIDs)
+	seen := make(map[int]bool, len(expanded))
+	for _, menuID := range expanded {
+		seen[menuID] = true
+	}
+	for index := 0; index < len(expanded); index++ {
+		menu, exists := s.findMenuByID(expanded[index])
+		if !exists || menu.ParentID == nil || seen[*menu.ParentID] {
+			continue
+		}
+		seen[*menu.ParentID] = true
+		expanded = append(expanded, *menu.ParentID)
+	}
+	return expanded
 }
 
 func (s *MemoryStore) hasChildMenu(id int) bool {
@@ -463,6 +1166,24 @@ func uniqueIDs(ids []int) []int {
 		}
 	}
 	return unique
+}
+
+func sameIDs(left, right []int) bool {
+	left = uniqueIDs(left)
+	right = uniqueIDs(right)
+	if len(left) != len(right) {
+		return false
+	}
+	rightSet := make(map[int]bool, len(right))
+	for _, id := range right {
+		rightSet[id] = true
+	}
+	for _, id := range left {
+		if !rightSet[id] {
+			return false
+		}
+	}
+	return true
 }
 
 func intPtr(value int) *int {

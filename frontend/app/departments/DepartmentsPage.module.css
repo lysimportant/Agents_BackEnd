@@ -1,0 +1,183 @@
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1.28fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.treePanel,
+.detailPanel {
+  min-height: 520px;
+}
+
+.treePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.treeWrap {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 2px;
+}
+
+.treeTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.treeTitle span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code {
+  color: var(--text-secondary);
+  font: 11px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.detailPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.detailHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.detailHeader h2 {
+  margin: 4px 0 6px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summaryItem {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-elevated);
+  border-radius: 8px;
+}
+
+.summaryItem span,
+.contactItem span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.summaryItem strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 18px;
+}
+
+.summaryItem strong svg {
+  vertical-align: -2px;
+}
+
+.contactGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.contactItem {
+  min-width: 0;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.contactItem strong {
+  overflow-wrap: anywhere;
+}
+
+.emptyDetail {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-height: 360px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.formGrid label {
+  display: grid;
+  gap: 7px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.spanTwo {
+  grid-column: 1 / -1;
+}
+
+.permissionHint {
+  margin: 0 0 14px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.permissionTree {
+  max-height: 420px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-elevated);
+}
+
+@media (max-width: 900px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .treePanel,
+  .detailPanel {
+    min-height: auto;
+  }
+
+  .summaryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .detailHeader {
+    flex-direction: column;
+  }
+
+  .summaryGrid,
+  .contactGrid,
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .spanTwo {
+    grid-column: auto;
+  }
+}

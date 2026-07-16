@@ -1,4 +1,4 @@
-package data_point_handlers
+package handlers
 
 import (
 	"net/http"
@@ -7,20 +7,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type Store interface {
+type DataPointStore interface {
 	ListDataPoints() []models.DataPoint
 	CreateDataPoint(request models.CreateDataPointRequest) models.DataPoint
 }
 
-type Handler struct {
-	store Store
+type DataPointHandler struct {
+	store DataPointStore
 }
 
-func New(store Store) *Handler {
-	return &Handler{store: store}
+func NewDataPointHandler(store DataPointStore) *DataPointHandler {
+	return &DataPointHandler{store: store}
 }
 
-func (h *Handler) List(c *gin.Context) {
+func (h *DataPointHandler) List(c *gin.Context) {
 	dataPoints := h.store.ListDataPoints()
 	if dataPoints == nil {
 		dataPoints = []models.DataPoint{}
@@ -28,7 +28,7 @@ func (h *Handler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, dataPoints)
 }
 
-func (h *Handler) Create(c *gin.Context) {
+func (h *DataPointHandler) Create(c *gin.Context) {
 	var request models.CreateDataPointRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
