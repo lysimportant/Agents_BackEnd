@@ -25,13 +25,14 @@ import {
 } from '@ant-design/icons';
 import { Alert, Button, Card, Dropdown, Empty, Input, Modal, Popconfirm, Select, Space, Statistic, Switch, Tag, Tooltip } from 'antd';
 import type { Article, ArticleForm } from '../types/admin';
+import type { ResourceActionAccess } from '../lib/actionPermissions';
 import { API_BASE_URL, articleStatusOptions, MAX_UPLOAD_SIZE } from '../lib/constants';
 import { requestWithSession } from '../lib/api';
 import { articleExportOptions, exportArticle, type ArticleExportFormat } from '../lib/articleExport';
 
 type ArticlesPageProps = {
   filteredArticles: Article[];
-  canManage: boolean;
+  actions: ResourceActionAccess;
   articleForm: ArticleForm;
   editingArticleId: number | null;
   articleKeyword: string;
@@ -50,7 +51,7 @@ type ArticlesPageProps = {
 
 export function ArticlesPage(props: ArticlesPageProps) {
   const {
-    filteredArticles, canManage, articleForm, editingArticleId, articleKeyword, articleStatus, isSavingArticle,
+    filteredArticles, actions, articleForm, editingArticleId, articleKeyword, articleStatus, isSavingArticle,
     onArticleFormChange, onSubmitArticle, onResetArticleForm, onArticleKeywordChange,
     onArticleStatusChange, onResetFilters, onEditArticle, onToggleArticleStatus, onDeleteArticle,
   } = props;
@@ -62,10 +63,11 @@ export function ArticlesPage(props: ArticlesPageProps) {
   const isEditing = editorArticleId !== null;
   const published = filteredArticles.filter((article) => article.status === '已发布').length;
 
-  const openNew = () => { onResetArticleForm(); setEditorArticleId(null); setIsEditorOpen(true); };
-  const openEdit = (article: Article) => { setEditorArticleId(article.id); setIsEditorOpen(true); onEditArticle(article); };
+  const openNew = () => { if (!actions.create) return; onResetArticleForm(); setEditorArticleId(null); setIsEditorOpen(true); };
+  const openEdit = (article: Article) => { if (!actions.update) return; setEditorArticleId(article.id); setIsEditorOpen(true); onEditArticle(article); };
   const closeEditor = () => { onResetArticleForm(); setEditorArticleId(null); setIsEditorOpen(false); };
   const submit = async (event: FormEvent<HTMLFormElement>) => {
+    if (isEditing ? !actions.update : !actions.create) return;
     if (await onSubmitArticle(event)) {
       setEditorArticleId(null);
       setIsEditorOpen(false);
@@ -88,7 +90,7 @@ export function ArticlesPage(props: ArticlesPageProps) {
     <Card className="article-hero" variant="borderless">
       <div><p className="page-kicker">内容管理 / 写作中心</p><h1 id="articles-page-title">文章管理</h1><span>在富文本编辑器中创作、预览、保存和发布文章；所有操作均直连后端接口。</span></div>
       <Space className="article-hero-actions" size={12} wrap>
-        {canManage && <Button className="article-create-button" icon={<PlusOutlined />} onClick={openNew}>新建文章</Button>}
+        {actions.create && <Button className="article-create-button" icon={<PlusOutlined />} onClick={openNew}>新建文章</Button>}
         <Button className="article-clear-filter-button" icon={<AppstoreOutlined />} onClick={onResetFilters}>清空筛选条件</Button>
       </Space>
     </Card>
@@ -98,10 +100,10 @@ export function ArticlesPage(props: ArticlesPageProps) {
     <div className="article-stat-grid"><Card><Statistic title="当前结果" value={filteredArticles.length} prefix={<FileTextOutlined />} /></Card><Card><Statistic title="已发布" value={published} suffix="篇" prefix={<SendOutlined />} /></Card><Card><Statistic title="草稿 / 下架" value={filteredArticles.length - published} suffix="篇" prefix={<EditOutlined />} /></Card></div>
 
     <Card className="article-browser-card" title="文章库" extra={<Space className="article-filter-bar"><Input allowClear value={articleKeyword} onChange={(event) => onArticleKeywordChange(event.target.value)} placeholder="标题、分类、作者、摘要" prefix={<FileTextOutlined />} /><Select value={articleStatus} onChange={onArticleStatusChange} options={[{ value: '全部', label: '全部状态' }, ...articleStatusOptions.map((status) => ({ value: status, label: status }))]} /><Button onClick={onResetFilters}>重置</Button></Space>}>
-      {filteredArticles.length === 0 ? <Empty description="暂无匹配文章">{canManage && <Button type="primary" onClick={openNew}>创建第一篇文章</Button>}</Empty> : <div className="article-card-list" aria-label="文章列表">{filteredArticles.map((article) => <ArticleCard key={article.id} article={article} canManage={canManage} exportingFormat={exportingArticle?.articleId === article.id ? exportingArticle.format : null} exportDisabled={Boolean(exportingArticle)} onExport={handleExport} onPreview={setPreviewArticle} onEdit={openEdit} onToggle={onToggleArticleStatus} onDelete={onDeleteArticle} />)}</div>}
+      {filteredArticles.length === 0 ? <Empty description="暂无匹配文章">{actions.create && <Button type="primary" onClick={openNew}>创建第一篇文章</Button>}</Empty> : <div className="article-card-list" aria-label="文章列表">{filteredArticles.map((article) => <ArticleCard key={article.id} article={article} actions={actions} exportingFormat={exportingArticle?.articleId === article.id ? exportingArticle.format : null} exportDisabled={Boolean(exportingArticle)} onExport={handleExport} onPreview={setPreviewArticle} onEdit={openEdit} onToggle={onToggleArticleStatus} onDelete={onDeleteArticle} />)}</div>}
     </Card>
 
-    {canManage && <Modal open={isEditorOpen} title={isEditing ? '编辑文章' : '新建文章'} footer={null} width="min(1160px, 96vw)" destroyOnHidden onCancel={closeEditor}>
+    {(actions.create || actions.update) && <Modal open={isEditorOpen} title={isEditing ? '编辑文章' : '新建文章'} footer={null} width="min(1160px, 96vw)" destroyOnHidden onCancel={closeEditor}>
       <form className="rich-editor-form" onSubmit={(event) => void submit(event)}>
         <div className="rich-editor-meta">
           <label>标题<Input required size="large" value={articleForm.title} onChange={(event) => onArticleFormChange({ ...articleForm, title: event.target.value })} placeholder="请输入清晰、有辨识度的文章标题" /></label>
@@ -113,7 +115,7 @@ export function ArticlesPage(props: ArticlesPageProps) {
         <div className="privacy-switch-row">
           <div>
             <strong>仅自己可见</strong>
-            <small>开启后仅归属人和系统管理员可查看；其他登录用户不会在列表中看到此文章。</small>
+            <small>开启后仅归属人和管理员可查看；其他登录用户不会在列表中看到此文章。</small>
           </div>
           <Switch checked={Boolean(articleForm.isPrivate)} onChange={(checked) => onArticleFormChange({ ...articleForm, isPrivate: checked })} checkedChildren="私密" unCheckedChildren="公开" />
         </div>
@@ -128,7 +130,7 @@ export function ArticlesPage(props: ArticlesPageProps) {
 
 type ArticleCardProps = {
   article: Article;
-  canManage: boolean;
+  actions: ResourceActionAccess;
   exportingFormat: ArticleExportFormat | null;
   exportDisabled: boolean;
   onExport: (article: Article, format: ArticleExportFormat) => Promise<void>;
@@ -137,7 +139,7 @@ type ArticleCardProps = {
   onToggle: (article: Article) => void;
   onDelete: (articleId: number) => void;
 };
-function ArticleCard({ article, canManage, exportingFormat, exportDisabled, onExport, onPreview, onEdit, onToggle, onDelete }: ArticleCardProps) {
+function ArticleCard({ article, actions, exportingFormat, exportDisabled, onExport, onPreview, onEdit, onToggle, onDelete }: ArticleCardProps) {
   const isPublished = article.status === '已发布';
   const isIndexable = isPublished && !article.isPrivate;
   const titleId = `article-title-${article.id}`;
@@ -158,9 +160,9 @@ function ArticleCard({ article, canManage, exportingFormat, exportDisabled, onEx
           {exportingFormat ? '正在导出' : '导出全文'} {!exportingFormat && <DownOutlined />}
         </Button>
       </Dropdown>
-      {canManage && <Button icon={<EditOutlined />} onClick={() => onEdit(article)}>编辑</Button>}
-      {canManage && <Button type={isPublished ? 'default' : 'primary'} icon={<SendOutlined />} onClick={() => onToggle(article)}>{isPublished ? '下架' : '发布'}</Button>}
-      {canManage && <Popconfirm title="确认删除此文章？此操作不可恢复。" okText="删除" cancelText="取消" onConfirm={() => onDelete(article.id)}><Button danger icon={<DeleteOutlined />}>删除</Button></Popconfirm>}
+      {actions.update && <Button icon={<EditOutlined />} onClick={() => onEdit(article)}>编辑</Button>}
+      {actions.update && <Button type={isPublished ? 'default' : 'primary'} icon={<SendOutlined />} onClick={() => onToggle(article)}>{isPublished ? '下架' : '发布'}</Button>}
+      {actions.delete && <Popconfirm title="确认删除此文章？此操作不可恢复。" okText="删除" cancelText="取消" onConfirm={() => onDelete(article.id)}><Button danger icon={<DeleteOutlined />}>删除</Button></Popconfirm>}
     </Space>
   </article>;
 }

@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { Button, Descriptions, Modal, Space, Tag } from 'antd';
+import type { ResourceActionAccess } from '../lib/actionPermissions';
 import type { Menu, MenuForm, MenuNode } from '../types/admin';
 import { menuStatusOptions } from '../lib/constants';
 
@@ -11,7 +12,7 @@ type MenusPageProps = {
   editingMenuId: number | null;
   isLoading: boolean;
   isSavingMenu: boolean;
-  canManage: boolean;
+  actions: ResourceActionAccess;
   onRefresh: () => void;
   onMenuFormChange: (form: MenuForm) => void;
   onSubmitMenu: (event: FormEvent<HTMLFormElement>) => Promise<boolean>;
@@ -20,7 +21,7 @@ type MenusPageProps = {
   onDeleteMenu: (menuId: number) => void;
 };
 
-export function MenusPage({ menus, menuTree, menuForm, editingMenuId, isLoading, isSavingMenu, canManage, onRefresh, onMenuFormChange, onSubmitMenu, onResetMenuForm, onEditMenu, onDeleteMenu }: MenusPageProps) {
+export function MenusPage({ menus, menuTree, menuForm, editingMenuId, isLoading, isSavingMenu, actions, onRefresh, onMenuFormChange, onSubmitMenu, onResetMenuForm, onEditMenu, onDeleteMenu }: MenusPageProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewingMenu, setViewingMenu] = useState<Menu | null>(null);
   const enabledMenus = menus.filter((menu) => menu.status === '启用');
@@ -42,10 +43,12 @@ export function MenusPage({ menus, menuTree, menuForm, editingMenuId, isLoading,
   }, [editingMenuId, menus]);
 
   const openCreate = () => {
+    if (!actions.create) return;
     onResetMenuForm();
     setDialogOpen(true);
   };
   const openEdit = (menu: Menu) => {
+    if (!actions.update) return;
     onEditMenu(menu);
     setDialogOpen(true);
   };
@@ -54,7 +57,7 @@ export function MenusPage({ menus, menuTree, menuForm, editingMenuId, isLoading,
     onResetMenuForm();
   };
   const submit = async (event: FormEvent<HTMLFormElement>) => {
-    if (!canManage) return;
+    if (editingMenuId ? !actions.update : !actions.create) return;
     if (await onSubmitMenu(event)) setDialogOpen(false);
   };
 
@@ -68,7 +71,7 @@ export function MenusPage({ menus, menuTree, menuForm, editingMenuId, isLoading,
         </div>
         <Space className="page-header-actions" size={12} wrap>
           <Button color="cyan" variant="filled" icon={<ReloadOutlined />} onClick={onRefresh} loading={isLoading}>刷新菜单</Button>
-          {canManage && <Button className="menu-create-button" type="primary" icon={<PlusOutlined />} aria-label="新建菜单" onClick={openCreate}>新建菜单</Button>}
+          {actions.create && <Button className="menu-create-button" type="primary" icon={<PlusOutlined />} aria-label="新建菜单" onClick={openCreate}>新建菜单</Button>}
         </Space>
       </section>
 
@@ -96,14 +99,9 @@ export function MenusPage({ menus, menuTree, menuForm, editingMenuId, isLoading,
                   <td><Tag color={menu.status === '启用' ? 'success' : 'default'}>{menu.status}</Tag></td>
                   <td>
                     <div className="action-group">
-                      {canManage ? (
-                        <>
-                          <button type="button" onClick={() => openEdit(menu)}>编辑</button>
-                          <button className="danger" type="button" onClick={() => onDeleteMenu(menu.id)}>删除</button>
-                        </>
-                      ) : (
-                        <button type="button" onClick={() => setViewingMenu(menu)}>查看</button>
-                      )}
+                      <button type="button" onClick={() => setViewingMenu(menu)}>查看</button>
+                      {actions.update && <button type="button" onClick={() => openEdit(menu)}>编辑</button>}
+                      {actions.delete && <button className="danger" type="button" onClick={() => onDeleteMenu(menu.id)}>删除</button>}
                     </div>
                   </td>
                 </tr>
@@ -114,7 +112,7 @@ export function MenusPage({ menus, menuTree, menuForm, editingMenuId, isLoading,
         </div>
       </section>
 
-      {canManage && <Modal open={dialogOpen} title={editingMenuId ? '编辑菜单' : '创建菜单'} footer={null} onCancel={closeDialog} destroyOnHidden width={620} className="menu-form-modal">
+      {(actions.create || actions.update) && <Modal open={dialogOpen} title={editingMenuId ? '编辑菜单' : '创建菜单'} footer={null} onCancel={closeDialog} destroyOnHidden width={620} className="menu-form-modal">
         <form className="form-panel modal-form" onSubmit={(event) => void submit(event)}>
           <label>菜单名称<input required value={menuForm.name} onChange={(event) => onMenuFormChange({ ...menuForm, name: event.target.value })} placeholder="如：文件管理" /></label>
           <label>权限编码<input required value={menuForm.code} onChange={(event) => onMenuFormChange({ ...menuForm, code: event.target.value })} placeholder="如：files" /></label>

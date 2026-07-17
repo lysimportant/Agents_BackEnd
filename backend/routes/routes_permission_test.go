@@ -17,6 +17,7 @@ import (
 	"collector-backend/models"
 	"collector-backend/permissions"
 	"collector-backend/repository"
+	"collector-backend/verification"
 	"github.com/gin-gonic/gin"
 )
 
@@ -47,8 +48,10 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *repository.SQLiteStore, *auth.
 		SessionTTLHours:   8,
 	}
 	sessionService := auth.NewService(store, cfg)
+	passwordCodes := verification.NewPasswordCodeService(cfg)
+	t.Cleanup(func() { _ = passwordCodes.Close() })
 	router := gin.New()
-	Setup(router, store, sessionService, cfg)
+	Setup(router, store, sessionService, passwordCodes, cfg)
 	return router, store, sessionService
 }
 
@@ -586,7 +589,7 @@ func TestMHInvariantsAreProtected(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
 		t.Fatalf("decode updated MH: %v", err)
 	}
-	if updated.Username != "MH" || updated.Role != "系统管理员" || updated.RoleCode != "system-admin" || updated.RoleID == nil || !updated.CanLogin || updated.DepartmentID == nil || *updated.DepartmentID != rootDepartment.ID {
+	if updated.Username != "MH" || updated.Role != "超级管理员" || updated.RoleCode != "super-admin" || updated.RoleID == nil || !updated.CanLogin || updated.DepartmentID == nil || *updated.DepartmentID != rootDepartment.ID {
 		t.Fatalf("MH invariants were not preserved: %+v", updated)
 	}
 
@@ -792,16 +795,18 @@ func TestRoleDepartmentUsersAndArticleExports(t *testing.T) {
 
 func TestActionContractAndSystemAdminUserBoundary(t *testing.T) {
 	router, store, _ := setupTestRouter(t)
-	var systemRole, viewerRole models.Role
+	var superRole, systemRole, viewerRole models.Role
 	for _, role := range store.ListRoles() {
 		switch role.Code {
+		case permissions.SuperAdminRoleCode:
+			superRole = role
 		case permissions.SystemAdminRoleCode:
 			systemRole = role
 		case "viewer":
 			viewerRole = role
 		}
 	}
-	if systemRole.ID == 0 || viewerRole.ID == 0 {
+	if superRole.ID == 0 || systemRole.ID == 0 || viewerRole.ID == 0 {
 		t.Fatal("role seeds missing")
 	}
 
@@ -891,5 +896,100 @@ func TestActionContractAndSystemAdminUserBoundary(t *testing.T) {
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("system administrator could not create administrator: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	createSuperBody, _ := json.Marshal(models.UserRequest{
+		Username: "second-super-admin", Name: "第二超级管理员", RoleID: &superRole.ID,
+		Status: "在岗", CanLogin: &canLogin, Password: "pass1234",
+	})
+	req = httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(createSuperBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "sessionId", Value: adminCookie})
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("super administrator could not create super administrator: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSystemAdminCannotEscalateToSuperAdministrator(t *testing.T) {
+	router, store, _ := setupTestRouter(t)
+	var superRole, systemRole, viewerRole models.Role
+	for _, role := range store.ListRoles() {
+		switch role.Code {
+		case permissions.SuperAdminRoleCode:
+			superRole = role
+		case permissions.SystemAdminRoleCode:
+			systemRole = role
+		case "viewer":
+			viewerRole = role
+		}
+	}
+	if superRole.ID == 0 || systemRole.ID == 0 || viewerRole.ID == 0 {
+		t.Fatal("administrator role seeds missing")
+	}
+	canLogin := true
+	systemUser, message := store.CreateUser(models.UserRequest{
+		Username: "boundary-system-admin", Name: "边界系统管理员", RoleID: &systemRole.ID,
+		Status: "在岗", CanLogin: &canLogin,
+	}, auth.MustHashPassword("pass1234"))
+	if message != "" {
+		t.Fatalf("create system administrator: %s", message)
+	}
+	ordinary, message := store.CreateUser(models.UserRequest{
+		Username: "boundary-viewer", Name: "边界普通用户", RoleID: &viewerRole.ID,
+		Status: "在岗", CanLogin: &canLogin,
+	}, auth.MustHashPassword("pass1234"))
+	if message != "" {
+		t.Fatalf("create ordinary user: %s", message)
+	}
+	systemCookie := loginCookie(t, router, systemUser.Username, "pass1234")
+
+	createSuperBody, _ := json.Marshal(models.UserRequest{
+		Username: "forbidden-super-by-system", Name: "系统管理员越权创建超级管理员", RoleID: &superRole.ID,
+		Status: "在岗", CanLogin: &canLogin, Password: "pass1234",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(createSuperBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "sessionId", Value: systemCookie})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("system administrator created super administrator: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	updateBody, _ := json.Marshal(models.UserRequest{
+		Username: ordinary.Username, Name: ordinary.Name, RoleID: &superRole.ID,
+		Status: ordinary.Status, CanLogin: &canLogin,
+	})
+	req = httptest.NewRequest(http.MethodPut, "/api/users/"+strconv.Itoa(ordinary.ID), bytes.NewReader(updateBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "sessionId", Value: systemCookie})
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("system administrator assigned super administrator: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	mh, _ := store.FindUserByUsername("MH")
+	updateMHBody, _ := json.Marshal(models.UserRequest{
+		Username: mh.Username, Name: "越权修改", RoleID: mh.RoleID,
+		Status: mh.Status, CanLogin: &canLogin,
+	})
+	req = httptest.NewRequest(http.MethodPut, "/api/users/"+strconv.Itoa(mh.ID), bytes.NewReader(updateMHBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "sessionId", Value: systemCookie})
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("system administrator modified MH: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/roles/"+strconv.Itoa(superRole.ID), nil)
+	req.AddCookie(&http.Cookie{Name: "sessionId", Value: systemCookie})
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("system administrator deleted super role: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }

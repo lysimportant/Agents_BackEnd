@@ -56,6 +56,10 @@ func (h *RoleHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if permissions.IsAdministratorRoleCode(request.Code) && !currentUserIsSuperAdmin(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "只有超级管理员可以创建管理员角色"})
+		return
+	}
 	role, message := h.store.CreateRole(request)
 	if message != "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": message})
@@ -69,12 +73,16 @@ func (h *RoleHandler) Update(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if h.systemAdminTargetForbidden(c, id) {
+	if h.administratorTargetForbidden(c, id) {
 		return
 	}
 	var request models.RoleRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if permissions.IsAdministratorRoleCode(request.Code) && !currentUserIsSuperAdmin(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "只有超级管理员可以设置管理员角色编码"})
 		return
 	}
 	role, message := h.store.UpdateRole(id, request)
@@ -94,7 +102,7 @@ func (h *RoleHandler) Delete(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if h.systemAdminTargetForbidden(c, id) {
+	if h.administratorTargetForbidden(c, id) {
 		return
 	}
 	message := h.store.DeleteRole(id)
@@ -131,7 +139,7 @@ func (h *RoleHandler) UpdateMenus(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if h.systemAdminTargetForbidden(c, id) {
+	if h.administratorTargetForbidden(c, id) {
 		return
 	}
 	var request models.UserMenusRequest
@@ -171,12 +179,12 @@ func (h *RoleHandler) ListUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, users)
 }
 
-func (h *RoleHandler) systemAdminTargetForbidden(c *gin.Context, id int) bool {
+func (h *RoleHandler) administratorTargetForbidden(c *gin.Context, id int) bool {
 	target, found := h.store.FindRoleByID(id)
 	current, currentFound := middleware.CurrentUser(c)
-	if !found || target.Code != permissions.SystemAdminRoleCode || (currentFound && current.RoleCode == permissions.SystemAdminRoleCode) {
+	if !found || !permissions.IsAdministratorRoleCode(target.Code) || (currentFound && permissions.IsSuperAdminRoleCode(current.RoleCode)) {
 		return false
 	}
-	c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "不能修改系统管理员角色"})
+	c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "只有超级管理员可以操作管理员角色"})
 	return true
 }

@@ -1,18 +1,23 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { MailOutlined, PhoneOutlined, UserOutlined } from '@ant-design/icons';
-import { Alert, Avatar, Button, Input, InputNumber, Modal, Skeleton, Tag } from 'antd';
+import { useEffect, useState, type FormEvent } from 'react';
+import { LockOutlined, MailOutlined, PhoneOutlined, SafetyCertificateOutlined, UserOutlined } from '@ant-design/icons';
+import { Alert, Avatar, Button, Input, InputNumber, Skeleton, Tag } from 'antd';
 import { API_BASE_URL } from '../lib/constants';
 import { requestWithSession } from '../lib/api';
 import type { AuthUser, ProfileForm, User } from '../types/admin';
 import styles from './ProfileDialog.module.css';
 
-type ProfileDialogProps = {
+type ProfilePageProps = {
   authUser: AuthUser;
-  open: boolean;
-  onClose: () => void;
   onUpdated: (user: User) => void;
+  onPasswordChanged: () => void;
+};
+
+type PasswordForm = {
+  code: string;
+  newPassword: string;
+  confirmPassword: string;
 };
 
 function toProfileForm(user: AuthUser | User): ProfileForm {
@@ -45,16 +50,19 @@ async function requestProfile(userId: number, init: RequestInit = {}) {
   throw new Error('个人资料接口不可用');
 }
 
-export function ProfileDialog({ authUser, open, onClose, onUpdated }: ProfileDialogProps) {
-  const formRef = useRef<HTMLFormElement>(null);
+export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfilePageProps) {
   const [profile, setProfile] = useState<User | null>(null);
   const [form, setForm] = useState<ProfileForm>(() => toProfileForm(authUser));
+  const [passwordForm, setPasswordForm] = useState<PasswordForm>({ code: '', newPassword: '', confirmPassword: '' });
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [error, setError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordMessage, setPasswordMessage] = useState('');
 
   useEffect(() => {
-    if (!open) return;
     const controller = new AbortController();
     setForm(toProfileForm(authUser));
     setProfile(null);
@@ -79,9 +87,9 @@ export function ProfileDialog({ authUser, open, onClose, onUpdated }: ProfileDia
     })();
 
     return () => controller.abort();
-  }, [authUser.id, open]);
+  }, [authUser.id]);
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
+  const submitProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
     setIsSaving(true);
@@ -103,7 +111,6 @@ export function ProfileDialog({ authUser, open, onClose, onUpdated }: ProfileDia
       setProfile(user);
       setForm(toProfileForm(user));
       onUpdated(user);
-      onClose();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : '保存个人资料失败');
     } finally {
@@ -111,70 +118,168 @@ export function ProfileDialog({ authUser, open, onClose, onUpdated }: ProfileDia
     }
   };
 
+  const sendCode = async () => {
+    setPasswordError('');
+    setPasswordMessage('');
+    setIsSendingCode(true);
+    try {
+      const response = await requestWithSession(`${API_BASE_URL}/api/profile/password-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: form.email.trim() }),
+      });
+      if (!response.ok) throw new Error(await parseProfileError(response, '发送验证码失败'));
+      setPasswordMessage('验证码已发送到当前绑定邮箱，3 分钟内有效。');
+    } catch (sendError) {
+      setPasswordError(sendError instanceof Error ? sendError.message : '发送验证码失败');
+    } finally {
+      setIsSendingCode(false);
+    }
+  };
+
+  const changePassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPasswordError('');
+    setPasswordMessage('');
+    if (passwordForm.newPassword.length < 6) {
+      setPasswordError('新密码至少需要 6 位。');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError('两次输入的新密码不一致。');
+      return;
+    }
+    setIsChangingPassword(true);
+    try {
+      const response = await requestWithSession(`${API_BASE_URL}/api/profile/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: passwordForm.code.trim(), newPassword: passwordForm.newPassword }),
+      });
+      if (!response.ok) throw new Error(await parseProfileError(response, '修改密码失败'));
+      setPasswordForm({ code: '', newPassword: '', confirmPassword: '' });
+      setPasswordMessage('密码已修改，请使用新密码重新登录。');
+      onPasswordChanged();
+    } catch (changeError) {
+      setPasswordError(changeError instanceof Error ? changeError.message : '修改密码失败');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
   const visibleUser = profile ?? authUser;
   const avatarFallback = Array.from(form.name.trim() || visibleUser.username || '?')[0]?.toUpperCase();
 
   return (
-    <Modal
-      open={open}
-      title="个人资料"
-      width={720}
-      destroyOnHidden
-      mask={{ closable: !isSaving }}
-      onCancel={isSaving ? undefined : onClose}
-      footer={[
-        <Button key="cancel" disabled={isSaving} onClick={onClose}>取消</Button>,
-        <Button key="save" type="primary" loading={isSaving} disabled={isLoading} onClick={() => formRef.current?.requestSubmit()}>保存资料</Button>,
-      ]}
-    >
+    <div className="page-stack profile-page">
+      <section className="section-header-card">
+        <div>
+          <p className="page-kicker">账号中心</p>
+          <h1>个人资料</h1>
+          <span>维护个人联系方式、头像与密码安全；密码修改需要邮箱验证码确认。</span>
+        </div>
+      </section>
+
       {isLoading ? (
-        <div className={styles.loading} aria-label="正在加载个人资料"><Skeleton active avatar paragraph={{ rows: 5 }} /></div>
+        <section className="panel-card">
+          <div className={styles.loading} aria-label="正在加载个人资料"><Skeleton active avatar paragraph={{ rows: 5 }} /></div>
+        </section>
       ) : (
-        <form ref={formRef} className={styles.form} onSubmit={(event) => void submit(event)}>
-          <section className={styles.identity}>
-            <Avatar size={88} src={form.avatarUrl || undefined}>{avatarFallback}</Avatar>
-            <div>
-              <h2>{form.name || visibleUser.username}</h2>
-              <p>@{visibleUser.username}</p>
-              <div className={styles.tags}>
-                <Tag color="blue">{visibleUser.role || '未分配角色'}</Tag>
-                <Tag>{visibleUser.department || '未分配部门'}</Tag>
-                <Tag color={form.email ? 'success' : 'default'}>{form.email ? '邮箱已绑定' : '邮箱未绑定'}</Tag>
+        <section className="content-grid profile-layout">
+          <section className="panel-card">
+            <form className={styles.form} onSubmit={(event) => void submitProfile(event)}>
+              <section className={styles.identity}>
+                <Avatar size={88} src={form.avatarUrl || undefined}>{avatarFallback}</Avatar>
+                <div>
+                  <h2>{form.name || visibleUser.username}</h2>
+                  <p>@{visibleUser.username}</p>
+                  <div className={styles.tags}>
+                    <Tag color="blue">{visibleUser.role || '未分配角色'}</Tag>
+                    <Tag>{visibleUser.department || '未分配部门'}</Tag>
+                    <Tag color={form.email ? 'success' : 'default'}>{form.email ? '邮箱已绑定' : '邮箱未绑定'}</Tag>
+                  </div>
+                </div>
+              </section>
+
+              {error && <Alert type="error" showIcon title={error} />}
+
+              <div className={styles.fields}>
+                <label>
+                  显示姓名
+                  <Input required maxLength={60} value={form.name} prefix={<UserOutlined />} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="请输入姓名" />
+                </label>
+                <label>
+                  年龄
+                  <InputNumber min={0} max={150} precision={0} value={form.age || null} onChange={(age) => setForm({ ...form, age: Number(age ?? 0) })} placeholder="未填写" />
+                </label>
+                <label>
+                  邮箱绑定
+                  <Input type="email" maxLength={120} value={form.email} prefix={<MailOutlined />} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="name@example.com" />
+                </label>
+                <label>
+                  联系电话
+                  <Input maxLength={30} value={form.phone} prefix={<PhoneOutlined />} onChange={(event) => setForm({ ...form, phone: event.target.value })} placeholder="请输入联系电话" />
+                </label>
+                <label className={styles.spanTwo}>
+                  头像地址
+                  <Input type="url" maxLength={2048} value={form.avatarUrl} onChange={(event) => setForm({ ...form, avatarUrl: event.target.value })} placeholder="https://example.com/avatar.jpg" />
+                  <small>填写可公开访问的 HTTPS 图片地址，留空则使用默认头像。</small>
+                </label>
+                <label className={styles.spanTwo}>
+                  个人描述
+                  <Input.TextArea showCount maxLength={500} rows={4} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="介绍你的职责、擅长方向或当前工作重点" />
+                </label>
               </div>
-            </div>
+
+              <div className="rich-editor-actions">
+                <Button type="primary" htmlType="submit" loading={isSaving}>保存资料</Button>
+              </div>
+            </form>
           </section>
 
-          {error && <Alert type="error" showIcon title={error} />}
+          <section className="panel-card">
+            <form className={styles.form} onSubmit={(event) => void changePassword(event)}>
+              <div className="panel-heading">
+                <div>
+                  <p className="page-kicker">安全验证</p>
+                  <h2>修改密码</h2>
+                  <span>验证码发送到当前账号绑定邮箱，Redis 缓存有效期为 3 分钟。</span>
+                </div>
+                <SafetyCertificateOutlined className="profile-security-icon" />
+              </div>
 
-          <div className={styles.fields}>
-            <label>
-              显示姓名
-              <Input required maxLength={60} value={form.name} prefix={<UserOutlined />} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="请输入姓名" />
-            </label>
-            <label>
-              年龄
-              <InputNumber min={0} max={150} precision={0} value={form.age || null} onChange={(age) => setForm({ ...form, age: Number(age ?? 0) })} placeholder="未填写" />
-            </label>
-            <label>
-              邮箱绑定
-              <Input type="email" maxLength={120} value={form.email} prefix={<MailOutlined />} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="name@example.com" />
-            </label>
-            <label>
-              联系电话
-              <Input maxLength={30} value={form.phone} prefix={<PhoneOutlined />} onChange={(event) => setForm({ ...form, phone: event.target.value })} placeholder="请输入联系电话" />
-            </label>
-            <label className={styles.spanTwo}>
-              头像地址
-              <Input type="url" maxLength={2048} value={form.avatarUrl} onChange={(event) => setForm({ ...form, avatarUrl: event.target.value })} placeholder="https://example.com/avatar.jpg" />
-              <small>填写可公开访问的 HTTPS 图片地址，留空则使用默认头像。</small>
-            </label>
-            <label className={styles.spanTwo}>
-              个人描述
-              <Input.TextArea showCount maxLength={500} rows={4} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="介绍你的职责、擅长方向或当前工作重点" />
-            </label>
-          </div>
-        </form>
+              {passwordError && <Alert type="error" showIcon title={passwordError} />}
+              {passwordMessage && <Alert type="success" showIcon title={passwordMessage} />}
+
+              <div className={styles.fields}>
+                <label className={styles.spanTwo}>
+                  绑定邮箱
+                  <Input value={form.email || '当前账号未绑定邮箱'} prefix={<MailOutlined />} disabled />
+                </label>
+                <label className={styles.spanTwo}>
+                  邮箱验证码
+                  <div className="profile-code-row">
+                    <Input value={passwordForm.code} maxLength={6} prefix={<SafetyCertificateOutlined />} onChange={(event) => setPasswordForm({ ...passwordForm, code: event.target.value })} placeholder="请输入 6 位验证码" />
+                    <Button onClick={() => void sendCode()} loading={isSendingCode} disabled={!form.email.trim()}>发送验证码</Button>
+                  </div>
+                </label>
+                <label>
+                  新密码
+                  <Input.Password value={passwordForm.newPassword} prefix={<LockOutlined />} onChange={(event) => setPasswordForm({ ...passwordForm, newPassword: event.target.value })} placeholder="至少 6 位" />
+                </label>
+                <label>
+                  确认新密码
+                  <Input.Password value={passwordForm.confirmPassword} prefix={<LockOutlined />} onChange={(event) => setPasswordForm({ ...passwordForm, confirmPassword: event.target.value })} placeholder="再次输入新密码" />
+                </label>
+              </div>
+
+              <div className="rich-editor-actions">
+                <Button type="primary" htmlType="submit" loading={isChangingPassword}>确认修改密码</Button>
+              </div>
+            </form>
+          </section>
+        </section>
       )}
-    </Modal>
+    </div>
   );
 }

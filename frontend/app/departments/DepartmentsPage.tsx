@@ -5,12 +5,13 @@ import { Button, Empty, InputNumber, Modal, Select, Tag, Tree, TreeSelect } from
 import type { DataNode } from 'antd/es/tree';
 import { Eye, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, UsersRound } from 'lucide-react';
 import { AssociatedUsersDialog } from '../components/AssociatedUsersDialog';
+import type { ResourceActionAccess } from '../lib/actionPermissions';
 import { departmentStatusOptions, emptyDepartmentForm } from '../lib/constants';
 import type { Department, DepartmentForm, Menu, User } from '../types/admin';
 import styles from './DepartmentsPage.module.css';
 
 type DepartmentsPageProps = {
-  canManage: boolean;
+  actions: ResourceActionAccess;
   departments: Department[];
   users: User[];
   menus: Menu[];
@@ -30,7 +31,7 @@ function byOrder<T extends { sort: number; id: number }>(first: T, second: T) {
 }
 
 export function DepartmentsPage({
-  canManage,
+  actions,
   departments,
   users,
   menus,
@@ -139,6 +140,7 @@ export function DepartmentsPage({
 
   const submitEditor = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (editingId ? !actions.update : !actions.create) return;
     if (await onSave(editingId, form)) setEditorOpen(false);
   };
 
@@ -184,7 +186,7 @@ export function DepartmentsPage({
         </div>
         <div className="action-group">
           <Button icon={<RefreshCw size={15} />} onClick={onRefresh} loading={isLoading}>刷新组织</Button>
-          {canManage && <Button type="primary" icon={<Plus size={15} />} onClick={openCreate}>新增部门</Button>}
+          {actions.create && <Button type="primary" icon={<Plus size={15} />} onClick={openCreate}>新增部门</Button>}
         </div>
       </section>
 
@@ -221,9 +223,9 @@ export function DepartmentsPage({
                 </div>
                 <div className={styles.actions}>
                   <Button icon={<Eye size={15} />} onClick={() => void openUsers(selected)}>查看成员</Button>
-                  <Button type={canManage ? 'primary' : 'default'} icon={<ShieldCheck size={15} />} onClick={() => void openPermissions(selected)}>{canManage ? '部门权限' : '查看权限'}</Button>
-                  {canManage && <Button icon={<Pencil size={15} />} onClick={() => openEdit(selected)}>编辑资料</Button>}
-                  {canManage && <Button danger icon={<Trash2 size={15} />} onClick={() => confirmDelete(selected)}>删除</Button>}
+                  <Button type={actions.permissions ? 'primary' : 'default'} icon={<ShieldCheck size={15} />} onClick={() => void openPermissions(selected)}>{actions.permissions ? '部门权限' : '查看权限'}</Button>
+                  {actions.update && <Button icon={<Pencil size={15} />} onClick={() => openEdit(selected)}>编辑资料</Button>}
+                  {actions.delete && <Button danger icon={<Trash2 size={15} />} onClick={() => confirmDelete(selected)}>删除</Button>}
                 </div>
               </div>
 
@@ -311,9 +313,9 @@ export function DepartmentsPage({
         width={600}
         destroyOnHidden
         onCancel={() => setPermissionOpen(false)}
-        footer={canManage ? undefined : <Button onClick={() => setPermissionOpen(false)}>关闭</Button>}
+        footer={actions.permissions ? undefined : <Button onClick={() => setPermissionOpen(false)}>关闭</Button>}
         onOk={async () => {
-          if (selected && await onSavePermissions(selected.id, permissionIds)) setPermissionOpen(false);
+          if (actions.permissions && selected && await onSavePermissions(selected.id, permissionIds)) setPermissionOpen(false);
         }}
       >
         <p className={styles.permissionHint}>这里配置当前部门成员默认拥有的菜单权限；下级部门独立配置，避免顶级部门权限扩散到整个组织。</p>
@@ -321,7 +323,7 @@ export function DepartmentsPage({
           {menuTree.length ? (
             <Tree
               checkable
-              disabled={!canManage}
+              disabled={!actions.permissions}
               selectable={false}
               defaultExpandAll
               treeData={menuTree}

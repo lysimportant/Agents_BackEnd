@@ -3,6 +3,7 @@ package permissions
 import "strings"
 
 const (
+	SuperAdminRoleCode  = "super-admin"
 	SystemAdminRoleCode = "system-admin"
 
 	DashboardQuery  = "dashboard.query"
@@ -50,6 +51,15 @@ const (
 	FilesRestore         = "files.restore"
 	FilesPermanentDelete = "files.permanent-delete"
 )
+
+func IsSuperAdminRoleCode(code string) bool {
+	return strings.EqualFold(strings.TrimSpace(code), SuperAdminRoleCode)
+}
+
+func IsAdministratorRoleCode(code string) bool {
+	code = strings.TrimSpace(code)
+	return strings.EqualFold(code, SuperAdminRoleCode) || strings.EqualFold(code, SystemAdminRoleCode)
+}
 
 type Definition struct {
 	Code     string `json:"code"`
@@ -114,6 +124,13 @@ func DefaultRoleCodes() []string {
 	return filterCodes(func(definition Definition) bool { return definition.ReadOnly })
 }
 
+func RoleCodes(roleCode string) []string {
+	if IsAdministratorRoleCode(roleCode) {
+		return AllCodes()
+	}
+	return DefaultRoleCodes()
+}
+
 func IsKnown(code string) bool {
 	code = strings.TrimSpace(code)
 	for _, definition := range definitions {
@@ -141,6 +158,44 @@ func Contains(codes []string, required string) bool {
 		}
 	}
 	return false
+}
+
+// NormalizeCodes validates action codes and returns them once in catalog order.
+// An empty slice is valid and is used to clear a user's personal grants.
+func NormalizeCodes(codes []string) ([]string, bool) {
+	selected := make(map[string]bool, len(codes))
+	for _, rawCode := range codes {
+		code := strings.TrimSpace(rawCode)
+		if !IsKnown(code) {
+			return nil, false
+		}
+		selected[code] = true
+	}
+	return selectedCodes(selected), true
+}
+
+// MergeCodes combines grants and returns only known codes in catalog order.
+func MergeCodes(codeGroups ...[]string) []string {
+	selected := map[string]bool{}
+	for _, codes := range codeGroups {
+		for _, rawCode := range codes {
+			code := strings.TrimSpace(rawCode)
+			if IsKnown(code) {
+				selected[code] = true
+			}
+		}
+	}
+	return selectedCodes(selected)
+}
+
+func selectedCodes(selected map[string]bool) []string {
+	codes := make([]string, 0, len(selected))
+	for _, definition := range definitions {
+		if selected[definition.Code] {
+			codes = append(codes, definition.Code)
+		}
+	}
+	return codes
 }
 
 func filterCodes(keep func(Definition) bool) []string {

@@ -116,8 +116,21 @@ type UserProfileRequest struct {
 	AvatarURL   *string `json:"avatarUrl"`
 }
 
+type PasswordCodeRequest struct {
+	Email string `json:"email"`
+}
+
+type ChangePasswordRequest struct {
+	Code        string `json:"code" binding:"required"`
+	NewPassword string `json:"newPassword" binding:"required"`
+}
+
 type UserMenusRequest struct {
 	MenuIDs []int `json:"menuIds" binding:"required"`
+}
+
+type UserActionsRequest struct {
+	ActionCodes []string `json:"actionCodes"`
 }
 
 type UserPermissionDetail struct {
@@ -126,6 +139,7 @@ type UserPermissionDetail struct {
 	UserMenuIDs          []int    `json:"userMenuIds"`
 	EffectiveMenuIDs     []int    `json:"effectiveMenuIds"`
 	RoleActionCodes      []string `json:"roleActionCodes"`
+	UserActionCodes      []string `json:"userActionCodes"`
 	EffectiveActionCodes []string `json:"effectiveActionCodes"`
 }
 

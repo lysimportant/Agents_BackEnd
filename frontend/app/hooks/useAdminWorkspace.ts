@@ -61,6 +61,9 @@ export function useAdminWorkspace() {
   const [departmentMenuIds, setDepartmentMenuIds] = useState<number[]>([]);
   const [roleMenuIds, setRoleMenuIds] = useState<number[]>([]);
   const [effectiveMenuIds, setEffectiveMenuIds] = useState<number[]>([]);
+  const [roleActionCodes, setRoleActionCodes] = useState<string[]>([]);
+  const [userActionCodes, setUserActionCodes] = useState<string[]>([]);
+  const [effectiveActionCodes, setEffectiveActionCodes] = useState<string[]>([]);
   const [activePage, setActivePage] = useState<PageKey>('dashboard');
   const [isLoading, setIsLoading] = useState(false);
   const [isSavingUser, setIsSavingUser] = useState(false);
@@ -68,6 +71,7 @@ export function useAdminWorkspace() {
   const [isSavingArticle, setIsSavingArticle] = useState(false);
   const [isSavingFile, setIsSavingFile] = useState(false);
   const [isSavingPermission, setIsSavingPermission] = useState(false);
+  const [isSavingActionPermission, setIsSavingActionPermission] = useState(false);
   const [isSavingDepartment, setIsSavingDepartment] = useState(false);
   const [isSavingDepartmentPermission, setIsSavingDepartmentPermission] = useState(false);
   const [isSavingRole, setIsSavingRole] = useState(false);
@@ -107,6 +111,9 @@ export function useAdminWorkspace() {
     setDepartmentMenuIds(Array.isArray(data.departmentMenuIds) ? data.departmentMenuIds : []);
     setRoleMenuIds(Array.isArray(data.roleMenuIds) ? data.roleMenuIds : []);
     setEffectiveMenuIds(Array.isArray(data.effectiveMenuIds) ? data.effectiveMenuIds : []);
+    setRoleActionCodes(Array.isArray(data.roleActionCodes) ? data.roleActionCodes : []);
+    setUserActionCodes(Array.isArray(data.userActionCodes) ? data.userActionCodes : []);
+    setEffectiveActionCodes(Array.isArray(data.effectiveActionCodes) ? data.effectiveActionCodes : []);
   };
 
   const loadRecycleFiles = async () => {
@@ -161,6 +168,9 @@ export function useAdminWorkspace() {
           setDepartmentMenuIds([]);
           setRoleMenuIds([]);
           setEffectiveMenuIds([]);
+          setRoleActionCodes([]);
+          setUserActionCodes([]);
+          setEffectiveActionCodes([]);
         }
       } else {
         setSelectedUserId(null);
@@ -168,6 +178,9 @@ export function useAdminWorkspace() {
         setDepartmentMenuIds([]);
         setRoleMenuIds([]);
         setEffectiveMenuIds([]);
+        setRoleActionCodes([]);
+        setUserActionCodes([]);
+        setEffectiveActionCodes([]);
       }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : '加载数据失败');
@@ -264,6 +277,9 @@ export function useAdminWorkspace() {
     setDepartmentMenuIds([]);
     setRoleMenuIds([]);
     setEffectiveMenuIds([]);
+    setRoleActionCodes([]);
+    setUserActionCodes([]);
+    setEffectiveActionCodes([]);
   };
 
   const resetUserForm = () => {
@@ -345,6 +361,9 @@ export function useAdminWorkspace() {
       setDepartmentMenuIds([]);
       setRoleMenuIds([]);
       setEffectiveMenuIds([]);
+      setRoleActionCodes([]);
+      setUserActionCodes([]);
+      setEffectiveActionCodes([]);
     }
     await loadData();
   };
@@ -355,6 +374,9 @@ export function useAdminWorkspace() {
     setDepartmentMenuIds([]);
     setRoleMenuIds([]);
     setEffectiveMenuIds([]);
+    setRoleActionCodes([]);
+    setUserActionCodes([]);
+    setEffectiveActionCodes([]);
     try {
       await loadUserMenus(userId);
       return true;
@@ -403,6 +425,46 @@ export function useAdminWorkspace() {
       return false;
     } finally {
       setIsSavingPermission(false);
+    }
+  };
+
+  const handleSaveActionPermissions = async (actionCodes: string[] = userActionCodes) => {
+    if (!selectedUserId) {
+      return false;
+    }
+    setIsSavingActionPermission(true);
+    setError('');
+    try {
+      const response = await requestWithSession(`${API_BASE_URL}/api/users/${selectedUserId}/actions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actionCodes }),
+      });
+      if (!response.ok) {
+        throw new Error(await parseError(response, '保存按钮权限失败'));
+      }
+      const payload = await response.json() as unknown;
+      const rawCodes = Array.isArray(payload)
+        ? payload
+        : payload && typeof payload === 'object' && 'actionCodes' in payload
+          ? (payload as { actionCodes?: unknown }).actionCodes
+          : actionCodes;
+      const savedCodes = Array.isArray(rawCodes)
+        ? rawCodes.filter((code): code is string => typeof code === 'string')
+        : actionCodes;
+      setUserActionCodes(savedCodes);
+      try {
+        await loadUserMenus(selectedUserId);
+      } catch (refreshError) {
+        setEffectiveActionCodes([...new Set([...roleActionCodes, ...savedCodes])]);
+        setError(refreshError instanceof Error ? `按钮权限已保存，但刷新有效权限失败：${refreshError.message}` : '按钮权限已保存，但刷新有效权限失败');
+      }
+      return true;
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : '保存按钮权限失败');
+      return false;
+    } finally {
+      setIsSavingActionPermission(false);
     }
   };
 
@@ -815,6 +877,9 @@ export function useAdminWorkspace() {
     departmentMenuIds,
     roleMenuIds,
     effectiveMenuIds,
+    roleActionCodes,
+    userActionCodes,
+    effectiveActionCodes,
     activePage,
     isLoading,
     isSavingUser,
@@ -822,6 +887,7 @@ export function useAdminWorkspace() {
     isSavingArticle,
     isSavingFile,
     isSavingPermission,
+    isSavingActionPermission,
     isSavingDepartment,
     isSavingDepartmentPermission,
     isSavingRole,
@@ -856,6 +922,7 @@ export function useAdminWorkspace() {
     handleSelectUser,
     handleToggleMenuPermission,
     handleSavePermissions,
+    handleSaveActionPermissions,
     handleSaveDepartment,
     handleDeleteDepartment,
     loadDepartmentPermissions,

@@ -5,12 +5,15 @@ import { Button, Empty, Input, InputNumber, Modal, Popconfirm, Select, Tag, Tree
 import type { DataNode } from 'antd/es/tree';
 import { Eye, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2, UsersRound } from 'lucide-react';
 import { AssociatedUsersDialog } from '../components/AssociatedUsersDialog';
+import type { ResourceActionAccess } from '../lib/actionPermissions';
 import { emptyRoleForm, roleStatusOptions } from '../lib/constants';
 import type { Menu, Role, RoleForm, User } from '../types/admin';
+import { isAdministratorRoleCode, isSuperAdminRoleCode } from '../lib/roleAccess';
 import styles from './RolesPage.module.css';
 
 type RolesPageProps = {
-  canManage: boolean;
+  actions: ResourceActionAccess;
+  actorRoleCode: string;
   roles: Role[];
   users: User[];
   menus: Menu[];
@@ -26,7 +29,8 @@ type RolesPageProps = {
 };
 
 export function RolesPage({
-  canManage,
+  actions,
+  actorRoleCode,
   roles,
   users,
   menus,
@@ -104,6 +108,7 @@ export function RolesPage({
 
   const submitEditor = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (editingRole ? !actions.update : !actions.create) return;
     if (await onSave(editingRole?.id ?? null, form)) setEditorOpen(false);
   };
 
@@ -147,7 +152,7 @@ export function RolesPage({
         </div>
         <div className="action-group">
           <Button icon={<RefreshCw size={15} />} onClick={onRefresh} loading={isLoading}>刷新角色</Button>
-          {canManage && <Button type="primary" icon={<Plus size={15} />} onClick={openCreate}>新增角色</Button>}
+          {actions.create && <Button type="primary" icon={<Plus size={15} />} onClick={openCreate}>新增角色</Button>}
         </div>
       </section>
 
@@ -184,7 +189,8 @@ export function RolesPage({
             </thead>
             <tbody>
               {filteredRoles.map((role) => {
-                const isSystemRole = role.code === 'system-admin';
+                const isAdministratorRole = isAdministratorRoleCode(role.code);
+                const actorIsSuperAdmin = isSuperAdminRoleCode(actorRoleCode);
                 return (
                   <tr key={role.id}>
                     <td><strong>{role.name}</strong></td>
@@ -200,9 +206,9 @@ export function RolesPage({
                     <td><Tag color={role.status === '启用' ? 'success' : 'default'}>{role.status}</Tag></td>
                     <td>
                       <div className="action-group">
-                        <button className={styles.actionButton} type="button" disabled={isLoadingPermissions} onClick={() => void openPermissions(role)}><ShieldCheck size={14} />{canManage && !isSystemRole ? '授权' : '查看权限'}</button>
-                        {canManage && !isSystemRole && <button className={styles.actionButton} type="button" onClick={() => openEdit(role)}><Pencil size={14} />编辑</button>}
-                        {canManage && !isSystemRole && (
+                        <button className={styles.actionButton} type="button" disabled={isLoadingPermissions} onClick={() => void openPermissions(role)}><ShieldCheck size={14} />{actions.permissions && !isAdministratorRole ? '授权' : '查看权限'}</button>
+                        {actions.update && (!isAdministratorRole || actorIsSuperAdmin) && <button className={styles.actionButton} type="button" onClick={() => openEdit(role)}><Pencil size={14} />编辑</button>}
+                        {actions.delete && !isAdministratorRole && (
                           <Popconfirm
                             title={`删除角色“${role.name}”？`}
                             description="存在关联用户时后端会拒绝删除。"
@@ -236,13 +242,13 @@ export function RolesPage({
         <form className={styles.formGrid} onSubmit={submitEditor}>
           <label>
             角色名称
-            <input required disabled={editingRole?.code === 'system-admin'} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="例如：内容编辑" />
+            <input required disabled={isAdministratorRoleCode(editingRole?.code)} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="例如：内容编辑" />
           </label>
           <label>
             角色编码
             <input
               required
-              disabled={editingRole?.code === 'system-admin'}
+              disabled={editingRole !== null}
               pattern="[a-z0-9][a-z0-9-]*"
               title="仅支持小写字母、数字和连字符"
               value={form.code}
@@ -256,7 +262,7 @@ export function RolesPage({
           </label>
           <label>
             状态
-            <Select disabled={editingRole?.code === 'system-admin'} value={form.status} options={roleStatusOptions.map((status) => ({ label: status, value: status }))} onChange={(status) => setForm({ ...form, status })} />
+            <Select disabled={isAdministratorRoleCode(editingRole?.code)} value={form.status} options={roleStatusOptions.map((status) => ({ label: status, value: status }))} onChange={(status) => setForm({ ...form, status })} />
           </label>
           <label className={styles.spanTwo}>
             角色说明
@@ -275,24 +281,24 @@ export function RolesPage({
         okText="保存权限"
         cancelText="取消"
         confirmLoading={isSavingPermissions}
-        okButtonProps={{ disabled: !canManage || permissionRole?.code === 'system-admin' }}
+        okButtonProps={{ disabled: !actions.permissions || isAdministratorRoleCode(permissionRole?.code) }}
         width={600}
         destroyOnHidden
         onCancel={() => setPermissionOpen(false)}
-        footer={!canManage || permissionRole?.code === 'system-admin' ? <Button onClick={() => setPermissionOpen(false)}>关闭</Button> : undefined}
+        footer={!actions.permissions || isAdministratorRoleCode(permissionRole?.code) ? <Button onClick={() => setPermissionOpen(false)}>关闭</Button> : undefined}
         onOk={async () => {
-          if (permissionRole && await onSavePermissions(permissionRole.id, permissionIds)) setPermissionOpen(false);
+          if (actions.permissions && permissionRole && await onSavePermissions(permissionRole.id, permissionIds)) setPermissionOpen(false);
         }}
       >
         <div className={styles.permissionIntro}>
           <ShieldCheck size={18} />
-          <span>{permissionRole?.code === 'system-admin' ? '系统管理员始终拥有全部菜单权限，此处仅用于查看。' : '选中的菜单会自动授予所有使用该角色的用户，个人额外权限不会在这里被覆盖。'}</span>
+          <span>{isAdministratorRoleCode(permissionRole?.code) ? '超级管理员和系统管理员始终拥有全部菜单权限，此处仅用于查看。' : '选中的菜单会自动授予所有使用该角色的用户，个人额外权限不会在这里被覆盖。'}</span>
         </div>
         <div className={styles.permissionTree}>
           {menuTree.length ? (
             <Tree
               checkable
-              disabled={!canManage || permissionRole?.code === 'system-admin'}
+              disabled={!actions.permissions || isAdministratorRoleCode(permissionRole?.code)}
               selectable={false}
               defaultExpandAll
               treeData={menuTree}

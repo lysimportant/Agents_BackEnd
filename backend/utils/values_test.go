@@ -25,6 +25,15 @@ func TestIsAdminUsesImmutableRoleCode(t *testing.T) {
 	if !IsAdmin(models.User{Role: "任意显示名", RoleCode: "system-admin"}) {
 		t.Fatal("system administrator role code should grant administrator access")
 	}
+	if !IsAdmin(models.User{Role: "任意显示名", RoleCode: "super-admin"}) {
+		t.Fatal("super administrator role code should grant administrator access")
+	}
+	if IsSuperAdmin(models.User{RoleCode: "system-admin"}) {
+		t.Fatal("system administrator must not be treated as super administrator")
+	}
+	if !IsSuperAdmin(models.User{RoleCode: "super-admin"}) {
+		t.Fatal("super administrator role code should grant protected access")
+	}
 }
 
 func TestSanitizeFileName(t *testing.T) {

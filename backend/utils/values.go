@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"collector-backend/models"
+	"collector-backend/permissions"
 )
 
 func ParseBool(value string) bool {
@@ -40,5 +41,9 @@ func SanitizeFileName(name string) string {
 }
 
 func IsAdmin(user models.User) bool {
-	return user.RoleCode == "system-admin"
+	return permissions.IsAdministratorRoleCode(user.RoleCode)
+}
+
+func IsSuperAdmin(user models.User) bool {
+	return permissions.IsSuperAdminRoleCode(user.RoleCode)
 }

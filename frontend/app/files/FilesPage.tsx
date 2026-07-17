@@ -33,11 +33,12 @@ import {
 } from '@ant-design/icons';
 import { API_BASE_URL, MAX_UPLOAD_SIZE } from '../lib/constants';
 import { permanentlyDeleteFile, readTextFileContent, updateFileMetadata, updateTextFileContent } from '../lib/fileApi';
+import type { ResourceActionAccess } from '../lib/actionPermissions';
 import { RichTextEditor } from '../components/RichTextEditor';
 import type { FileForm, ManagedFile } from '../types/admin';
 
 type FilesPageProps = {
-  canManage: boolean;
+  actions: ResourceActionAccess;
   filteredFiles: ManagedFile[];
   recycleFiles: ManagedFile[];
   fileForm: FileForm;
@@ -77,7 +78,7 @@ const CATEGORY_PRESETS = ['制度文档', '图片素材', '合同资料', '报�
 
 export function FilesPage(props: FilesPageProps) {
   const {
-    canManage,
+    actions,
     filteredFiles, recycleFiles, fileForm, selectedUploadFile, editingFileId, fileKeyword, isSavingFile,
     onFileFormChange, onSelectUploadFile, onSubmitFile, onResetFileForm, onFileKeywordChange,
     onEditFile, onDownloadFile, onDeleteFile, onRestoreFile, onLoadRecycleFiles, onRefreshFiles,
@@ -115,6 +116,7 @@ export function FilesPage(props: FilesPageProps) {
   const closeUploadDialog = () => { setIsUploadOpen(false); onResetFileForm(); };
   const closeEditDialog = () => { setIsEditOpen(false); onResetFileForm(); };
   const openTextEditor = async (file: ManagedFile) => {
+    if (!actions.update) return;
     onEditFile(file);
     setTextEditorFile(file);
     setTextEditorContent('');
@@ -130,7 +132,7 @@ export function FilesPage(props: FilesPageProps) {
     }
   };
   const saveTextContent = async () => {
-    if (!textEditorFile) return;
+    if (!actions.update || !textEditorFile) return;
     setTextEditorError('');
     setIsTextSaving(true);
     try {
@@ -151,6 +153,7 @@ export function FilesPage(props: FilesPageProps) {
     }
   };
   const permanentlyDeleteFromRecycle = async (fileId: number) => {
+    if (!actions.permanentDelete) return;
     setRecycleError('');
     setDeletingPermanentId(fileId);
     try {
@@ -164,6 +167,7 @@ export function FilesPage(props: FilesPageProps) {
     }
   };
   const openEditDialog = (file: ManagedFile) => {
+    if (!actions.update) return;
     if (getFileKind(file).key === 'text') {
       void openTextEditor(file);
       return;
@@ -172,6 +176,7 @@ export function FilesPage(props: FilesPageProps) {
     setIsEditOpen(true);
   };
   const openRecycleBin = async () => {
+    if (!actions.restore && !actions.permanentDelete) return;
     setIsRecycleOpen(true);
     setIsRecycleLoading(true);
     try {
@@ -203,6 +208,7 @@ export function FilesPage(props: FilesPageProps) {
   }, [editingFileId]);
 
   const submitFileForm = async (event: FormEvent<HTMLFormElement>, mode: 'upload' | 'edit') => {
+    if (mode === 'upload' ? !actions.create : !actions.update) return;
     if (!(await onSubmitFile(event))) return;
     if (mode === 'upload') setIsUploadOpen(false);
     else setIsEditOpen(false);
@@ -217,7 +223,7 @@ export function FilesPage(props: FilesPageProps) {
       <div className="privacy-switch-row">
         <div>
           <strong>仅自己可见</strong>
-          <small>开启后仅归属人和系统管理员可查看与操作。</small>
+          <small>开启后仅归属人和管理员可查看与操作。</small>
         </div>
         <Switch checked={Boolean(fileForm.isPrivate)} onChange={(checked) => onFileFormChange({ ...fileForm, isPrivate: checked })} checkedChildren="私密" unCheckedChildren="公开" />
       </div>
@@ -227,9 +233,9 @@ export function FilesPage(props: FilesPageProps) {
 
   return (
     <section className="page-stack files-workspace antd-files-workspace" aria-labelledby="files-page-title">
-      <Card className="file-browser-panel" title={<h1 id="files-page-title" className="file-page-heading">文件管理</h1>} extra={<div className="antd-file-tools"><Input value={fileKeyword} allowClear onChange={(event) => onFileKeywordChange(event.target.value)} placeholder="名称、分类或说明" prefix={<FileTextOutlined />} /><Button onClick={() => onFileKeywordChange('')}>重置</Button>{canManage && <Button type="primary" icon={<InboxOutlined />} onClick={() => { onResetFileForm(); setIsUploadOpen(true); }}>上传文件</Button>}{canManage && <Button icon={<DeleteOutlined />} onClick={() => void openRecycleBin()}>回收站{recycleFiles.length ? ` (${recycleFiles.length})` : ''}</Button>}</div>}>
+      <Card className="file-browser-panel" title={<h1 id="files-page-title" className="file-page-heading">文件管理</h1>} extra={<div className="antd-file-tools"><Input value={fileKeyword} allowClear onChange={(event) => onFileKeywordChange(event.target.value)} placeholder="名称、分类或说明" prefix={<FileTextOutlined />} /><Button onClick={() => onFileKeywordChange('')}>重置</Button>{actions.create && <Button type="primary" icon={<InboxOutlined />} onClick={() => { onResetFileForm(); setIsUploadOpen(true); }}>上传文件</Button>}{(actions.restore || actions.permanentDelete) && <Button icon={<DeleteOutlined />} onClick={() => void openRecycleBin()}>回收站{recycleFiles.length ? ` (${recycleFiles.length})` : ''}</Button>}</div>}>
         <div className="file-type-tabs" role="tablist" aria-label="按文件类型筛选">{FILE_KIND_OPTIONS.map((item) => <button className={activeKind === item.key ? 'active' : ''} type="button" role="tab" aria-selected={activeKind === item.key} key={item.key} onClick={() => setActiveKind(item.key)}><span aria-hidden="true">{item.icon}</span>{item.label}<strong>{kindCounts[item.key]}</strong></button>)}</div>
-        {visibleFiles.length === 0 ? <Empty description="暂无匹配文件" /> : <div className="file-card-grid">{visibleFiles.map((file) => <FileCard key={file.id} file={file} canManage={canManage} onOpenImage={openImage} onEditFile={openEditDialog} onDownloadFile={onDownloadFile} onDeleteFile={onDeleteFile} />)}</div>}
+        {visibleFiles.length === 0 ? <Empty description="暂无匹配文件" /> : <div className="file-card-grid">{visibleFiles.map((file) => <FileCard key={file.id} file={file} actions={actions} onOpenImage={openImage} onEditFile={openEditDialog} onDownloadFile={onDownloadFile} onDeleteFile={onDeleteFile} />)}</div>}
       </Card>
 
       <Modal open={isUploadOpen} title="上传文件" okText="上传" cancelText="取消" confirmLoading={isSavingFile} onOk={() => document.getElementById('file-upload-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))} onCancel={closeUploadDialog} destroyOnHidden>
@@ -243,7 +249,7 @@ export function FilesPage(props: FilesPageProps) {
       <Drawer title="文件回收站" open={isRecycleOpen} size={620} onClose={() => { setIsRecycleOpen(false); setRecycleError(''); }} extra={<Button loading={isRecycleLoading} onClick={() => void openRecycleBin()}>刷新</Button>}>
         <div className="recycle-bin-notice">文件移入回收站后不会自动过期删除；需要你在这里二次确认后点击“永久删除”。永久删除会同时删除数据库记录和磁盘文件，无法恢复。</div>
         {recycleError && <p className="error-message">{recycleError}</p>}
-        {isRecycleLoading ? <div className="recycle-loading"><LoadingOutlined spin /> 正在加载回收站…</div> : recycleFiles.length === 0 ? <Empty description="回收站为空" /> : <div className="recycle-file-list">{recycleFiles.map((file) => <article className="recycle-file-card" key={file.id}><div className="recycle-file-main"><strong>{file.displayName}</strong><span>{file.originalName}</span><small>移入时间：{file.deletedAt ? new Date(file.deletedAt).toLocaleString() : '未知'}</small></div><Space><Button type="primary" icon={<HistoryOutlined />} onClick={() => onRestoreFile(file.id)}>恢复</Button><Popconfirm title="确认永久删除该文件？" description="这会删除数据库记录和磁盘文件，无法恢复。" okText="永久删除" okButtonProps={{ danger: true, loading: deletingPermanentId === file.id }} cancelText="取消" onConfirm={() => permanentlyDeleteFromRecycle(file.id)}><Button danger icon={<DeleteOutlined />} loading={deletingPermanentId === file.id}>永久删除</Button></Popconfirm></Space></article>)}</div>}
+        {isRecycleLoading ? <div className="recycle-loading"><LoadingOutlined spin /> 正在加载回收站…</div> : recycleFiles.length === 0 ? <Empty description="回收站为空" /> : <div className="recycle-file-list">{recycleFiles.map((file) => <article className="recycle-file-card" key={file.id}><div className="recycle-file-main"><strong>{file.displayName}</strong><span>{file.originalName}</span><small>移入时间：{file.deletedAt ? new Date(file.deletedAt).toLocaleString() : '未知'}</small></div><Space>{actions.restore && <Button type="primary" icon={<HistoryOutlined />} onClick={() => onRestoreFile(file.id)}>恢复</Button>}{actions.permanentDelete && <Popconfirm title="确认永久删除该文件？" description="这会删除数据库记录和磁盘文件，无法恢复。" okText="永久删除" okButtonProps={{ danger: true, loading: deletingPermanentId === file.id }} cancelText="取消" onConfirm={() => permanentlyDeleteFromRecycle(file.id)}><Button danger icon={<DeleteOutlined />} loading={deletingPermanentId === file.id}>永久删除</Button></Popconfirm>}</Space></article>)}</div>}
       </Drawer>
 
       <Modal open={Boolean(textEditorFile)} title={`编辑文本文件：${textEditorFile?.displayName ?? ''}`} okText="保存全部" cancelText="关闭" width="min(1040px, 96vw)" confirmLoading={isTextSaving || isSavingFile} onOk={() => void saveTextContent()} onCancel={() => { setTextEditorFile(null); onResetFileForm(); }} destroyOnHidden>
@@ -267,8 +273,8 @@ export function FilesPage(props: FilesPageProps) {
   );
 }
 
-type FileCardProps = { file: ManagedFile; canManage: boolean; onOpenImage: (file: ManagedFile) => void; onEditFile: (file: ManagedFile) => void; onDownloadFile: (fileId: number) => void; onDeleteFile: (fileId: number) => void };
-function FileCard({ file, canManage, onOpenImage, onEditFile, onDownloadFile, onDeleteFile }: FileCardProps) {
+type FileCardProps = { file: ManagedFile; actions: ResourceActionAccess; onOpenImage: (file: ManagedFile) => void; onEditFile: (file: ManagedFile) => void; onDownloadFile: (fileId: number) => void; onDeleteFile: (fileId: number) => void };
+function FileCard({ file, actions, onOpenImage, onEditFile, onDownloadFile, onDeleteFile }: FileCardProps) {
   const meta = getFileKind(file);
   const previewUrl = `${API_BASE_URL}/api/files/${file.id}/preview`;
   const thumbnailUrl = `${API_BASE_URL}/api/files/${file.id}/thumbnail`;
@@ -287,7 +293,7 @@ function FileCard({ file, canManage, onOpenImage, onEditFile, onDownloadFile, on
     <div className="file-card-actions">
       {isImage && <Tooltip title="点击后才加载原始图片"><Button type="link" icon={<EyeOutlined />} onClick={() => onOpenImage(file)}>预览</Button></Tooltip>}
       {isPDF && <a href={previewUrl} target="_blank" rel="noopener"><Button type="link" icon={<EyeOutlined />}>浏览 PDF</Button></a>}
-      {canManage && <Button type="link" icon={<EditOutlined />} onClick={() => onEditFile(file)}>编辑</Button>}<Button type="link" icon={<DownloadOutlined />} onClick={() => onDownloadFile(file.id)}>下载</Button>{canManage && <Popconfirm title="确认将该文件移入回收站？可通过恢复接口找回。" okText="移入回收站" cancelText="取消" onConfirm={() => onDeleteFile(file.id)}><Button danger type="link" icon={<DeleteOutlined />}>移入回收站</Button></Popconfirm>}
+      {actions.update && <Button type="link" icon={<EditOutlined />} onClick={() => onEditFile(file)}>编辑</Button>}<Button type="link" icon={<DownloadOutlined />} onClick={() => onDownloadFile(file.id)}>下载</Button>{actions.delete && <Popconfirm title="确认将该文件移入回收站？可通过恢复接口找回。" okText="移入回收站" cancelText="取消" onConfirm={() => onDeleteFile(file.id)}><Button danger type="link" icon={<DeleteOutlined />}>移入回收站</Button></Popconfirm>}
     </div>
   </article>;
 }

@@ -7,6 +7,7 @@ import (
 	"collector-backend/config"
 	"collector-backend/handlers"
 	"collector-backend/middleware"
+	"collector-backend/verification"
 	"github.com/gin-gonic/gin"
 )
 
@@ -23,7 +24,7 @@ type Store interface {
 	handlers.FileStore
 }
 
-func Setup(router *gin.Engine, appStore Store, authService *auth.Service, cfg config.Config) {
+func Setup(router *gin.Engine, appStore Store, authService *auth.Service, passwordCodes *verification.PasswordCodeService, cfg config.Config) {
 	router.MaxMultipartMemory = handlers.MaxUploadSize
 	router.Use(middleware.CORS(cfg.AllowedOrigins))
 
@@ -37,7 +38,7 @@ func Setup(router *gin.Engine, appStore Store, authService *auth.Service, cfg co
 	protected := api.Group("")
 	protected.Use(middleware.RequireAuth(appStore, authService))
 	registerDataPointRoutes(protected, appStore, handlers.NewDataPointHandler(appStore))
-	registerUserRoutes(protected, appStore, handlers.NewUserHandler(appStore))
+	registerUserRoutes(protected, appStore, handlers.NewUserHandler(appStore, passwordCodes))
 	registerDepartmentRoutes(protected, appStore, handlers.NewDepartmentHandler(appStore))
 	registerRoleRoutes(protected, appStore, handlers.NewRoleHandler(appStore))
 	registerMenuRoutes(protected, appStore, handlers.NewMenuHandler(appStore))

@@ -2406,8 +2406,20 @@ html[data-theme='dark'] .ant-breadcrumb-separator {
     @apply bg-background text-foreground;
   }
   html {
+    scrollbar-gutter: stable;
+    overflow-y: scroll;
     @apply font-sans;
   }
+}
+
+/* html2canvas clones the document into a temporary off-screen iframe. Keep
+   that fixed clone inside the viewport so it never expands page overflow. */
+.html2canvas-container {
+  left: 0 !important;
+  top: 0 !important;
+  z-index: -2147483648 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 /* ===== 权限与用户 Dialog 增量样式 ===== */
 .privacy-switch-row {
@@ -2565,6 +2577,187 @@ html[data-theme='dark'] .ant-breadcrumb-separator {
   line-height: 1;
 }
 
+.permission-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.permission-section-header > div {
+  min-width: 0;
+}
+
+.permission-section-header strong,
+.permission-section-header small {
+  display: block;
+}
+
+.permission-section-header strong {
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.permission-section-header small {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.action-permission-heading {
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.permission-action-sources {
+  margin-top: 12px;
+}
+
+.action-permission-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.action-permission-group {
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-elevated) 94%, transparent);
+}
+
+.action-permission-group-title {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 48px;
+  padding: 10px 12px 10px 34px;
+  background: color-mix(in srgb, var(--surface-selected) 55%, transparent);
+  cursor: pointer;
+  list-style: none;
+}
+
+.action-permission-group[open] .action-permission-group-title {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.action-permission-group-title::-webkit-details-marker {
+  display: none;
+}
+
+.action-permission-group-title::before {
+  position: absolute;
+  left: 14px;
+  color: var(--theme-primary);
+  content: '›';
+  font-size: 18px;
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform 160ms ease;
+}
+
+.action-permission-group[open] .action-permission-group-title::before {
+  transform: rotate(90deg);
+}
+
+.action-permission-group-title > span {
+  min-width: 0;
+}
+
+.action-permission-group-title strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-permission-group-title small {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-permission-options {
+  display: grid;
+  gap: 1px;
+  padding: 5px;
+}
+
+.action-permission-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 160ms ease, transform 160ms ease;
+}
+
+.action-permission-option:hover {
+  background: var(--surface-hover);
+}
+
+.action-permission-option.is-checked {
+  background: color-mix(in srgb, var(--theme-primary) 10%, transparent);
+}
+
+.action-permission-option.is-inherited {
+  cursor: not-allowed;
+}
+
+.action-permission-option > span {
+  min-width: 0;
+}
+
+.action-permission-option strong,
+.action-permission-option small {
+  display: block;
+}
+
+.action-permission-option strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-permission-option small {
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-permission-option em {
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--theme-primary) 32%, var(--border-subtle));
+  border-radius: 999px;
+  color: var(--theme-primary);
+  font-size: 10px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.action-permission-option em.is-personal {
+  border-color: color-mix(in srgb, var(--theme-secondary, var(--theme-primary)) 38%, var(--border-subtle));
+  color: var(--theme-secondary, var(--theme-primary));
+}
+
 @media (max-width: 600px) {
   .permission-tree-modal {
     max-width: calc(100vw - 24px);
@@ -2583,6 +2776,10 @@ html[data-theme='dark'] .ant-breadcrumb-separator {
   }
 
   .permission-source-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .action-permission-groups {
     grid-template-columns: 1fr;
   }
 }
@@ -2665,6 +2862,99 @@ html[data-theme='dark'] .ant-breadcrumb-separator {
   gap: 7px;
 }
 
+.user-detail-panel {
+  min-width: 0;
+}
+
+.user-detail-panel .ant-descriptions {
+  overflow-x: auto;
+}
+
+.permission-collapse {
+  margin-top: 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-panel);
+}
+
+.permission-collapse-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 13px 14px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.permission-collapse-summary::before {
+  content: "展开";
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--theme-primary) 32%, var(--border-subtle));
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: var(--theme-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.permission-collapse.is-open .permission-collapse-summary::before {
+  content: "收起";
+}
+
+.permission-collapse-summary > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.permission-collapse-summary strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.permission-collapse-summary small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.permission-collapse > :not(.permission-collapse-summary) {
+  display: block;
+  margin-inline: 12px;
+}
+
+.permission-collapse > :last-child {
+  margin-bottom: 12px;
+}
+
+.profile-layout {
+  grid-template-columns: minmax(0, 1.1fr) minmax(340px, 0.9fr);
+  align-items: start;
+}
+
+.profile-code-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.profile-security-icon {
+  color: var(--theme-primary);
+  font-size: 26px;
+}
+
+.profile-page .rich-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
 @media (max-width: 600px) {
   .antd-header-brand strong {
     display: none;
@@ -2690,12 +2980,17 @@ html[data-theme='dark'] .ant-breadcrumb-separator {
   .user-search-tools input {
     min-width: 0;
   }
+
+  .profile-code-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 980px) {
   .menu-summary-grid,
   .user-layout,
-  .menu-layout {
+  .menu-layout,
+  .profile-layout {
     grid-template-columns: 1fr;
   }
 }

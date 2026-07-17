@@ -127,12 +127,6 @@ func RequireAction(userStore UserStore, code string) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "动作权限配置错误"})
 			return
 		}
-		// Write permissions are deliberately non-delegable. Role names and
-		// menu grants must never turn a normal account into an administrator.
-		if !permissions.IsReadOnly(code) && user.RoleCode != permissions.SystemAdminRoleCode {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "仅系统管理员可执行此操作"})
-			return
-		}
 		codes, message := userStore.ListUserActionPermissions(user.ID)
 		if message != "" {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": message})
@@ -154,7 +148,7 @@ func RequireAdmin() gin.HandlerFunc {
 			return
 		}
 		if !utils.IsAdmin(user) {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "仅系统管理员可执行此操作"})
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "仅超级管理员或系统管理员可执行此操作"})
 			return
 		}
 		c.Next()

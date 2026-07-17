@@ -36,9 +36,7 @@ import {
   type MenuProps,
 } from 'antd';
 import type { AuthUser, Menu as AdminMenu, PageKey } from '../types/admin';
-import type { User } from '../types/admin';
 import { pageTitles } from '../lib/constants';
-import { ProfileDialog } from '../profile/ProfileDialog';
 import {
   adminThemes,
   applyAdminTheme,
@@ -63,7 +61,6 @@ type MainLayoutProps = {
   onOpenMobileSidebar: () => void;
   onCloseMobileSidebar: () => void;
   onNavigate: (page: PageKey) => void;
-  onAuthUserUpdate: (user: User) => void;
   onLogout: () => void;
   children: ReactNode;
 };
@@ -117,14 +114,12 @@ export function MainLayout({
   onOpenMobileSidebar,
   onCloseMobileSidebar,
   onNavigate,
-  onAuthUserUpdate,
   onLogout,
   children,
 }: MainLayoutProps) {
   const [themeId, setThemeId] = useState<AdminThemeId>(DEFAULT_THEME_ID);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     const nextTheme = resolveThemeId(
@@ -180,7 +175,7 @@ export function MainLayout({
   }, [menus]);
 
   useEffect(() => {
-    if (menus.length > 0 && !pageButtons.includes(activePage) && pageButtons[0]) {
+    if (activePage !== 'profile' && menus.length > 0 && !pageButtons.includes(activePage) && pageButtons[0]) {
       onNavigate(pageButtons[0]);
     }
   }, [activePage, menus.length, onNavigate, pageButtons]);
@@ -192,7 +187,7 @@ export function MainLayout({
       activePage={activePage}
       collapsed={sidebarCollapsed && !isMobile}
       onNavigate={navigate}
-      onOpenProfile={() => setProfileOpen(true)}
+      onOpenProfile={() => navigate('profile')}
       onLogout={onLogout}
       onToggleSidebar={isMobile ? undefined : onToggleSidebar}
     />
@@ -332,7 +327,7 @@ export function MainLayout({
                 <Button type="text" icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />} onClick={toggleFullscreen} />
               </Tooltip>
               <Tooltip title="个人资料">
-                <Button type="text" className="antd-user-entry" onClick={() => setProfileOpen(true)}>
+                <Button type="text" className="antd-user-entry" onClick={() => navigate('profile')}>
                   <Avatar size="small" src={authUser.avatarUrl || undefined}>{getAvatarFallback(authUser)}</Avatar>
                   <Typography.Text>{authUser.name}</Typography.Text>
                 </Button>
@@ -347,12 +342,6 @@ export function MainLayout({
           </Content>
         </Layout>
       </Layout>
-      <ProfileDialog
-        authUser={authUser}
-        open={profileOpen}
-        onClose={() => setProfileOpen(false)}
-        onUpdated={onAuthUserUpdate}
-      />
     </ConfigProvider>
   );
 }
@@ -437,7 +426,7 @@ function AdminNavigation({
         defaultOpenKeys={collapsed ? [] : openKeys}
         inlineCollapsed={collapsed}
         onClick={({ key }) => {
-          if (['dashboard', 'users', 'departments', 'roles', 'menus', 'articles', 'files'].includes(key)) {
+          if (['dashboard', 'users', 'departments', 'roles', 'menus', 'articles', 'files', 'profile'].includes(key)) {
             onNavigate(key as PageKey);
           }
         }}

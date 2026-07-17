@@ -8,7 +8,7 @@ export const menuStatusOptions = ['启用', '停用'];
 export const departmentStatusOptions = ['启用', '停用'];
 export const roleStatusOptions = ['启用', '停用'];
 export const articleStatusOptions = ['草稿', '已发布', '归档'];
-export const pageKeys = ['dashboard', 'users', 'departments', 'roles', 'menus', 'articles', 'files'] as const;
+export const pageKeys = ['dashboard', 'users', 'departments', 'roles', 'menus', 'articles', 'files', 'profile'] as const;
 
 export const pageTitles: Record<(typeof pageKeys)[number], string> = {
   dashboard: '工作台',
@@ -18,6 +18,7 @@ export const pageTitles: Record<(typeof pageKeys)[number], string> = {
   menus: '菜单管理',
   articles: '文章管理',
   files: '文件管理',
+  profile: '个人资料',
 };
 
 export const emptyUserForm = {

@@ -1,14 +1,20 @@
 ﻿'use client';
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Button, Descriptions, Modal, Switch, Tag, Tree } from 'antd';
+import { Button, Checkbox, Descriptions, Modal, Switch, Tag, Tree } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { LockKeyhole } from 'lucide-react';
+import { actionPermissionGroups, allActionPermissionCodes } from '../lib/actionPermissions';
 import type { Department, Menu, Role, User, UserForm } from '../types/admin';
 import { shiftOptions, statusOptions } from '../lib/constants';
+import { isAdministratorRoleCode, isSuperAdminRoleCode } from '../lib/roleAccess';
 
 type UsersPageProps = {
-  canManage: boolean;
+  canCreate: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
+  canConfigurePermissions: boolean;
+  actorRoleCode: string;
   users: User[];
   departments: Department[];
   roles: Role[];
@@ -20,9 +26,13 @@ type UsersPageProps = {
   departmentMenuIds: number[];
   roleMenuIds: number[];
   effectiveMenuIds: number[];
+  roleActionCodes: string[];
+  userActionCodes: string[];
+  effectiveActionCodes: string[];
   isLoading: boolean;
   isSavingUser: boolean;
   isSavingPermission: boolean;
+  isSavingActionPermission: boolean;
   onRefresh: () => void;
   onUserFormChange: (form: UserForm) => void;
   onSubmitUser: (event: FormEvent<HTMLFormElement>) => void;
@@ -31,10 +41,15 @@ type UsersPageProps = {
   onDeleteUser: (userId: number) => void;
   onSelectUser: (userId: number) => Promise<boolean>;
   onSavePermissions: (menuIds: number[]) => Promise<boolean>;
+  onSaveActionPermissions: (actionCodes: string[]) => Promise<boolean>;
 };
 
 export function UsersPage({
-  canManage,
+  canCreate,
+  canUpdate,
+  canDelete,
+  canConfigurePermissions,
+  actorRoleCode,
   users,
   departments,
   roles,
@@ -46,9 +61,13 @@ export function UsersPage({
   departmentMenuIds,
   roleMenuIds,
   effectiveMenuIds,
+  roleActionCodes,
+  userActionCodes,
+  effectiveActionCodes,
   isLoading,
   isSavingUser,
   isSavingPermission,
+  isSavingActionPermission,
   onRefresh,
   onUserFormChange,
   onSubmitUser,
@@ -57,15 +76,29 @@ export function UsersPage({
   onDeleteUser,
   onSelectUser,
   onSavePermissions,
+  onSaveActionPermissions,
 }: UsersPageProps) {
   const selectedUser = useMemo(() => users.find((user) => user.id === selectedUserId) ?? null, [users, selectedUserId]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
   const [viewUser, setViewUser] = useState<User | null>(null);
   const [draftMenuIds, setDraftMenuIds] = useState<number[]>([]);
+  const [draftActionCodes, setDraftActionCodes] = useState<string[]>([]);
+  const [actionPermissionOpen, setActionPermissionOpen] = useState(false);
   const [keyword, setKeyword] = useState('');
   const selectedRole = useMemo(() => roles.find((role) => role.id === selectedUser?.roleId) ?? null, [roles, selectedUser]);
+  const isAdministratorTarget = isAdministratorRoleCode(selectedUser?.roleCode);
+  const actorIsSuperAdmin = isSuperAdminRoleCode(actorRoleCode);
+  const canEditSelectedPermissions = canConfigurePermissions && !isAdministratorTarget;
   const inheritedMenuIds = useMemo(() => [...new Set([...departmentMenuIds, ...roleMenuIds])], [departmentMenuIds, roleMenuIds]);
+  const inheritedActionCodes = useMemo(
+    () => isAdministratorTarget ? allActionPermissionCodes : [...new Set(roleActionCodes)],
+    [isAdministratorTarget, roleActionCodes],
+  );
+  const draftEffectiveActionCodes = useMemo(
+    () => isAdministratorTarget ? allActionPermissionCodes : [...new Set([...roleActionCodes, ...draftActionCodes])],
+    [draftActionCodes, isAdministratorTarget, roleActionCodes],
+  );
   const filteredUsers = useMemo(() => {
     const query = keyword.trim().toLowerCase();
     if (!query) return users;
@@ -90,8 +123,14 @@ export function UsersPage({
   }, [inheritedMenuIds, menus]);
 
   const roleOptions = useMemo(
-    () => [...roles].sort((first, second) => first.sort - second.sort || first.id - second.id),
-    [roles],
+    () => [...roles]
+      .filter((role) => {
+        if (isSuperAdminRoleCode(role.code)) return actorIsSuperAdmin || role.id === userForm.roleId;
+        if (role.code === 'system-admin') return actorIsSuperAdmin || role.id === userForm.roleId;
+        return true;
+      })
+      .sort((first, second) => first.sort - second.sort || first.id - second.id),
+    [actorIsSuperAdmin, roles, userForm.roleId],
   );
 
   const departmentOptions = useMemo(() => {
@@ -107,11 +146,18 @@ export function UsersPage({
   };
 
   useEffect(() => {
-    if (permissionDialogOpen) setDraftMenuIds(selectedMenuIds);
-  }, [permissionDialogOpen, selectedMenuIds]);
+    if (permissionDialogOpen) {
+      setDraftMenuIds(selectedMenuIds);
+      const inherited = new Set(roleActionCodes);
+      setDraftActionCodes(userActionCodes.filter((code) => !inherited.has(code)));
+      setActionPermissionOpen(false);
+    }
+  }, [permissionDialogOpen, roleActionCodes, selectedMenuIds, userActionCodes]);
 
   const confirmPermissions = async () => {
-    if (await onSavePermissions(draftMenuIds)) setPermissionDialogOpen(false);
+    if (!canEditSelectedPermissions) return;
+    if (!await onSavePermissions(draftMenuIds)) return;
+    if (await onSaveActionPermissions(draftActionCodes)) setPermissionDialogOpen(false);
   };
 
   useEffect(() => {
@@ -127,7 +173,7 @@ export function UsersPage({
   }, [isSavingUser, editingUserId, userForm.username, userForm.name, userForm.password]);
 
   const openCreateDialog = () => {
-    const defaultRole = roleOptions.find((role) => role.status === '启用') ?? null;
+    const defaultRole = roleOptions.find((role) => role.code === 'viewer' && role.status === '启用') ?? null;
     onResetUserForm();
     onUserFormChange({
       username: '',
@@ -163,7 +209,7 @@ export function UsersPage({
           <button className="ghost-button" type="button" onClick={onRefresh} disabled={isLoading}>
             {isLoading ? '刷新中' : '刷新'}
           </button>
-          {canManage && (
+          {canCreate && (
             <button className="primary-button" type="button" onClick={openCreateDialog}>
               新增用户
             </button>
@@ -213,9 +259,16 @@ export function UsersPage({
                     <td>
                       <div className="action-group">
                         <button type="button" onClick={() => setViewUser(user)}>查看</button>
-                        {canManage && (
+                        {(() => {
+                          const targetIsAdministrator = isAdministratorRoleCode(user.roleCode);
+                          const canAuthorizeTarget = canConfigurePermissions && !targetIsAdministrator;
+                          const canEditTarget = canUpdate && (!targetIsAdministrator || actorIsSuperAdmin);
+                          const canDeleteTarget = canDelete && user.username.toLowerCase() !== 'mh' && (!targetIsAdministrator || actorIsSuperAdmin);
+                          if (!canAuthorizeTarget && !canEditTarget && !canDeleteTarget) return null;
+                          return (
                           <>
-                            <button type="button" onClick={() => void openPermissionDialog(user.id)}>授权</button>
+                            {canAuthorizeTarget && <button type="button" onClick={() => void openPermissionDialog(user.id)}>授权</button>}
+                            {canEditTarget && (
                             <button
                               type="button"
                               onClick={() => {
@@ -225,9 +278,11 @@ export function UsersPage({
                             >
                               编辑
                             </button>
-                            <button className="danger" type="button" onClick={() => onDeleteUser(user.id)}>删除</button>
+                            )}
+                            {canDeleteTarget && <button className="danger" type="button" onClick={() => onDeleteUser(user.id)}>删除</button>}
                           </>
-                        )}
+                          );
+                        })()}
                       </div>
                     </td>
                   </tr>
@@ -239,49 +294,63 @@ export function UsersPage({
         </section>
       </section>
 
-      <Modal
-        open={Boolean(viewUser)}
-        title={`用户详情${viewUser ? ` · ${viewUser.name}` : ''}`}
-        footer={<Button onClick={() => setViewUser(null)}>关闭</Button>}
-        width={680}
-        destroyOnHidden
-        onCancel={() => setViewUser(null)}
-      >
-        {viewUser && (
-          <Descriptions
-            bordered
-            size="small"
-            column={{ xs: 1, sm: 2 }}
-            items={[
-              { key: 'username', label: '登录账号', children: viewUser.username },
-              { key: 'name', label: '姓名', children: viewUser.name },
-              { key: 'role', label: '所属角色', children: roles.find((role) => role.id === viewUser.roleId)?.name ?? viewUser.role ?? '-' },
-              { key: 'department', label: '所属部门', children: viewUser.department || '-' },
-              { key: 'status', label: '状态', children: viewUser.status },
-              { key: 'login', label: '登录权限', children: viewUser.canLogin && viewUser.status !== '停用' ? '可登录' : '禁止登录' },
-              { key: 'phone', label: '手机', children: viewUser.phone || '-' },
-              { key: 'email', label: '邮箱', children: viewUser.email || '-' },
-              { key: 'createdAt', label: '创建时间', children: new Date(viewUser.createdAt).toLocaleString() },
-              { key: 'updatedAt', label: '更新时间', children: new Date(viewUser.updatedAt).toLocaleString() },
-            ]}
-          />
+      {viewUser && (
+        <section className="panel-card user-detail-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="page-kicker">用户详情</p>
+              <h2>{viewUser.name}</h2>
+              <span>@{viewUser.username}</span>
+            </div>
+            <Button onClick={() => setViewUser(null)}>收起详情</Button>
+          </div>
+          {viewUser && (
+            <Descriptions
+              bordered
+              size="small"
+              column={{ xs: 1, sm: 2 }}
+              items={[
+                { key: 'username', label: '登录账号', children: viewUser.username },
+                { key: 'name', label: '姓名', children: viewUser.name },
+                { key: 'role', label: '所属角色', children: roles.find((role) => role.id === viewUser.roleId)?.name ?? viewUser.role ?? '-' },
+                { key: 'department', label: '所属部门', children: viewUser.department || '-' },
+                { key: 'status', label: '状态', children: viewUser.status },
+                { key: 'login', label: '登录权限', children: viewUser.canLogin && viewUser.status !== '停用' ? '可登录' : '禁止登录' },
+                { key: 'phone', label: '手机', children: viewUser.phone || '-' },
+                { key: 'email', label: '邮箱', children: viewUser.email || '-' },
+                { key: '创建时间', label: '创建时间', children: new Date(viewUser.createdAt).toLocaleString() },
+                { key: '更新时间', label: '更新时间', children: new Date(viewUser.updatedAt).toLocaleString() },
+              ]}
+            />
         )}
-      </Modal>
+        </section>
+      )}
 
       <Modal
         open={permissionDialogOpen}
-        title={`用户额外权限${selectedUser ? ` · ${selectedUser.name}` : ''}`}
+        title={`用户权限配置${selectedUser ? ` · ${selectedUser.name}` : ''}`}
         onCancel={() => setPermissionDialogOpen(false)}
-        onOk={canManage ? () => void confirmPermissions() : undefined}
+        onOk={canEditSelectedPermissions ? () => void confirmPermissions() : undefined}
         okText="确认保存"
         cancelText="取消"
-        confirmLoading={isSavingPermission}
-        width={560}
+        confirmLoading={isSavingPermission || isSavingActionPermission}
+        width={920}
         destroyOnHidden
-        className="permission-tree-modal"
-        footer={canManage ? undefined : <Button onClick={() => setPermissionDialogOpen(false)}>关闭</Button>}
+        className="permission-tree-modal user-permission-modal"
+        footer={canEditSelectedPermissions ? undefined : <Button onClick={() => setPermissionDialogOpen(false)}>关闭</Button>}
       >
-        <p className="section-subtitle">部门和角色权限自动继承且不可取消；下方授权树仅用于追加或移除该用户的个人额外权限。</p>
+        <p className="section-subtitle">
+          {isAdministratorTarget
+            ? '超级管理员和系统管理员始终拥有全部菜单和按钮权限，此处仅供查看。'
+            : '部门与角色权限自动继承且不可取消；管理员可在这里为普通用户追加个人菜单和按钮权限。'}
+        </p>
+        <div className="permission-section-header">
+          <div>
+            <strong>菜单权限</strong>
+            <small>控制用户可以进入的功能页面</small>
+          </div>
+          <Tag color="blue">有效 {isAdministratorTarget ? menus.filter((menu) => menu.status === '启用').length : effectiveMenuIds.length} 项</Tag>
+        </div>
         <div className="permission-source-grid">
           <article>
             <span>部门权限</span>
@@ -301,24 +370,109 @@ export function UsersPage({
         </div>
         <div className="permission-inheritance-note">
           <LockKeyhole size={15} />
-          <span>继承权限 {inheritedMenuIds.length} 项，个人额外权限 {draftMenuIds.length} 项，当前有效权限共 {effectiveMenuIds.length} 项。</span>
+          <span>{isAdministratorTarget ? '管理员全权限已锁定，不允许移除。' : `继承权限 ${inheritedMenuIds.length} 项，个人额外权限 ${draftMenuIds.length} 项，当前有效权限共 ${effectiveMenuIds.length} 项。`}</span>
         </div>
         <div className="permission-tree-panel">
           {treeData.length > 0 ? (
             <Tree
               checkable
-              disabled={!canManage}
+              disabled={!canEditSelectedPermissions}
               selectable={false}
               defaultExpandAll
               treeData={treeData}
-              checkedKeys={[...new Set([...inheritedMenuIds, ...draftMenuIds])]}
+              checkedKeys={isAdministratorTarget ? menus.filter((menu) => menu.status === '启用').map((menu) => menu.id) : [...new Set([...inheritedMenuIds, ...draftMenuIds])]}
               onCheck={(checked) => {
+                if (!canEditSelectedPermissions) return;
                 const inherited = new Set(inheritedMenuIds);
                 setDraftMenuIds((Array.isArray(checked) ? checked : checked.checked).map(Number).filter((id) => !inherited.has(id)));
               }}
             />
           ) : <p className="empty-state">暂无可授权菜单</p>}
         </div>
+
+        <section className={`permission-collapse${actionPermissionOpen ? ' is-open' : ''}`}>
+          <button
+            className="permission-collapse-summary"
+            type="button"
+            aria-expanded={actionPermissionOpen}
+            onClick={() => setActionPermissionOpen((current) => !current)}
+          >
+            <span>
+              <strong>按钮权限</strong>
+              <small>控制查询、查看、新增、编辑、删除等具体操作</small>
+            </span>
+            <Tag color="purple">有效 {draftEffectiveActionCodes.length} 项</Tag>
+          </button>
+          {actionPermissionOpen && (
+            <>
+              <div className="permission-source-grid permission-action-sources">
+                <article>
+                  <span>角色动作</span>
+                  <strong>{inheritedActionCodes.length}</strong>
+                  <small>{isAdministratorTarget ? '管理员全权限' : selectedRole?.name || selectedUser?.role || '未分配角色'}</small>
+                </article>
+                <article className="is-extra">
+                  <span>个人附加动作</span>
+                  <strong>{isAdministratorTarget ? 0 : draftActionCodes.length}</strong>
+                  <small>{isAdministratorTarget ? '无需个人追加' : '可由管理员调整'}</small>
+                </article>
+                <article>
+                  <span>当前有效动作</span>
+                  <strong>{isAdministratorTarget ? allActionPermissionCodes.length : draftEffectiveActionCodes.length}</strong>
+                  <small>角色与个人附加权限并集</small>
+                </article>
+              </div>
+              <div className="permission-inheritance-note">
+                <LockKeyhole size={15} />
+                <span>
+                  {isAdministratorTarget
+                    ? `超级管理员和系统管理员固定拥有全部 ${allActionPermissionCodes.length} 项按钮权限。`
+                    : `后端已返回角色动作 ${roleActionCodes.length} 项、个人附加动作 ${userActionCodes.length} 项、有效动作 ${effectiveActionCodes.length} 项；勾选变化将作为该用户的个人附加动作保存。`}
+                </span>
+              </div>
+              <div className="action-permission-groups">
+                {actionPermissionGroups.map((group) => (
+                  <details className="action-permission-group" key={group.resource}>
+                    <summary className="action-permission-group-title">
+                      <span>
+                        <strong>{group.label}</strong>
+                        <small>{group.resource}</small>
+                      </span>
+                      <Tag color="blue">{group.actions.filter((action) => draftEffectiveActionCodes.includes(action.code)).length} / {group.actions.length}</Tag>
+                    </summary>
+                    <div className="action-permission-options">
+                      {group.actions.map((action) => {
+                        const inherited = inheritedActionCodes.includes(action.code);
+                        const personal = !isAdministratorTarget && draftActionCodes.includes(action.code);
+                        const effective = isAdministratorTarget || inherited || personal;
+                        return (
+                          <label className={`action-permission-option${effective ? ' is-checked' : ''}${inherited ? ' is-inherited' : ''}`} key={action.code}>
+                            <Checkbox
+                              checked={effective}
+                              disabled={!canEditSelectedPermissions || inherited}
+                              onChange={(event) => {
+                                if (!canEditSelectedPermissions || inherited) return;
+                                setDraftActionCodes((current) => event.target.checked
+                                  ? [...new Set([...current, action.code])]
+                                  : current.filter((code) => code !== action.code));
+                              }}
+                            />
+                            <span>
+                              <strong>{action.label}</strong>
+                              <small>{action.description}</small>
+                            </span>
+                            {inherited && <em>{isAdministratorTarget ? '管理员全权限' : '角色继承'}</em>}
+                            {personal && <em className="is-personal">个人附加</em>}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
       </Modal>
 
       <Modal open={dialogOpen} title={editingUserId ? '编辑用户' : '新增用户'} footer={null} destroyOnHidden width={640} onCancel={closeDialog} className="user-edit-modal">
@@ -346,8 +500,8 @@ export function UsersPage({
                 }}
               >
                 <option value="">请选择角色</option>
-                {roleOptions.filter((role) => canManage || role.code !== 'system-admin').map((role) => (
-                  <option key={role.id} value={role.id} disabled={role.status !== '启用' && role.id !== userForm.roleId}>
+                {roleOptions.map((role) => (
+                  <option key={role.id} value={role.id} disabled={(isSuperAdminRoleCode(role.code) && !actorIsSuperAdmin) || (role.status !== '启用' && role.id !== userForm.roleId)}>
                     {role.name}（{role.code}{role.status === '启用' ? '' : ' · 已停用'}）
                   </option>
                 ))}

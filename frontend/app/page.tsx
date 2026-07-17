@@ -1,6 +1,8 @@
 ﻿'use client';
 
 import { ArticlesPage } from './articles/ArticlesPage';
+import type { ResourceActionAccess } from './lib/actionPermissions';
+import { isAdministratorRoleCode } from './lib/roleAccess';
 import { AuthPage } from './auth/AuthPage';
 import { DashboardPage } from './dashboard/DashboardPage';
 import { DepartmentsPage } from './departments/DepartmentsPage';
@@ -8,6 +10,7 @@ import { FilesPage } from './files/FilesPage';
 import { useAdminWorkspace } from './hooks/useAdminWorkspace';
 import { MainLayout } from './layout/MainLayout';
 import { MenusPage } from './menus/MenusPage';
+import { ProfilePage } from './profile/ProfileDialog';
 import { RolesPage } from './roles/RolesPage';
 import { UsersPage } from './users/UsersPage';
 
@@ -27,7 +30,38 @@ export default function Home() {
     );
   }
 
-  const canManage = workspace.authUser.roleCode === 'system-admin';
+  const authUser = workspace.authUser;
+  const hasAction = (actionCode: string) => isAdministratorRoleCode(authUser.roleCode)
+    || authUser.actionPermissions?.includes(actionCode) === true;
+  const roleActions: ResourceActionAccess = {
+    create: hasAction('roles.create'),
+    update: hasAction('roles.update'),
+    delete: hasAction('roles.delete'),
+    permissions: hasAction('roles.permissions.update'),
+  };
+  const menuActions: ResourceActionAccess = {
+    create: hasAction('menus.create'),
+    update: hasAction('menus.update'),
+    delete: hasAction('menus.delete'),
+  };
+  const departmentActions: ResourceActionAccess = {
+    create: hasAction('departments.create'),
+    update: hasAction('departments.update'),
+    delete: hasAction('departments.delete'),
+    permissions: hasAction('departments.permissions.update'),
+  };
+  const articleActions: ResourceActionAccess = {
+    create: hasAction('articles.create'),
+    update: hasAction('articles.update'),
+    delete: hasAction('articles.delete'),
+  };
+  const fileActions: ResourceActionAccess = {
+    create: hasAction('files.create'),
+    update: hasAction('files.update'),
+    delete: hasAction('files.delete'),
+    restore: hasAction('files.restore'),
+    permanentDelete: hasAction('files.permanent-delete'),
+  };
 
   return (
     <MainLayout
@@ -41,7 +75,6 @@ export default function Home() {
       onOpenMobileSidebar={() => workspace.setMobileSidebarOpen(true)}
       onCloseMobileSidebar={() => workspace.setMobileSidebarOpen(false)}
       onNavigate={workspace.handleNavigate}
-      onAuthUserUpdate={workspace.handleAuthUserUpdate}
       onLogout={workspace.handleLogout}
     >
       {workspace.activePage === 'dashboard' && (
@@ -59,7 +92,11 @@ export default function Home() {
 
       {workspace.activePage === 'users' && (
         <UsersPage
-          canManage={canManage}
+          canCreate={hasAction('users.create')}
+          canUpdate={hasAction('users.update')}
+          canDelete={hasAction('users.delete')}
+          canConfigurePermissions={isAdministratorRoleCode(authUser.roleCode) && hasAction('users.permissions.update')}
+          actorRoleCode={authUser.roleCode}
           users={workspace.users}
           menus={workspace.menus}
           departments={workspace.departments}
@@ -71,9 +108,13 @@ export default function Home() {
           departmentMenuIds={workspace.departmentMenuIds}
           roleMenuIds={workspace.roleMenuIds}
           effectiveMenuIds={workspace.effectiveMenuIds}
+          roleActionCodes={workspace.roleActionCodes}
+          userActionCodes={workspace.userActionCodes}
+          effectiveActionCodes={workspace.effectiveActionCodes}
           isLoading={workspace.isLoading}
           isSavingUser={workspace.isSavingUser}
           isSavingPermission={workspace.isSavingPermission}
+          isSavingActionPermission={workspace.isSavingActionPermission}
           onRefresh={workspace.loadData}
           onUserFormChange={workspace.setUserForm}
           onSubmitUser={workspace.handleSubmitUser}
@@ -82,12 +123,14 @@ export default function Home() {
           onEditUser={workspace.handleEditUser}
           onDeleteUser={workspace.handleDeleteUser}
           onSavePermissions={workspace.handleSavePermissions}
+          onSaveActionPermissions={workspace.handleSaveActionPermissions}
         />
       )}
 
       {workspace.activePage === 'roles' && (
         <RolesPage
-          canManage={canManage}
+          actorRoleCode={authUser.roleCode}
+          actions={roleActions}
           roles={workspace.roles}
           users={workspace.users}
           menus={workspace.menus}
@@ -105,7 +148,7 @@ export default function Home() {
 
       {workspace.activePage === 'menus' && (
         <MenusPage
-          canManage={canManage}
+          actions={menuActions}
           menus={workspace.menus}
           menuTree={workspace.menuTree}
           menuForm={workspace.menuForm}
@@ -123,7 +166,7 @@ export default function Home() {
 
       {workspace.activePage === 'departments' && (
         <DepartmentsPage
-          canManage={canManage}
+          actions={departmentActions}
           departments={workspace.departments}
           users={workspace.users}
           menus={workspace.menus}
@@ -141,7 +184,7 @@ export default function Home() {
 
       {workspace.activePage === 'articles' && (
         <ArticlesPage
-          canManage={canManage}
+          actions={articleActions}
           filteredArticles={workspace.filteredArticles}
           articleForm={workspace.articleForm}
           editingArticleId={workspace.editingArticleId}
@@ -165,7 +208,7 @@ export default function Home() {
 
       {workspace.activePage === 'files' && (
         <FilesPage
-          canManage={canManage}
+          actions={fileActions}
           filteredFiles={workspace.filteredFiles}
           recycleFiles={workspace.recycleFiles}
           fileForm={workspace.fileForm}
@@ -184,6 +227,14 @@ export default function Home() {
           onRestoreFile={workspace.handleRestoreFile}
           onLoadRecycleFiles={workspace.loadRecycleFiles}
           onRefreshFiles={workspace.loadData}
+        />
+      )}
+
+      {workspace.activePage === 'profile' && (
+        <ProfilePage
+          authUser={authUser}
+          onUpdated={workspace.handleAuthUserUpdate}
+          onPasswordChanged={workspace.handleLogout}
         />
       )}
     </MainLayout>

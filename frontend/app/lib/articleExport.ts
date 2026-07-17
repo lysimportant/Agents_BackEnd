@@ -1,13 +1,15 @@
 import type { Article } from '../types/admin';
 import { API_BASE_URL } from './constants';
+import { buildArticleMarkdownDocument } from './articleMarkdown';
 
-export type ArticleExportFormat = 'csv' | 'pdf' | 'print' | 'png' | 'word' | 'html';
+export type ArticleExportFormat = 'csv' | 'pdf' | 'print' | 'png' | 'word' | 'html' | 'markdown';
 
 export const articleExportOptions: Array<{ key: ArticleExportFormat; label: string }> = [
   { key: 'pdf', label: 'PDF 文件 (.pdf)' },
   { key: 'print', label: '打印文章' },
   { key: 'word', label: 'Word 文档 (.doc)' },
   { key: 'html', label: 'HTML 网页 (.html)' },
+  { key: 'markdown', label: 'Markdown 文档 (.md)' },
   { key: 'png', label: 'PNG 图片（自动分页）' },
   { key: 'csv', label: 'Excel 表格 (.csv)' },
 ];
@@ -42,6 +44,9 @@ export async function exportArticle(article: Article, format: ArticleExportForma
     case 'word':
       downloadBlob(`\uFEFF${buildWordDocument(article)}`, 'application/msword;charset=utf-8', buildFilename(article, 'doc'));
       return `《${article.title}》Word 文档已下载。`;
+    case 'markdown':
+      downloadBlob(`\uFEFF${buildArticleMarkdownDocument(article, sanitizeArticleContent(article.content || ''))}`, 'text/markdown;charset=utf-8', buildFilename(article, 'md'));
+      return `《${article.title}》Markdown 文档已下载。`;
     default:
       throw new Error('不支持所选的文章导出格式。');
   }
@@ -114,7 +119,9 @@ async function renderArticlePages(article: Article) {
 
   const stage = document.createElement('div');
   stage.setAttribute('aria-hidden', 'true');
-  stage.style.cssText = `position:fixed;left:-100000px;top:0;width:${EXPORT_WIDTH}px;background:#fff;pointer-events:none;z-index:-1;`;
+  // Render behind the application so html2canvas can still paint the content.
+  // A hidden or transparent ancestor would produce an empty PDF/PNG.
+  stage.style.cssText = `position:fixed;left:0;top:0;width:${EXPORT_WIDTH}px;background:#fff;pointer-events:none;z-index:-2147483648;`;
   stage.innerHTML = `<style>${ARTICLE_EXPORT_STYLES}</style>${articlePage.outerHTML}`;
   document.body.appendChild(stage);
 
@@ -130,18 +137,20 @@ async function renderArticlePages(article: Article) {
 
     const contentHeight = Math.max(1, Math.ceil(renderedPage.scrollHeight));
     const pages = Math.max(1, Math.ceil(contentHeight / PNG_PAGE_HEIGHT));
-    const serializablePage = renderedPage.cloneNode(true) as HTMLElement;
-    serializablePage.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-    const serializedPage = new XMLSerializer().serializeToString(serializablePage);
+    const { default: html2canvas } = await import('html2canvas');
+    const fullCanvas = await html2canvas(renderedPage, {
+      backgroundColor: '#ffffff',
+      logging: false,
+      scale: PNG_RENDER_SCALE,
+      useCORS: false,
+      width: EXPORT_WIDTH,
+      height: contentHeight,
+      windowWidth: EXPORT_WIDTH,
+      windowHeight: contentHeight,
+    });
+    assertCanvasHasVisibleContent(fullCanvas);
 
-    const renderedPages: HTMLCanvasElement[] = [];
-    for (let pageIndex = 0; pageIndex < pages; pageIndex += 1) {
-      const offset = pageIndex * PNG_PAGE_HEIGHT;
-      const visibleHeight = Math.min(PNG_PAGE_HEIGHT, contentHeight - offset);
-      const svg = buildSvgPage(serializedPage, offset, visibleHeight);
-      renderedPages.push(await renderSvgToCanvas(svg, EXPORT_WIDTH, visibleHeight));
-    }
-    return renderedPages;
+    return splitCanvasIntoPages(fullCanvas, contentHeight, pages);
   } finally {
     stage.remove();
   }
@@ -182,35 +191,52 @@ async function exportPdf(article: Article) {
   return pages.length;
 }
 
-function buildSvgPage(serializedPage: string, offset: number, height: number) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${EXPORT_WIDTH}" height="${height}" viewBox="0 0 ${EXPORT_WIDTH} ${height}">
-    <foreignObject x="0" y="0" width="${EXPORT_WIDTH}" height="${height}">
-      <div xmlns="http://www.w3.org/1999/xhtml" style="width:${EXPORT_WIDTH}px;transform:translateY(-${offset}px);transform-origin:top left;background:#fff">
-        <style>${escapeXmlText(ARTICLE_EXPORT_STYLES)}</style>${serializedPage}
-      </div>
-    </foreignObject>
-  </svg>`;
-}
-
-async function renderSvgToCanvas(svg: string, width: number, height: number) {
-  const source = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
-  try {
-    const image = new Image();
-    image.decoding = 'async';
-    image.src = source;
-    const loaded = await waitForImage(image, 10000);
-    if (!loaded) throw new Error('文章图片渲染失败，请重试。');
+function splitCanvasIntoPages(fullCanvas: HTMLCanvasElement, contentHeight: number, pages: number) {
+  const renderedPages: HTMLCanvasElement[] = [];
+  for (let pageIndex = 0; pageIndex < pages; pageIndex += 1) {
+    const offset = pageIndex * PNG_PAGE_HEIGHT;
+    const visibleHeight = Math.min(PNG_PAGE_HEIGHT, contentHeight - offset);
     const canvas = document.createElement('canvas');
-    canvas.width = Math.ceil(width * PNG_RENDER_SCALE);
-    canvas.height = Math.ceil(height * PNG_RENDER_SCALE);
+    canvas.width = fullCanvas.width;
+    canvas.height = Math.ceil(visibleHeight * PNG_RENDER_SCALE);
     const context = canvas.getContext('2d');
-    if (!context) throw new Error('当前浏览器无法创建图片画布。');
+    if (!context) throw new Error('当前浏览器无法创建文章导出画布。');
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    return canvas;
-  } finally {
-    URL.revokeObjectURL(source);
+    context.drawImage(
+      fullCanvas,
+      0,
+      Math.floor(offset * PNG_RENDER_SCALE),
+      fullCanvas.width,
+      canvas.height,
+      0,
+      0,
+      canvas.width,
+      canvas.height,
+    );
+    renderedPages.push(canvas);
+  }
+  return renderedPages;
+}
+
+function assertCanvasHasVisibleContent(canvas: HTMLCanvasElement) {
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) throw new Error('当前浏览器无法检查文章导出内容。');
+  const step = Math.max(1, Math.floor(Math.min(canvas.width, canvas.height) / 180));
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  let visibleSamples = 0;
+  let totalSamples = 0;
+  for (let y = 0; y < canvas.height; y += step) {
+    for (let x = 0; x < canvas.width; x += step) {
+      const offset = (y * canvas.width + x) * 4;
+      totalSamples += 1;
+      if (pixels[offset + 3] > 16 && (pixels[offset] < 248 || pixels[offset + 1] < 248 || pixels[offset + 2] < 248)) {
+        visibleSamples += 1;
+      }
+    }
+  }
+  if (visibleSamples < Math.max(12, Math.floor(totalSamples * 0.001))) {
+    throw new Error('PDF / PNG 渲染结果为空白，请刷新页面后重试。');
   }
 }
 
@@ -258,6 +284,7 @@ function buildWordDocument(article: Article) {
       '<head><meta name="ProgId" content="Word.Document"><meta name="Generator" content="HuaJian_AI"><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml>',
     );
 }
+
 
 function sanitizeArticleContent(input: string) {
   if (!input) return '';
@@ -434,10 +461,6 @@ function escapeCsvCell(value: string | number) {
 
 function escapeHtml(value: string | number) {
   return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-}
-
-function escapeXmlText(value: string) {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 }
 
 function formatDate(value: string) {

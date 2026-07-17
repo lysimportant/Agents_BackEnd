@@ -128,6 +128,17 @@ func (s *SQLiteStore) assignMHAdminInvariants() error {
 		return err
 	}
 	defer tx.Rollback()
+	var mhCount int
+	if err := tx.QueryRow(`SELECT COUNT(1) FROM users WHERE lower(username)=lower('MH')`).Scan(&mhCount); err != nil {
+		return err
+	}
+	if mhCount != 1 {
+		return fmt.Errorf("默认管理员 MH 必须且只能存在一个，当前检测到 %d 个；迁移未修改任何账号", mhCount)
+	}
+	var mhID int
+	if err := tx.QueryRow(`SELECT id FROM users WHERE lower(username)=lower('MH')`).Scan(&mhID); err != nil {
+		return err
+	}
 	var rootID int
 	var rootName string
 	if err := tx.QueryRow(`SELECT id,name FROM departments WHERE code='huajian'`).Scan(&rootID, &rootName); err != nil {
@@ -135,14 +146,14 @@ func (s *SQLiteStore) assignMHAdminInvariants() error {
 	}
 	var roleID int
 	var roleName string
-	if err := tx.QueryRow(`SELECT id,name FROM roles WHERE code=?`, systemAdminRoleCode).Scan(&roleID, &roleName); err != nil {
+	if err := tx.QueryRow(`SELECT id,name FROM roles WHERE code=?`, superAdminRoleCode).Scan(&roleID, &roleName); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(
 		`UPDATE users SET role_id=?,role=?,department_id=?,department=?,status='在岗',can_login=1,updated_at=?
-			 WHERE lower(username)=lower('MH')
+			 WHERE id=?
 			   AND (role_id IS NOT ? OR role<>? OR department_id IS NOT ? OR department<>? OR status<>'在岗' OR can_login<>1)`,
-		roleID, roleName, rootID, rootName, timeText(time.Now()), roleID, roleName, rootID, rootName,
+		roleID, roleName, rootID, rootName, timeText(time.Now()), mhID, roleID, roleName, rootID, rootName,
 	); err != nil {
 		return err
 	}
@@ -420,6 +431,10 @@ func (s *SQLiteStore) GetUserPermissionDetail(userID int) (models.UserPermission
 	if err != nil {
 		return models.UserPermissionDetail{}, "查询角色动作权限失败"
 	}
+	userActionCodes, err := s.listUserActionCodes(userID)
+	if err != nil {
+		return models.UserPermissionDetail{}, "查询用户动作权限失败"
+	}
 	effectiveActionCodes, message := s.ListUserActionPermissions(userID)
 	if message != "" {
 		return models.UserPermissionDetail{}, message
@@ -430,6 +445,7 @@ func (s *SQLiteStore) GetUserPermissionDetail(userID int) (models.UserPermission
 		UserMenuIDs:          userIDs,
 		EffectiveMenuIDs:     effectiveIDs,
 		RoleActionCodes:      roleActionCodes,
+		UserActionCodes:      userActionCodes,
 		EffectiveActionCodes: effectiveActionCodes,
 	}, ""
 }

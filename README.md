@@ -69,8 +69,8 @@ npm run dev
 
 - 查询/查看：`dashboard.query|view`、`users.query|view`、`departments.query|view`、`roles.query|view`、`menus.query|view`、`articles.query|view`、`files.query|view`。
 - 写动作：`dashboard.create`；各管理资源的 `create`、`update`、`delete`；以及 `users.permissions.update`、`departments.permissions.update`、`roles.permissions.update`、`files.restore`、`files.permanent-delete`。
-- `roleCode=system-admin` 固定拥有全部动作；其他角色固定只有查询/查看动作，菜单授权或角色显示名称不能授予写权限。
-- 除本人维护 `/api/profile` 的个人资料外，所有业务 CRUD、权限配置、文件恢复及彻底删除只允许 `system-admin`。
+- `roleCode=super-admin`（超级管理员）与 `roleCode=system-admin`（系统管理员）固定拥有全部当前动作；其他角色默认只有查询/查看动作，管理员可再为普通用户追加个人动作权限。
+- 超级管理员是最高保护角色；只有超级管理员可以创建或分配超级管理员，系统管理员和其他角色不能创建、修改、删除或降级超级管理员。除本人维护 `/api/profile` 外，受控 CRUD、权限配置、文件恢复及彻底删除由动作权限决定。
 
 ### 基础接口
 
@@ -97,8 +97,8 @@ npm run dev
 
 - `GET /api/profile`: 获取当前登录用户资料
 - `PUT /api/profile`: 更新当前登录用户资料
-- `GET /api/users/:id/profile`: 本人或系统管理员获取指定用户资料
-- `PUT /api/users/:id/profile`: 本人或系统管理员更新指定用户资料
+- `GET /api/users/:id/profile`: 本人或管理员获取指定用户资料
+- `PUT /api/users/:id/profile`: 本人或管理员更新指定用户资料
 
 资料更新 Body 可包含 `name`、`email`、`phone`、`age`、`description`、`avatarUrl`。该接口不会修改账号、密码、角色、部门、状态或登录权限；`age` 允许 `0` 到 `150`。
 
@@ -115,7 +115,8 @@ npm run dev
 
 - `GET /api/users/:id/menus`: 查询用户个人附加菜单
 - `PUT /api/users/:id/menus`: 保存用户个人附加菜单，Body 示例：`{"menuIds":[1,2,3]}`
-- `GET /api/users/:id/permissions`: 查询权限明细，返回 `departmentMenuIds`、`roleMenuIds`、`userMenuIds`、`effectiveMenuIds`、`roleActionCodes` 和 `effectiveActionCodes`
+- `GET /api/users/:id/permissions`: 查询权限明细，返回 `departmentMenuIds`、`roleMenuIds`、`userMenuIds`、`effectiveMenuIds`、`roleActionCodes`、`userActionCodes` 和 `effectiveActionCodes`
+- `PUT /api/users/:id/actions`: 超级管理员或系统管理员保存普通用户的个人按钮/动作权限，Body 与响应均为 `{"actionCodes":["articles.create","files.update"]}`；传空数组可清空个人授权
 
 ### 部门管理
 
@@ -139,13 +140,13 @@ npm run dev
 - `PUT /api/roles/:id/menus`: 保存角色菜单权限，Body 与响应均为 `{"menuIds":[1,2,3]}`
 - `GET /api/roles/:id/users`: 查询使用该角色的用户，直接返回用户数组
 
-角色 JSON 字段：`name`、`code`、`description`、`sort`、`status`。系统幂等创建 `system-admin`、`department-admin`、`content-editor` 和 `viewer`；非系统角色及普通部门默认具有工作台权限，`system-admin`、根部门和稳定编码为 `board-office` 的董事会办公室保留全部菜单权限。启动迁移只补齐这套基线，不删除既有部门、角色或个人菜单授权。
+角色 JSON 字段：`name`、`code`、`description`、`sort`、`status`。系统幂等创建 11 个常见及购物预留角色：`super-admin`（超级管理员）、`system-admin`（系统管理员）、`department-admin`（部门管理员）、`content-editor`（内容编辑）、`auditor`（审核员）、`viewer`（普通用户）、`product-manager`（商品管理员）、`order-manager`（订单管理员）、`warehouse-manager`（仓库管理员）、`customer-service`（客服专员）和 `finance`（财务人员）。旧内置 `operations-admin` 会安全迁移为部门管理员，关联用户和权限均保留；自定义角色不会被启动迁移删除。购物角色目前是预留角色，默认只有工作台和查询/查看动作，待商品、订单、库存等菜单与 API 接入后再配置对应权限。非管理员角色及普通部门默认具有工作台权限，超级管理员、系统管理员、根部门和 `board-office` 保留全部菜单权限。角色编码创建后不可在前端修改，修改显示名称时关联用户名称会在同一事务中同步更新。
 
-用户的有效菜单是启用状态直属部门、启用状态角色与个人附加菜单的并集，停用部门或角色不再贡献菜单权限。HuaJian 组织结构作为幂等初始数据写入；`MH` 会关联根部门和 `system-admin` 角色，两者始终补齐全部菜单权限。启动迁移不会清空已有菜单、部门/角色/个人权限或业务数据，也不会重置已有 `MH` 的密码。
+用户的有效菜单是启用状态直属部门、启用状态角色与个人附加菜单的并集，停用部门或角色不再贡献菜单权限。HuaJian 组织结构作为幂等初始数据写入；`MH` 会关联根部门和 `super-admin` 角色，两者始终补齐全部菜单权限。升级时只将 `MH` 迁入超级管理员，其他既有系统管理员保持 `system-admin`，不会被批量提升。启动迁移不会清空已有菜单、部门/角色/个人权限或业务数据，也不会重置已有 `MH` 的密码。
 
-默认管理员 `MH` 不可删除；通过用户接口编辑时会强制保留 `MH` 账号、`系统管理员` 角色、根部门归属和可登录状态，但仍可更新姓名、联系方式及密码。根部门的菜单权限不可缩减。
+默认管理员 `MH` 不可删除；通过用户接口编辑时会强制保留 `MH` 账号、`超级管理员` 角色、根部门归属和可登录状态，但仍可更新姓名、联系方式及密码。超级管理员可以将超级管理员角色分配给其他账号，其他角色不能分配或调整超级管理员；根部门权限不可缩减。
 
-用户、部门、角色和菜单的查看接口按有效菜单及查询/查看动作鉴权；所有业务新增、修改、删除以及用户/部门/角色菜单授权仅允许 `system-admin` 执行。非系统管理员不能修改 `system-admin` 角色或任何归属该角色的用户，也不能在新增或编辑用户时选择 `system-admin`；这些限制使用稳定 `roleCode` 校验，不依赖可编辑的角色名称。管理员写接口不依赖可能被误停用的管理菜单，因此仍可恢复权限配置。
+用户、部门、角色和菜单接口同时按有效菜单与动作编码鉴权。超级管理员和系统管理员固定拥有全部当前动作，且个人动作权限不可修改；其他角色默认只有查询、查看动作，其有效权限是角色动作与管理员授予的个人动作并集。普通用户不能自行提权。只有超级管理员可以创建或调整超级管理员、系统管理员；系统管理员不能操作超级管理员、`MH` 或管理员角色边界。所有限制使用稳定 `roleCode` 校验，不依赖可编辑的角色名称。
 
 ### 文章管理
 
@@ -156,11 +157,11 @@ npm run dev
 - `DELETE /api/articles/:id`: 删除文章
 - `GET /api/articles/export?format=csv|pdf`: 导出当前用户可见文章；CSV 使用 UTF-8 BOM 并防止公式注入，PDF 在内存中生成
 
-文章查询、详情和导出可由具有文章菜单的普通角色使用；文章新增、修改和删除仅允许 `system-admin`。
+文章查询、详情和导出可由具有文章菜单与相应动作的角色使用；新增、修改和删除按动作权限控制。
 
 文章 JSON 字段：`title`、`category`、`author`、`status`、`summary`、`content`。状态可使用 `已发布`、`草稿`、`待审核`。
 
-前端还可将当前筛选结果导出为 Excel 兼容 CSV、打印/PDF、分页 PNG 或带 `Article` 结构化数据的 SEO HTML。公开且已发布的文章会输出文章语义信息，私密或未发布文章不会输出可索引标记。
+前端还可将单篇文章导出为 Excel 兼容 CSV、打印/PDF、Word、分页 PNG、Markdown 或带 `Article` 结构化数据的 SEO HTML。Markdown 会根据正文标题自动生成目录和显式锚点，正文没有标题时不生成目录；重复标题会生成唯一锚点。公开且已发布的文章会输出文章语义信息，私密或未发布文章不会输出可索引标记。
 
 ### 文件管理
 
@@ -172,7 +173,7 @@ npm run dev
 - `DELETE /api/files/:id`: 将文件移入回收站（软删除，保留物理文件）
 - `POST /api/files/:id/restore`: 从回收站恢复文件
 
-文件查询、详情、预览和下载可由具有文件菜单的普通角色使用；上传、修改、软删除、恢复和彻底删除仅允许 `system-admin`。
+文件查询、详情、预览和下载可由具有文件菜单与相应动作的角色使用；上传、修改、软删除、恢复和彻底删除按动作权限控制。
 
 文件安全约束：
 

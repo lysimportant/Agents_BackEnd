@@ -25,6 +25,9 @@ func NewSQLiteStore(db *sql.DB) *SQLiteStore {
 }
 
 func (s *SQLiteStore) MigrateAndSeed() error {
+	if err := s.validateMigrationPreconditions(); err != nil {
+		return err
+	}
 	if err := s.migrate(); err != nil {
 		return err
 	}
@@ -183,6 +186,12 @@ func (s *SQLiteStore) migrate() error {
 			FOREIGN KEY (role_id) REFERENCES roles(id),
 			FOREIGN KEY (menu_id) REFERENCES menus(id)
 		)`,
+		`CREATE TABLE IF NOT EXISTS user_action_permissions (
+			user_id INTEGER NOT NULL,
+			action_code TEXT NOT NULL,
+			PRIMARY KEY (user_id, action_code),
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		)`,
 		`CREATE TABLE IF NOT EXISTS sessions (
 			id TEXT PRIMARY KEY,
 			user_id INTEGER NOT NULL,
@@ -263,14 +272,14 @@ func (s *SQLiteStore) migrate() error {
 
 	if _, err := s.db.Exec(`
 		UPDATE articles
-		SET owner_id = COALESCE((SELECT id FROM users WHERE role = '系统管理员' ORDER BY id LIMIT 1), 1)
+		SET owner_id = COALESCE((SELECT id FROM users WHERE lower(username)=lower('MH') ORDER BY id LIMIT 1), (SELECT id FROM users WHERE role IN ('超级管理员','系统管理员') ORDER BY id LIMIT 1), 1)
 		WHERE owner_id = 0 OR owner_id IS NULL
 	`); err != nil {
 		return err
 	}
 	if _, err := s.db.Exec(`
 		UPDATE files
-		SET owner_id = COALESCE((SELECT id FROM users WHERE role = '系统管理员' ORDER BY id LIMIT 1), 1)
+		SET owner_id = COALESCE((SELECT id FROM users WHERE lower(username)=lower('MH') ORDER BY id LIMIT 1), (SELECT id FROM users WHERE role IN ('超级管理员','系统管理员') ORDER BY id LIMIT 1), 1)
 		WHERE owner_id = 0 OR owner_id IS NULL
 	`); err != nil {
 		return err
@@ -322,13 +331,13 @@ func (s *SQLiteStore) seed() error {
 			return err
 		}
 		var roleID int
-		if err := s.db.QueryRow(`SELECT id FROM roles WHERE code='system-admin'`).Scan(&roleID); err != nil {
+		if err := s.db.QueryRow(`SELECT id FROM roles WHERE code=?`, superAdminRoleCode).Scan(&roleID); err != nil {
 			return err
 		}
 		if _, err := s.db.Exec(
 			`INSERT INTO users (username,name,role_id,role,department_id,department,status,shift,phone,email,age,description,avatar_url,can_login,password_hash,created_at,updated_at)
 			 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			"MH", "MH", roleID, "系统管理员", rootID, "HuaJian技术有限公司", "在岗", "常白班", "", "mh@example.com", 0, "", "", 1, passwordHash, now, now,
+			"MH", "MH", roleID, "超级管理员", rootID, "HuaJian技术有限公司", "在岗", "常白班", "", "mh@example.com", 0, "", "", 1, passwordHash, now, now,
 		); err != nil {
 			return err
 		}
@@ -382,7 +391,7 @@ func (s *SQLiteStore) findAdminUser() (models.User, bool) {
 		SELECT `+userSelectColumns+`
 		FROM users u LEFT JOIN roles r ON r.id=u.role_id
 		WHERE r.code=? ORDER BY u.id LIMIT 1
-	`, systemAdminRoleCode))
+	`, superAdminRoleCode))
 }
 
 func (s *SQLiteStore) ListDataPoints() []models.DataPoint {
@@ -588,9 +597,9 @@ func (s *SQLiteStore) UpdateUser(id int, request models.UserRequest, passwordHas
 			return models.User{}, "根部门不存在"
 		}
 		canLogin := true
-		systemRole, exists := s.findRoleByCode(systemAdminRoleCode)
+		systemRole, exists := s.findRoleByCode(superAdminRoleCode)
 		if !exists {
-			return models.User{}, "系统管理员角色不存在"
+			return models.User{}, "超级管理员角色不存在"
 		}
 		request.Username = "MH"
 		request.RoleID = &systemRole.ID
@@ -671,6 +680,9 @@ func (s *SQLiteStore) DeleteUser(id int) string {
 	if _, err := tx.Exec(`DELETE FROM user_menus WHERE user_id=?`, id); err != nil {
 		return "删除用户失败"
 	}
+	if _, err := tx.Exec(`DELETE FROM user_action_permissions WHERE user_id=?`, id); err != nil {
+		return "删除用户失败"
+	}
 	if _, err := tx.Exec(`DELETE FROM sessions WHERE user_id=?`, id); err != nil {
 		return "删除用户失败"
 	}
@@ -684,6 +696,30 @@ func (s *SQLiteStore) DeleteUser(id int) string {
 	}
 	if err := tx.Commit(); err != nil {
 		return "删除用户失败"
+	}
+	return ""
+}
+
+func (s *SQLiteStore) UpdateUserPassword(id int, passwordHash string) string {
+	if strings.TrimSpace(passwordHash) == "" {
+		return "密码不能为空"
+	}
+	if _, ok := s.FindUserByID(id); !ok {
+		return "用户不存在"
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return "修改密码失败"
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE users SET password_hash=?,updated_at=? WHERE id=?`, passwordHash, timeText(time.Now().UTC()), id); err != nil {
+		return "修改密码失败"
+	}
+	if _, err := tx.Exec(`DELETE FROM sessions WHERE user_id=?`, id); err != nil {
+		return "修改密码失败"
+	}
+	if err := tx.Commit(); err != nil {
+		return "修改密码失败"
 	}
 	return ""
 }
@@ -735,8 +771,8 @@ func (s *SQLiteStore) CreateMenu(request models.MenuRequest) (models.Menu, strin
 	}
 	if _, err := tx.Exec(`
 		INSERT OR IGNORE INTO role_menus(role_id,menu_id)
-		SELECT id,? FROM roles WHERE code=?
-	`, id, systemAdminRoleCode); err != nil {
+		SELECT id,? FROM roles WHERE code IN (?,?)
+	`, id, superAdminRoleCode, systemAdminRoleCode); err != nil {
 		return models.Menu{}, "创建菜单失败"
 	}
 	if err := tx.Commit(); err != nil {

@@ -10,7 +10,10 @@ import (
 	"collector-backend/permissions"
 )
 
-const systemAdminRoleCode = permissions.SystemAdminRoleCode
+const (
+	superAdminRoleCode  = permissions.SuperAdminRoleCode
+	systemAdminRoleCode = permissions.SystemAdminRoleCode
+)
 
 type MemoryStore struct {
 	mu                sync.Mutex
@@ -22,6 +25,7 @@ type MemoryStore struct {
 	articles          []models.Article
 	files             []models.ManagedFile
 	userMenuIDs       map[int][]int
+	userActionCodes   map[int][]string
 	departmentMenuIDs map[int][]int
 	roleMenuIDs       map[int][]int
 	nextUserID        int
@@ -41,7 +45,7 @@ func NewMemoryStore() *MemoryStore {
 			{ID: 3, Source: "collector-a", Metric: "temperature", Value: 25.1, Unit: "°C", CreatedAt: now},
 		},
 		users: []models.User{
-			{ID: 1, Username: "MH", Name: "MH", RoleID: intPtr(1), Role: "系统管理员", RoleCode: systemAdminRoleCode, DepartmentID: intPtr(1), Department: "HuaJian技术有限公司", Status: "在岗", Shift: "常白班", Phone: "", Email: "mh@example.com", Age: 0, CanLogin: true, PasswordHash: auth.MustHashPassword("123"), CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 1, Username: "MH", Name: "MH", RoleID: intPtr(1), Role: "超级管理员", RoleCode: superAdminRoleCode, DepartmentID: intPtr(1), Department: "HuaJian技术有限公司", Status: "在岗", Shift: "常白班", Phone: "", Email: "mh@example.com", Age: 0, CanLogin: true, PasswordHash: auth.MustHashPassword("123"), CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
 			{ID: 2, Username: "zhang.gong", Name: "张工", Role: "产线主管", DepartmentID: intPtr(2), Department: "制造部", Status: "在岗", Shift: "早班", Phone: "13800000001", Email: "zhang.gong@example.com", CanLogin: true, PasswordHash: auth.MustHashPassword("123456"), CreatedAt: now.Add(-72 * time.Hour), UpdatedAt: now.Add(-2 * time.Hour)},
 			{ID: 3, Username: "li.min", Name: "李敏", Role: "质量工程师", DepartmentID: intPtr(3), Department: "质量与流程IT部", Status: "巡检", Shift: "中班", Phone: "13800000002", Email: "li.min@example.com", CanLogin: true, PasswordHash: auth.MustHashPassword("123456"), CreatedAt: now.Add(-48 * time.Hour), UpdatedAt: now.Add(-90 * time.Minute)},
 			{ID: 4, Username: "wang.qiang", Name: "王强", Role: "设备维护", DepartmentID: intPtr(2), Department: "制造部", Status: "待命", Shift: "夜班", Phone: "13800000003", Email: "wang.qiang@example.com", CanLogin: true, PasswordHash: auth.MustHashPassword("123456"), CreatedAt: now.Add(-36 * time.Hour), UpdatedAt: now.Add(-30 * time.Minute)},
@@ -52,10 +56,17 @@ func NewMemoryStore() *MemoryStore {
 			{ID: 3, Name: "质量与流程IT部", Code: "quality-process-it", ParentID: intPtr(1), Sort: 30, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
 		},
 		roles: []models.Role{
-			{ID: 1, Name: "系统管理员", Code: systemAdminRoleCode, Description: "系统最高管理权限", Sort: 10, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
-			{ID: 2, Name: "部门管理员", Code: "department-admin", Description: "部门管理角色", Sort: 20, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
-			{ID: 3, Name: "内容编辑", Code: "content-editor", Description: "内容编辑角色", Sort: 30, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
-			{ID: 4, Name: "普通用户", Code: "viewer", Description: "基础访问角色", Sort: 40, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 1, Name: "超级管理员", Code: superAdminRoleCode, Description: "系统最高权限，仅用于平台最高级管理", Sort: 10, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 2, Name: "系统管理员", Code: systemAdminRoleCode, Description: "负责用户、部门、角色、菜单和权限配置", Sort: 20, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 3, Name: "部门管理员", Code: "department-admin", Description: "负责本部门用户与业务数据管理", Sort: 30, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 4, Name: "内容编辑", Code: "content-editor", Description: "负责内容创建、编辑与维护", Sort: 40, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 5, Name: "审核员", Code: "auditor", Description: "负责内容审核与合规查看", Sort: 50, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 6, Name: "普通用户", Code: "viewer", Description: "基础查询与查看角色", Sort: 60, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 7, Name: "商品管理员", Code: "product-manager", Description: "负责商品、分类、品牌和上下架管理", Sort: 110, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 8, Name: "订单管理员", Code: "order-manager", Description: "负责订单处理、发货与售后流转", Sort: 120, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 9, Name: "仓库管理员", Code: "warehouse-manager", Description: "负责库存、入库、出库和盘点", Sort: 130, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 10, Name: "客服专员", Code: "customer-service", Description: "负责客户咨询、退款与售后服务", Sort: 140, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+			{ID: 11, Name: "财务人员", Code: "finance", Description: "负责支付、对账、退款和财务报表", Sort: 150, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
 		},
 		menus: []models.Menu{
 			{ID: 1, Name: "工作台", Code: "dashboard", Path: "dashboard", Icon: "dashboard", ParentID: nil, Sort: 10, Status: "启用", CreatedAt: now.Add(-96 * time.Hour), UpdatedAt: now.Add(-3 * time.Hour)},
@@ -75,20 +86,28 @@ func NewMemoryStore() *MemoryStore {
 			3: {1, 3},
 			4: {1, 4},
 		},
+		userActionCodes: map[int][]string{},
 		departmentMenuIDs: map[int][]int{
 			1: {1, 2, 3, 4},
 			2: {1},
 			3: {1},
 		},
 		roleMenuIDs: map[int][]int{
-			1: {1, 2, 3, 4},
-			2: {1},
-			3: {1},
-			4: {1},
+			1:  {1, 2, 3, 4},
+			2:  {1, 2, 3, 4},
+			3:  {1},
+			4:  {1},
+			5:  {1},
+			6:  {1},
+			7:  {1},
+			8:  {1},
+			9:  {1},
+			10: {1},
+			11: {1},
 		},
 		nextUserID:       5,
 		nextDepartmentID: 4,
-		nextRoleID:       5,
+		nextRoleID:       12,
 		nextMenuID:       5,
 		nextArticleID:    4,
 		nextFileID:       1,
@@ -187,9 +206,9 @@ func (s *MemoryStore) UpdateUser(id int, request models.UserRequest, passwordHas
 			return models.User{}, "根部门不存在"
 		}
 		canLogin := true
-		systemRole, exists := s.findRoleByCode(systemAdminRoleCode)
+		systemRole, exists := s.findRoleByCode(superAdminRoleCode)
 		if !exists {
-			return models.User{}, "系统管理员角色不存在"
+			return models.User{}, "超级管理员角色不存在"
 		}
 		request.Username = "MH"
 		request.RoleID = &systemRole.ID
@@ -268,6 +287,22 @@ func (s *MemoryStore) DeleteUser(id int) string {
 	}
 	s.users = append(s.users[:index], s.users[index+1:]...)
 	delete(s.userMenuIDs, id)
+	delete(s.userActionCodes, id)
+	return ""
+}
+
+func (s *MemoryStore) UpdateUserPassword(id int, passwordHash string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if strings.TrimSpace(passwordHash) == "" {
+		return "密码不能为空"
+	}
+	index, found := s.findUserIndexByID(id)
+	if !found {
+		return "用户不存在"
+	}
+	s.users[index].PasswordHash = passwordHash
+	s.users[index].UpdatedAt = time.Now()
 	return ""
 }
 
@@ -538,10 +573,14 @@ func (s *MemoryStore) UpdateRole(id int, request models.RoleRequest) (models.Rol
 	existing := s.roles[index]
 	code := strings.ToLower(strings.TrimSpace(request.Code))
 	name := strings.TrimSpace(request.Name)
-	if existing.Code == systemAdminRoleCode {
-		if code != systemAdminRoleCode || name != "系统管理员" || request.Status != "启用" {
-			return models.Role{}, "系统管理员角色的名称、编码和状态不可修改"
-		}
+	if code != existing.Code {
+		return models.Role{}, "角色编码创建后不可修改"
+	}
+	if existing.Code == superAdminRoleCode && (code != superAdminRoleCode || name != "超级管理员" || request.Status != "启用") {
+		return models.Role{}, "超级管理员角色的名称、编码和状态不可修改"
+	}
+	if existing.Code == systemAdminRoleCode && (code != systemAdminRoleCode || name != "系统管理员" || request.Status != "启用") {
+		return models.Role{}, "系统管理员角色的名称、编码和状态不可修改"
 	}
 	if other, exists := s.findRoleByCode(code); exists && other.ID != id {
 		return models.Role{}, "角色编码已存在"
@@ -569,8 +608,8 @@ func (s *MemoryStore) DeleteRole(id int) string {
 	if !exists {
 		return "角色不存在"
 	}
-	if s.roles[index].Code == systemAdminRoleCode {
-		return "系统管理员角色不能删除"
+	if permissions.IsAdministratorRoleCode(s.roles[index].Code) {
+		return "超级管理员和系统管理员角色不能删除"
 	}
 	for _, user := range s.users {
 		if user.RoleID != nil && *user.RoleID == id {
@@ -604,13 +643,13 @@ func (s *MemoryStore) UpdateRoleMenus(roleID int, menuIDs []int) ([]int, string)
 		}
 	}
 	ids := uniqueIDs(menuIDs)
-	if role.Code == systemAdminRoleCode {
+	if permissions.IsAdministratorRoleCode(role.Code) {
 		allMenuIDs := make([]int, 0, len(s.menus))
 		for _, menu := range s.menus {
 			allMenuIDs = append(allMenuIDs, menu.ID)
 		}
 		if !sameIDs(ids, allMenuIDs) {
-			return nil, "系统管理员角色必须保留全部菜单权限"
+			return nil, "超级管理员和系统管理员角色必须保留全部菜单权限"
 		}
 	}
 	s.roleMenuIDs[roleID] = ids
@@ -644,8 +683,10 @@ func (s *MemoryStore) CreateMenu(request models.MenuRequest) (models.Menu, strin
 	if board, exists := s.findDepartmentByCode("board-office"); exists {
 		s.departmentMenuIDs[board.ID] = append(s.departmentMenuIDs[board.ID], menu.ID)
 	}
-	if systemRole, exists := s.findRoleByCode(systemAdminRoleCode); exists {
-		s.roleMenuIDs[systemRole.ID] = append(s.roleMenuIDs[systemRole.ID], menu.ID)
+	for _, role := range s.roles {
+		if permissions.IsAdministratorRoleCode(role.Code) {
+			s.roleMenuIDs[role.ID] = append(s.roleMenuIDs[role.ID], menu.ID)
+		}
 	}
 	return menu, ""
 }
@@ -741,17 +782,16 @@ func (s *MemoryStore) ListUserActionPermissions(userID int) ([]string, string) {
 	if !exists {
 		return nil, "用户不存在"
 	}
-	if user.RoleID == nil {
-		return []string{}, ""
-	}
-	role, exists := s.findRoleByID(*user.RoleID)
-	if !exists || role.Status != "启用" {
-		return []string{}, ""
-	}
-	if role.Code == systemAdminRoleCode {
+	if permissions.IsAdministratorRoleCode(user.RoleCode) {
 		return permissions.AllCodes(), ""
 	}
-	return permissions.DefaultRoleCodes(), ""
+	roleCodes := []string{}
+	if user.RoleID != nil {
+		if role, found := s.findRoleByID(*user.RoleID); found && role.Status == "启用" {
+			roleCodes = permissions.RoleCodes(role.Code)
+		}
+	}
+	return permissions.MergeCodes(roleCodes, s.userActionCodes[userID]), ""
 }
 
 func (s *MemoryStore) ListUserExtraMenus(userID int) ([]models.Menu, string) {
@@ -797,11 +837,29 @@ func (s *MemoryStore) GetUserPermissionDetail(userID int) (models.UserPermission
 			effectiveRoleMenuIDs = nil
 		}
 	}
+	roleActionCodes := []string{}
+	if user.RoleID != nil {
+		if role, found := s.findRoleByID(*user.RoleID); found {
+			roleActionCodes = permissions.RoleCodes(role.Code)
+		}
+	}
+	userActionCodes := permissions.MergeCodes(s.userActionCodes[userID])
+	effectiveActionCodes := permissions.MergeCodes(userActionCodes)
+	if permissions.IsAdministratorRoleCode(user.RoleCode) {
+		effectiveActionCodes = permissions.AllCodes()
+	} else if user.RoleID != nil {
+		if role, found := s.findRoleByID(*user.RoleID); found && role.Status == "启用" {
+			effectiveActionCodes = permissions.MergeCodes(roleActionCodes, userActionCodes)
+		}
+	}
 	return models.UserPermissionDetail{
-		DepartmentMenuIDs: uniqueIDs(departmentMenuIDs),
-		RoleMenuIDs:       uniqueIDs(roleMenuIDs),
-		UserMenuIDs:       uniqueIDs(userMenuIDs),
-		EffectiveMenuIDs:  s.expandMenuAncestors(append(append(effectiveDepartmentMenuIDs, effectiveRoleMenuIDs...), userMenuIDs...)),
+		DepartmentMenuIDs:    uniqueIDs(departmentMenuIDs),
+		RoleMenuIDs:          uniqueIDs(roleMenuIDs),
+		UserMenuIDs:          uniqueIDs(userMenuIDs),
+		EffectiveMenuIDs:     s.expandMenuAncestors(append(append(effectiveDepartmentMenuIDs, effectiveRoleMenuIDs...), userMenuIDs...)),
+		RoleActionCodes:      roleActionCodes,
+		UserActionCodes:      userActionCodes,
+		EffectiveActionCodes: effectiveActionCodes,
 	}, ""
 }
 
@@ -818,6 +876,24 @@ func (s *MemoryStore) UpdateUserMenus(userID int, menuIDs []int) ([]int, string)
 	}
 	s.userMenuIDs[userID] = uniqueIDs(menuIDs)
 	return append([]int(nil), s.userMenuIDs[userID]...), ""
+}
+
+func (s *MemoryStore) UpdateUserActions(userID int, actionCodes []string) ([]string, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	user, exists := s.findUserByID(userID)
+	if !exists {
+		return nil, "用户不存在"
+	}
+	if permissions.IsAdministratorRoleCode(user.RoleCode) {
+		return nil, "超级管理员和系统管理员动作权限固定为全部，不能修改"
+	}
+	codes, valid := permissions.NormalizeCodes(actionCodes)
+	if !valid {
+		return nil, "包含不存在的动作权限"
+	}
+	s.userActionCodes[userID] = codes
+	return append([]string(nil), codes...), ""
 }
 
 func (s *MemoryStore) ListArticles() []models.Article {

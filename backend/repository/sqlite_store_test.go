@@ -11,6 +11,7 @@ import (
 	"collector-backend/auth"
 	"collector-backend/database"
 	"collector-backend/models"
+	"collector-backend/permissions"
 )
 
 func openTempStore(t *testing.T) (*SQLiteStore, string) {
@@ -302,7 +303,7 @@ func TestMigrationPreservesBusinessPermissionsAndMHPassword(t *testing.T) {
 	if !ok || mh.PasswordHash != customHash {
 		t.Fatal("MH password was reset during migration")
 	}
-	if mh.RoleID == nil || mh.Role != "系统管理员" || mh.RoleCode != systemAdminRoleCode || !mh.CanLogin {
+	if mh.RoleID == nil || mh.Role != "超级管理员" || mh.RoleCode != superAdminRoleCode || !mh.CanLogin {
 		t.Fatalf("MH administrator invariant was not restored: %+v", mh)
 	}
 	root, ok := store.findDepartmentByCode("huajian")
@@ -312,6 +313,69 @@ func TestMigrationPreservesBusinessPermissionsAndMHPassword(t *testing.T) {
 	rootMenus, message := store.ListDepartmentMenus(root.ID)
 	if message != "" || len(rootMenus) != len(store.ListMenus()) {
 		t.Fatalf("root department does not have all menus: message=%s root=%d all=%d", message, len(rootMenus), len(store.ListMenus()))
+	}
+}
+
+func TestMigrationRejectsCaseInsensitiveMHDuplicates(t *testing.T) {
+	store, _ := openTempStore(t)
+	defer store.db.Close()
+	now := timeText(time.Now().UTC())
+	result, err := store.db.Exec(
+		`INSERT INTO users(username,name,role,department,status,shift,phone,email,can_login,password_hash,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"mh", "重复管理员", "普通用户", "", "在岗", "", "", "", 1, auth.MustHashPassword("pass1234"), now, now,
+	)
+	if err != nil {
+		t.Fatalf("insert case-insensitive duplicate MH: %v", err)
+	}
+	duplicateID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatalf("get duplicate MH id: %v", err)
+	}
+	err = store.MigrateAndSeed()
+	if err == nil || !strings.Contains(err.Error(), "必须且只能存在一个") {
+		t.Fatalf("expected duplicate MH migration failure, got %v", err)
+	}
+	duplicate, ok := store.FindUserByID(int(duplicateID))
+	if !ok || duplicate.RoleCode == superAdminRoleCode {
+		t.Fatalf("duplicate account was elevated despite failed migration: %+v", duplicate)
+	}
+}
+
+func TestRepositoryAllowsSuperAdminAssignmentToNonMH(t *testing.T) {
+	store, _ := openTempStore(t)
+	defer store.db.Close()
+	superRole, ok := store.findRoleByCode(superAdminRoleCode)
+	if !ok {
+		t.Fatal("super administrator role missing")
+	}
+	viewerRole, ok := store.findRoleByCode("viewer")
+	if !ok {
+		t.Fatal("viewer role missing")
+	}
+	canLogin := true
+	created, message := store.CreateUser(models.UserRequest{
+		Username: "allowed-super", Name: "新增超级管理员", RoleID: &superRole.ID, Status: "在岗", CanLogin: &canLogin,
+	}, auth.MustHashPassword("pass1234"))
+	if message != "" {
+		t.Fatalf("repository rejected direct super assignment: %s", message)
+	}
+	if created.RoleCode != superAdminRoleCode || created.Role != superRole.Name {
+		t.Fatalf("created user did not receive super administrator role: %+v", created)
+	}
+	ordinary, message := store.CreateUser(models.UserRequest{
+		Username: "ordinary-before-escalation", Name: "普通用户", RoleID: &viewerRole.ID, Status: "在岗", CanLogin: &canLogin,
+	}, auth.MustHashPassword("pass1234"))
+	if message != "" {
+		t.Fatalf("create ordinary user: %s", message)
+	}
+	updated, message := store.UpdateUser(ordinary.ID, models.UserRequest{
+		Username: ordinary.Username, Name: ordinary.Name, RoleID: &superRole.ID, Status: ordinary.Status, CanLogin: &canLogin,
+	}, "")
+	if message != "" {
+		t.Fatalf("repository rejected direct super escalation: %s", message)
+	}
+	if updated.RoleCode != superAdminRoleCode || updated.Role != superRole.Name {
+		t.Fatalf("updated user did not receive super administrator role: %+v", updated)
 	}
 }
 
@@ -507,9 +571,13 @@ func TestLegacyMigrationIsAdditive(t *testing.T) {
 	if !ok || editor.RoleID == nil || editor.RoleCode != "content-editor" || editor.Role != "内容编辑" {
 		t.Fatalf("known legacy role was not mapped exactly: %+v", editor)
 	}
+	var dashboardID int
+	if err := store.db.QueryRow(`SELECT id FROM menus WHERE code='dashboard'`).Scan(&dashboardID); err != nil {
+		t.Fatalf("find dashboard menu: %v", err)
+	}
 	editorPermissions, message := store.GetUserPermissionDetail(editor.ID)
-	if message != "" || len(editorPermissions.RoleMenuIDs) != 0 || len(editorPermissions.EffectiveMenuIDs) != 0 {
-		t.Fatalf("legacy role mapping expanded permissions: message=%s detail=%+v", message, editorPermissions)
+	if message != "" || !reflect.DeepEqual(editorPermissions.RoleMenuIDs, []int{dashboardID}) || !reflect.DeepEqual(editorPermissions.EffectiveMenuIDs, []int{dashboardID}) {
+		t.Fatalf("legacy role mapping did not receive the dashboard baseline: message=%s detail=%+v", message, editorPermissions)
 	}
 	custom, ok := store.FindUserByUsername("legacy-custom")
 	if !ok || custom.RoleID != nil || custom.RoleCode != "" || custom.Role != "产线主管" {
@@ -594,11 +662,9 @@ func TestRolePermissionsStatusAndSystemInvariants(t *testing.T) {
 	for _, menu := range store.ListMenus() {
 		menuIDs[menu.Code] = menu.ID
 	}
-	role, message := store.CreateRole(models.RoleRequest{
-		Name: "审计员", Code: "auditor", Description: "审计查看", Sort: 80, Status: "启用",
-	})
-	if message != "" {
-		t.Fatalf("create role: %s", message)
+	role, ok := store.findRoleByCode("auditor")
+	if !ok {
+		t.Fatal("auditor role missing")
 	}
 	if _, message := store.UpdateRoleMenus(role.ID, []int{menuIDs["articles"]}); message != "" {
 		t.Fatalf("assign role menus: %s", message)
@@ -656,7 +722,7 @@ func TestRolePermissionsStatusAndSystemInvariants(t *testing.T) {
 	if message != "" || len(systemMenus) != len(store.ListMenus()) {
 		t.Fatalf("system role does not have all menus: message=%s role=%d all=%d", message, len(systemMenus), len(store.ListMenus()))
 	}
-	if _, message := store.UpdateRoleMenus(systemRole.ID, []int{menuIDs["dashboard"]}); message != "系统管理员角色必须保留全部菜单权限" {
+	if _, message := store.UpdateRoleMenus(systemRole.ID, []int{menuIDs["dashboard"]}); message != "超级管理员和系统管理员角色必须保留全部菜单权限" {
 		t.Fatalf("system role permissions could be reduced: %s", message)
 	}
 	if _, message := store.UpdateRole(systemRole.ID, models.RoleRequest{
@@ -664,7 +730,7 @@ func TestRolePermissionsStatusAndSystemInvariants(t *testing.T) {
 	}); message == "" {
 		t.Fatal("system role invariants could be changed")
 	}
-	if message := store.DeleteRole(systemRole.ID); message != "系统管理员角色不能删除" {
+	if message := store.DeleteRole(systemRole.ID); message != "超级管理员和系统管理员角色不能删除" {
 		t.Fatalf("system role could be deleted: %s", message)
 	}
 	newMenu, message := store.CreateMenu(models.MenuRequest{Name: "新增受控菜单", Code: "new-controlled", Status: "启用"})
@@ -739,7 +805,7 @@ func TestDefaultDashboardPermissionsAndBackfill(t *testing.T) {
 		if message != "" {
 			t.Fatalf("list role menus %s: %s", role.Code, message)
 		}
-		if role.Code == systemAdminRoleCode {
+		if permissions.IsAdministratorRoleCode(role.Code) {
 			if len(ids) != len(store.ListMenus()) {
 				t.Fatalf("system role should have all menus: %v", ids)
 			}
