@@ -259,8 +259,8 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
                 <label className={styles.spanTwo}>
                   邮箱验证码
                   <div className="profile-code-row">
-                    <Input value={passwordForm.code} maxLength={6} prefix={<SafetyCertificateOutlined />} onChange={(event) => setPasswordForm({ ...passwordForm, code: event.target.value })} placeholder="请输入 6 位验证码" />
-                    <Button onClick={() => void sendCode()} loading={isSendingCode} disabled={!form.email.trim()}>发送验证码</Button>
+                    <Input size="large" value={passwordForm.code} maxLength={6} prefix={<SafetyCertificateOutlined />} onChange={(event) => setPasswordForm({ ...passwordForm, code: event.target.value })} placeholder="请输入 6 位验证码" />
+                    <Button size="large" onClick={() => void sendCode()} loading={isSendingCode} disabled={!form.email.trim()}>发送验证码</Button>
                   </div>
                 </label>
                 <label>

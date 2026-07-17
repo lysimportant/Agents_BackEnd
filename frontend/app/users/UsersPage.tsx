@@ -334,7 +334,7 @@ export function UsersPage({
         okText="确认保存"
         cancelText="取消"
         confirmLoading={isSavingPermission || isSavingActionPermission}
-        width={920}
+        width={1120}
         destroyOnHidden
         className="permission-tree-modal user-permission-modal"
         footer={canEditSelectedPermissions ? undefined : <Button onClick={() => setPermissionDialogOpen(false)}>关闭</Button>}

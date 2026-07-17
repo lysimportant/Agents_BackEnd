@@ -20,7 +20,7 @@ import type {
   UserForm,
   UserPermissionDetails,
 } from '../types/admin';
-import { API_BASE_URL, MAX_UPLOAD_SIZE, emptyArticleForm, emptyFileForm, emptyMenuForm, emptyUserForm } from '../lib/constants';
+import { API_BASE_URL, MAX_UPLOAD_SIZE, emptyArticleForm, emptyFileForm, emptyMenuForm, emptyUserForm, pageKeys } from '../lib/constants';
 import { requestWithSession } from '../lib/api';
 import { buildMenuTree } from '../lib/menu';
 
@@ -31,6 +31,50 @@ async function parseError(response: Response, fallback: string) {
   } catch {
     return fallback;
   }
+}
+
+const ACTIVE_PAGE_STORAGE_KEY = 'collector:active-page';
+
+function isPageKey(value: string | null): value is PageKey {
+  return pageKeys.includes(value as PageKey);
+}
+
+function getInitialActivePage(): PageKey {
+  if (typeof window === 'undefined') return 'dashboard';
+  try {
+    const savedPage = window.sessionStorage.getItem(ACTIVE_PAGE_STORAGE_KEY);
+    return isPageKey(savedPage) ? savedPage : 'dashboard';
+  } catch {
+    return 'dashboard';
+  }
+}
+
+function saveActivePage(page: PageKey) {
+  try {
+    window.sessionStorage.setItem(ACTIVE_PAGE_STORAGE_KEY, page);
+  } catch {
+    // 浏览器禁用会话存储时仍允许正常导航，只是不跨刷新恢复。
+  }
+}
+
+function clearActivePage() {
+  try {
+    window.sessionStorage.removeItem(ACTIVE_PAGE_STORAGE_KEY);
+  } catch {
+    // 与 saveActivePage 保持一致，存储不可用时不影响退出登录。
+  }
+}
+
+function getAccessiblePages(menus: Menu[]) {
+  const accessible = menus
+    .filter((menu) => menu.status === '启用')
+    .map((menu) => {
+      const code = menu.code.trim().toLowerCase();
+      const path = menu.path.trim().toLowerCase().replace(/^\/+|\/+$/g, '');
+      return code === path && isPageKey(code) ? code : null;
+    })
+    .filter((page): page is PageKey => page !== null);
+  return [...new Set(accessible)];
 }
 
 export function useAdminWorkspace() {
@@ -64,7 +108,7 @@ export function useAdminWorkspace() {
   const [roleActionCodes, setRoleActionCodes] = useState<string[]>([]);
   const [userActionCodes, setUserActionCodes] = useState<string[]>([]);
   const [effectiveActionCodes, setEffectiveActionCodes] = useState<string[]>([]);
-  const [activePage, setActivePage] = useState<PageKey>('dashboard');
+  const [activePage, setActivePage] = useState<PageKey>(getInitialActivePage);
   const [isLoading, setIsLoading] = useState(false);
   const [isSavingUser, setIsSavingUser] = useState(false);
   const [isSavingMenu, setIsSavingMenu] = useState(false);
@@ -159,6 +203,15 @@ export function useAdminWorkspace() {
       setArticles(articlesData);
       setFiles(filesData);
 
+      const accessiblePages = getAccessiblePages(menusData);
+      setActivePage((current) => {
+        const nextPage = current === 'profile' || accessiblePages.includes(current)
+          ? current
+          : accessiblePages[0] ?? 'profile';
+        saveActivePage(nextPage);
+        return nextPage;
+      });
+
       if (allowedCodes.has('users')) {
         const nextSelectedUserId = selectedUserId && usersData.some((user) => user.id === selectedUserId) ? selectedUserId : usersData[0]?.id ?? null;
         setSelectedUserId(nextSelectedUserId);
@@ -238,6 +291,12 @@ export function useAdminWorkspace() {
     }
   }, [authUser]);
 
+  useEffect(() => {
+    if (authUser) {
+      saveActivePage(activePage);
+    }
+  }, [activePage, authUser]);
+
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoggingIn(true);
@@ -263,6 +322,7 @@ export function useAdminWorkspace() {
 
   const handleLogout = async () => {
     await requestWithSession(`${API_BASE_URL}/api/auth/logout`, { method: 'POST' });
+    clearActivePage();
     setAuthUser(null);
     setActivePage('dashboard');
     setUsers([]);
@@ -840,6 +900,7 @@ export function useAdminWorkspace() {
   };
 
   const handleNavigate = (page: PageKey) => {
+    saveActivePage(page);
     setActivePage(page);
     setMobileSidebarOpen(false);
   };

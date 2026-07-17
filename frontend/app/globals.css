@@ -2617,6 +2617,7 @@ html[data-theme='dark'] .ant-breadcrumb-separator {
 .action-permission-groups {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 12px;
   margin-top: 12px;
 }
@@ -2689,8 +2690,9 @@ html[data-theme='dark'] .ant-breadcrumb-separator {
 
 .action-permission-options {
   display: grid;
-  gap: 1px;
-  padding: 5px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 6px;
 }
 
 .action-permission-option {
@@ -2698,8 +2700,8 @@ html[data-theme='dark'] .ant-breadcrumb-separator {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  min-height: 48px;
-  padding: 8px;
+  min-height: 44px;
+  padding: 7px 8px;
   border-radius: 8px;
   cursor: pointer;
   transition: background-color 160ms ease, transform 160ms ease;
@@ -2940,8 +2942,20 @@ html[data-theme='dark'] .ant-breadcrumb-separator {
 
 .profile-code-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(132px, auto);
+  align-items: stretch;
   gap: 10px;
+}
+
+.profile-code-row > .ant-input-affix-wrapper,
+.profile-code-row > .ant-btn {
+  height: 40px;
+}
+
+.profile-code-row > .ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .profile-security-icon {
@@ -2982,6 +2996,16 @@ html[data-theme='dark'] .ant-breadcrumb-separator {
   }
 
   .profile-code-row {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-code-row > .ant-btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 860px) {
+  .action-permission-options {
     grid-template-columns: 1fr;
   }
 }
