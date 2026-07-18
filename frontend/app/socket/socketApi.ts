@@ -17,6 +17,12 @@ export function socketAdminWebSocketURL() {
   return url.toString();
 }
 
+export function socketNotificationWebSocketURL() {
+  const url = new URL('/api/socket/notifications', API_BASE_URL);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  return url.toString();
+}
+
 export async function listSocketConversations() {
   const response = await requestWithSession(`${API_BASE_URL}/api/socket/conversations`);
   if (!response.ok) throw new Error(await responseError(response, '加载 Socket 客服会话失败'));

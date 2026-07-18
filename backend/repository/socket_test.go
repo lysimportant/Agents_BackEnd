@@ -65,6 +65,10 @@ func TestSocketConversationAndMessagePersistence(t *testing.T) {
 	if !ok || renamed.Title != "客户自定义标题" {
 		t.Fatalf("conversation title was not renamed: %+v", renamed)
 	}
+	closed, ok := store.CloseSocketConversation(conversation.ID)
+	if !ok || closed.Status != "closed" || closed.Online || store.ValidateSocketConversationToken(conversation.ID, "hashed-token") {
+		t.Fatalf("conversation should be closed and reject reconnects: %+v", closed)
+	}
 	if !store.SoftDeleteSocketConversation(conversation.ID) {
 		t.Fatal("soft delete conversation failed")
 	}

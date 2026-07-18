@@ -11,11 +11,13 @@ func registerPublicSocketRoutes(api *gin.RouterGroup, handler *handlers.SocketHa
 	api.GET("/socket/customer", handler.CustomerSocket)
 	api.PUT("/socket/customer/:id/title", handler.CustomerUpdateTitle)
 	api.DELETE("/socket/customer/:id", handler.CustomerDeleteConversation)
+	api.POST("/socket/customer/:id/close", handler.CustomerCloseConversation)
 	api.POST("/socket/customer/:id/files", handler.CustomerUpload)
 	api.GET("/socket/customer/:id/files/:messageId", handler.CustomerAttachment)
 }
 
 func registerProtectedSocketRoutes(routes *gin.RouterGroup, store middleware.UserStore, handler *handlers.SocketHandler) {
+	routes.GET("/socket/notifications", handler.NotificationSocket)
 	requireMenu := middleware.RequireMenu(store, "socket-support")
 	routes.GET("/socket/conversations", requireMenu, middleware.RequireAction(store, permissions.SocketQuery), handler.ListConversations)
 	routes.GET("/socket/conversations/:id/messages", requireMenu, middleware.RequireAction(store, permissions.SocketView), handler.ListMessages)

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
 	"collector-backend/auth"
@@ -145,5 +147,72 @@ func TestAdminSocketDeleteRequiresDeletePermission(t *testing.T) {
 	deleted, found := store.FindSocketConversation(conversation.ID)
 	if !found || deleted.Status != "deleted" {
 		t.Fatalf("conversation was not soft deleted: %+v", deleted)
+	}
+}
+
+func TestCustomerClosePreventsFurtherAgentSend(t *testing.T) {
+	router, store, _ := setupTestRouter(t)
+	visitorToken := "closing-visitor-token"
+	tokenSum := sha256.Sum256([]byte(visitorToken))
+	conversation, ok := store.CreateSocketConversation("chat-close-test", "离开访客", hex.EncodeToString(tokenSum[:]))
+	if !ok {
+		t.Fatal("create close test conversation")
+	}
+
+	form := url.Values{"visitorToken": {visitorToken}}
+	req := httptest.NewRequest(http.MethodPost, "/api/socket/customer/"+conversation.ID+"/close", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("close customer conversation status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	closed, found := store.FindSocketConversation(conversation.ID)
+	if !found || closed.Status != "closed" || closed.Online || store.ValidateSocketConversationToken(conversation.ID, hex.EncodeToString(tokenSum[:])) {
+		t.Fatalf("conversation did not close correctly: %+v", closed)
+	}
+
+	mhCookie := loginCookie(t, router, "MH", "123")
+	body, _ := json.Marshal(models.SocketMessageRequest{MessageType: "text", Content: "离线回复"})
+	req = httptest.NewRequest(http.MethodPost, "/api/socket/conversations/"+conversation.ID+"/messages", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "sessionId", Value: mhCookie})
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("agent should not send to closed visitor status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSocketNotificationsAvailableToAnyLoggedInUser(t *testing.T) {
+	router, store, _ := setupTestRouter(t)
+	var viewerRoleID int
+	for _, role := range store.ListRoles() {
+		if role.Code == "viewer" {
+			viewerRoleID = role.ID
+		}
+	}
+	canLogin := true
+	viewer, message := store.CreateUser(models.UserRequest{
+		Username: "notification-viewer", Name: "通知接收用户", RoleID: &viewerRoleID, Status: "在岗", CanLogin: &canLogin,
+	}, auth.MustHashPassword("pass1234"))
+	if message != "" {
+		t.Fatalf("create notification viewer: %s", message)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/socket/notifications", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous notification socket status=%d", rec.Code)
+	}
+
+	viewerCookie := loginCookie(t, router, viewer.Username, "pass1234")
+	req = httptest.NewRequest(http.MethodGet, "/api/socket/notifications", nil)
+	req.AddCookie(&http.Cookie{Name: "sessionId", Value: viewerCookie})
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("logged-in user should reach websocket upgrade without socket menu, status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }

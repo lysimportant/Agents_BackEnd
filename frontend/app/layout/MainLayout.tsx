@@ -29,6 +29,7 @@ import {
   Layout,
   Menu,
   Popover,
+  notification,
   Space,
   Tag,
   Tooltip,
@@ -38,6 +39,8 @@ import {
 } from 'antd';
 import type { AuthUser, Menu as AdminMenu, PageKey } from '../types/admin';
 import { pageKeys, pageTitles } from '../lib/constants';
+import { socketNotificationWebSocketURL } from '../socket/socketApi';
+import type { SocketEnvelope } from '../socket/types';
 import {
   adminThemes,
   applyAdminTheme,
@@ -117,6 +120,7 @@ export function MainLayout({
   const [themeId, setThemeId] = useState<AdminThemeId>(DEFAULT_THEME_ID);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [notificationApi, notificationContextHolder] = notification.useNotification();
 
   useEffect(() => {
     const nextTheme = resolveThemeId(
@@ -136,6 +140,41 @@ export function MainLayout({
       document.removeEventListener('fullscreenchange', syncFullscreen);
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    let reconnectTimer = 0;
+    let socket: WebSocket | null = null;
+    const connect = () => {
+      if (!active) return;
+      const nextSocket = new WebSocket(socketNotificationWebSocketURL());
+      socket = nextSocket;
+      nextSocket.onmessage = (event) => {
+        try {
+          const envelope = JSON.parse(String(event.data)) as SocketEnvelope;
+          if (envelope.type === 'visitor_online' && envelope.conversation) {
+            notificationApi.success({
+              placement: 'bottomRight',
+              message: `${envelope.conversation.title || '新咨询'} 用户上线了`,
+              description: `会话 ${envelope.conversation.id} 已连接。`,
+            });
+          }
+        } catch {
+          return;
+        }
+      };
+      nextSocket.onclose = () => {
+        if (active) reconnectTimer = window.setTimeout(connect, 1800);
+      };
+      nextSocket.onerror = () => nextSocket.close();
+    };
+    connect();
+    return () => {
+      active = false;
+      window.clearTimeout(reconnectTimer);
+      socket?.close();
+    };
+  }, [notificationApi]);
 
   const changeTheme = (nextTheme: AdminThemeId) => {
     setThemeId(nextTheme);
@@ -268,6 +307,7 @@ export function MainLayout({
         },
       }}
     >
+      {notificationContextHolder}
       <Layout className="antd-shell">
         {!isMobile && (
           <Sider

@@ -14,7 +14,9 @@
 .socket-conversation-panel .ant-spin-nested-loading { min-height: 0; flex: 1; }
 .socket-conversation-panel .ant-spin-container { height: 100%; }
 .socket-conversation-list { height: 100%; overflow: auto; padding: 8px; }
-.socket-conversation-item { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 12px; border: 1px solid transparent; border-radius: 12px; color: var(--text-primary); background: transparent; text-align: left; cursor: pointer; transition: 160ms ease; }
+.socket-conversation-item { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; border: 1px solid transparent; border-radius: 12px; color: var(--text-primary); background: transparent; transition: 160ms ease; }
+.socket-conversation-open { width: 100%; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 12px 6px 12px 12px; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
+.socket-conversation-delete { margin-right: 5px; }
 .socket-conversation-item:hover { background: var(--surface-hover); }
 .socket-conversation-item.is-active { border-color: color-mix(in srgb, var(--theme-primary) 44%, var(--border-subtle)); background: color-mix(in srgb, var(--theme-primary) 10%, var(--surface-panel)); box-shadow: inset 3px 0 var(--theme-primary); }
 .socket-presence { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; background: var(--text-disabled); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-disabled) 16%, transparent); }

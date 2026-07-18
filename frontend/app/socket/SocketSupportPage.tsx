@@ -34,6 +34,7 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
   const messageListRef = useRef<HTMLDivElement>(null);
   const onlineCount = socket.conversations.filter((item) => item.online).length;
   const messageCount = socket.conversations.reduce((sum, item) => sum + item.messageCount, 0);
+  const canReply = Boolean(canSend && socket.selectedConversation?.online && socket.selectedConversation.status === 'open');
   const embedCode = useMemo(() => `<script src="${socketWidgetConfigURL()}"></script>\n<script src="${socketWidgetScriptURL()}" data-title="在线客服" data-session-key="default"></script>`, []);
   const filteredConversations = useMemo(() => {
     const keyword = searchTitle.trim().toLowerCase();
@@ -51,16 +52,6 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
     const messageList = messageListRef.current;
     if (messageList) messageList.scrollTop = messageList.scrollHeight;
   }, [socket.messages]);
-
-  useEffect(() => {
-    if (!socket.presenceEvent) return;
-    const conversation = socket.presenceEvent.conversation;
-    notificationApi.success({
-      placement: 'bottomRight',
-      message: `${conversation.title || '新咨询'} 用户上线了`,
-      description: `会话 ${conversation.id} 已连接。`,
-    });
-  }, [notificationApi, socket.presenceEvent]);
 
   const submitMessage = async () => {
     const content = draft.trim();
@@ -125,10 +116,12 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
                     key={conversation.id}
                     conversation={conversation}
                     active={conversation.id === socket.selectedConversationId}
-                    onClick={() => void socket.selectConversation(conversation.id).then((ok) => {
-                      if (!ok) return;
+                    canDelete={canDelete}
+                    onClick={() => void socket.selectConversation(conversation.id, conversation.online && conversation.status === 'open').then((ok) => {
+                      if (!ok || !conversation.online || conversation.status !== 'open') return;
                       notificationApi.info({ placement: 'bottomRight', message: '已接入客户聊天', description: conversation.title || '新咨询' });
                     })}
+                    onDelete={() => void socket.deleteConversation(conversation.id).then((ok) => { void (ok ? messageApi.success('会话删除完成') : messageApi.error('会话删除失败，请查看页面提示')); })}
                   />
                 ))}
               </div>
@@ -161,9 +154,9 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
               <div className="socket-composer">
                 <Input.TextArea
                   value={draft}
-                  disabled={!canSend}
+                  disabled={!canReply}
                   autoSize={{ minRows: 2, maxRows: 5 }}
-                  placeholder={canSend ? '输入客服回复，Ctrl + Enter 发送' : '没有 socket.send 回复权限'}
+                  placeholder={canReply ? '输入客服回复，Ctrl + Enter 发送' : socket.selectedConversation.online ? '没有 socket.send 回复权限' : '访客已离线，仅可查看历史消息'}
                   onChange={(event) => setDraft(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.ctrlKey && event.key === 'Enter') void submitMessage();
@@ -175,12 +168,12 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
                       trigger="click"
                       content={<div className="socket-emoji-grid">{emojiOptions.map((emoji) => <button type="button" key={emoji} onClick={() => setDraft((current) => current + emoji)}>{emoji}</button>)}</div>}
                     >
-                      <Button disabled={!canSend} icon={<SmileOutlined />}>表情</Button>
+                      <Button disabled={!canReply} icon={<SmileOutlined />}>表情</Button>
                     </Popover>
-                    <Button disabled={!canSend} icon={<PaperClipOutlined />} onClick={() => fileInputRef.current?.click()}>图片 / 文件</Button>
+                    <Button disabled={!canReply} icon={<PaperClipOutlined />} onClick={() => fileInputRef.current?.click()}>图片 / 文件</Button>
                     <input ref={fileInputRef} hidden type="file" onChange={(event) => void handleFile(event.target.files?.[0])} />
                   </Space>
-                  <Button type="primary" icon={<SendOutlined />} disabled={!canSend || !draft.trim()} onClick={() => void submitMessage()}>发送</Button>
+                  <Button type="primary" icon={<SendOutlined />} disabled={!canReply || !draft.trim()} onClick={() => void submitMessage()}>发送</Button>
                 </div>
               </div>
             </>
@@ -201,20 +194,30 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
   );
 }
 
-function ConversationItem({ conversation, active, onClick }: { conversation: SocketConversation; active: boolean; onClick: () => void }) {
+function ConversationItem({ conversation, active, canDelete, onClick, onDelete }: { conversation: SocketConversation; active: boolean; canDelete: boolean; onClick: () => void; onDelete: () => void }) {
   return (
-    <button type="button" className={`socket-conversation-item ${active ? 'is-active' : ''}`} onClick={onClick}>
-      <span className={`socket-presence ${conversation.online ? 'is-online' : ''}`} />
-      <span className="socket-conversation-copy">
-        <strong>{conversation.title || '新咨询'}</strong>
-        <small>{conversation.id}</small>
-        <span>{conversation.lastMessage || '新会话，等待消息'}</span>
-      </span>
-      <span className="socket-conversation-meta">
-        <small>{formatTime(conversation.updatedAt)}</small>
-        <Badge count={conversation.messageCount} overflowCount={99} />
-      </span>
-    </button>
+    <div className={`socket-conversation-item ${active ? 'is-active' : ''}`}>
+      <button type="button" className="socket-conversation-open" onClick={onClick}>
+        <span className={`socket-presence ${conversation.online ? 'is-online' : ''}`} />
+        <span className="socket-conversation-copy">
+          <strong>{conversation.title || '新咨询'}</strong>
+          <small>{conversation.id}</small>
+          <span>{conversation.lastMessage || '新会话，等待消息'}</span>
+        </span>
+        <span className="socket-conversation-meta">
+          <small>{formatTime(conversation.updatedAt)}</small>
+          <Badge count={conversation.messageCount} overflowCount={99} />
+        </span>
+      </button>
+      {canDelete && <Popconfirm
+        title="确认删除该会话？"
+        description="无需打开会话即可删除；聊天数据和附件会安全保留。"
+        okText="确认删除"
+        cancelText="取消"
+        okButtonProps={{ danger: true }}
+        onConfirm={onDelete}
+      ><Button className="socket-conversation-delete" danger type="text" size="small" aria-label={`删除会话 ${conversation.title || conversation.id}`} icon={<DeleteOutlined />} /></Popconfirm>}
+    </div>
   );
 }
 

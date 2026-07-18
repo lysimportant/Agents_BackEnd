@@ -30,20 +30,18 @@ export function useSocketSupport() {
   const [error, setError] = useState('');
   const selectedRef = useRef('');
   const socketRef = useRef<WebSocket | null>(null);
-  const [presenceEvent, setPresenceEvent] = useState<{ conversation: SocketConversation; sequence: number } | null>(null);
-  const initialConversationsReceived = useRef(false);
 
   useEffect(() => {
     selectedRef.current = selectedConversationId;
   }, [selectedConversationId]);
 
-  const selectConversation = useCallback(async (conversationId: string) => {
+  const selectConversation = useCallback(async (conversationId: string, shouldJoin = true) => {
     setSelectedConversationId(conversationId);
     selectedRef.current = conversationId;
     setError('');
     try {
       setMessages(await listSocketMessages(conversationId));
-      await joinSocketConversation(conversationId);
+      if (shouldJoin) await joinSocketConversation(conversationId);
       return true;
     } catch (loadError) {
       setMessages([]);
@@ -61,7 +59,10 @@ export function useSocketSupport() {
       const nextSelected = selectedRef.current && next.some((item) => item.id === selectedRef.current)
         ? selectedRef.current
         : next[0]?.id ?? '';
-      if (nextSelected) await selectConversation(nextSelected);
+      if (nextSelected) {
+        const selected = next.find((item) => item.id === nextSelected);
+        await selectConversation(nextSelected, Boolean(selected?.online && selected.status === 'open'));
+      }
       else {
         setSelectedConversationId('');
         setMessages([]);
@@ -95,13 +96,8 @@ export function useSocketSupport() {
         }
         if (envelope.type === 'conversations' && envelope.conversations) {
           setConversations(sortConversations(envelope.conversations));
-          initialConversationsReceived.current = true;
         } else if (envelope.type === 'conversation' && envelope.conversation) {
           setConversations((current) => {
-            const previous = current.find((item) => item.id === envelope.conversation!.id);
-            if (initialConversationsReceived.current && envelope.conversation!.online && !previous?.online) {
-              setPresenceEvent({ conversation: envelope.conversation!, sequence: Date.now() });
-            }
             return sortConversations([envelope.conversation!, ...current.filter((item) => item.id !== envelope.conversation!.id)]);
           });
         } else if (envelope.type === 'conversation_deleted' && envelope.conversation) {
@@ -187,7 +183,6 @@ export function useSocketSupport() {
     connected,
     loading,
     error,
-    presenceEvent,
     refresh,
     selectConversation,
     sendMessage,

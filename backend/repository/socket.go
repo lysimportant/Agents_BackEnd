@@ -34,15 +34,28 @@ func (s *SQLiteStore) FindSocketConversation(id string) (models.SocketConversati
 
 func (s *SQLiteStore) ValidateSocketConversationToken(id, tokenHash string) bool {
 	var count int
-	if err := s.db.QueryRow(`SELECT COUNT(1) FROM socket_conversations WHERE id=? AND visitor_token_hash=? AND status<>'deleted'`, strings.TrimSpace(id), tokenHash).Scan(&count); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(1) FROM socket_conversations WHERE id=? AND visitor_token_hash=? AND status='open'`, strings.TrimSpace(id), tokenHash).Scan(&count); err != nil {
 		return false
 	}
 	return count == 1
 }
 
+func (s *SQLiteStore) CloseSocketConversation(id string) (models.SocketConversation, bool) {
+	now := timeText(time.Now().UTC())
+	result, err := s.db.Exec(`UPDATE socket_conversations SET status='closed',online=0,last_seen_at=?,updated_at=? WHERE id=? AND status='open'`, now, now, strings.TrimSpace(id))
+	if err != nil {
+		return models.SocketConversation{}, false
+	}
+	rows, _ := result.RowsAffected()
+	if rows != 1 {
+		return models.SocketConversation{}, false
+	}
+	return s.FindSocketConversation(id)
+}
+
 func (s *SQLiteStore) SetSocketConversationOnline(id string, online bool) bool {
 	now := timeText(time.Now().UTC())
-	result, err := s.db.Exec(`UPDATE socket_conversations SET online=?,last_seen_at=?,updated_at=? WHERE id=? AND status<>'deleted'`, online, now, now, strings.TrimSpace(id))
+	result, err := s.db.Exec(`UPDATE socket_conversations SET online=?,last_seen_at=?,updated_at=? WHERE id=? AND status='open'`, online, now, now, strings.TrimSpace(id))
 	if err != nil {
 		return false
 	}

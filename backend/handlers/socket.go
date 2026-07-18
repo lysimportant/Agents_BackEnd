@@ -29,6 +29,7 @@ type SocketStore interface {
 	FindSocketConversation(id string) (models.SocketConversation, bool)
 	ValidateSocketConversationToken(id, tokenHash string) bool
 	SetSocketConversationOnline(id string, online bool) bool
+	CloseSocketConversation(id string) (models.SocketConversation, bool)
 	SetSocketConversationTitle(id, title string, onlyIfEmpty bool) (models.SocketConversation, bool)
 	SoftDeleteSocketConversation(id string) bool
 	ListSocketConversations() []models.SocketConversation
@@ -113,10 +114,13 @@ func (h *SocketHandler) CustomerSocket(c *gin.Context) {
 		return
 	}
 
-	h.hub.addCustomer(conversationID, client)
+	connectionCount := h.hub.addCustomer(conversationID, client)
 	h.store.SetSocketConversationOnline(conversationID, true)
 	conversation, _ = h.store.FindSocketConversation(conversationID)
 	h.hub.broadcastAdmins(socketEnvelope{Type: "conversation", Conversation: &conversation})
+	if connectionCount == 1 {
+		h.hub.broadcastObservers(socketEnvelope{Type: "visitor_online", Conversation: &conversation})
+	}
 	defer func() {
 		if h.hub.removeCustomer(conversationID, client) == 0 {
 			h.store.SetSocketConversationOnline(conversationID, false)
@@ -124,6 +128,15 @@ func (h *SocketHandler) CustomerSocket(c *gin.Context) {
 			if ok {
 				h.hub.broadcastAdmins(socketEnvelope{Type: "conversation", Conversation: &updated})
 			}
+			go func(id string) {
+				time.Sleep(10 * time.Second)
+				if h.hub.customerCount(id) != 0 {
+					return
+				}
+				if closed, closedOK := h.store.CloseSocketConversation(id); closedOK {
+					h.hub.broadcastAdmins(socketEnvelope{Type: "conversation", Conversation: &closed})
+				}
+			}(conversationID)
 		}
 	}()
 
@@ -165,6 +178,29 @@ func (h *SocketHandler) CustomerSocket(c *gin.Context) {
 	}
 }
 
+func (h *SocketHandler) NotificationSocket(c *gin.Context) {
+	if _, ok := middleware.CurrentUser(c); !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
+		return
+	}
+	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		return
+	}
+	client := &socketClient{conn: conn}
+	h.hub.addObserver(client)
+	defer func() {
+		h.hub.removeObserver(client)
+		client.close()
+	}()
+	conn.SetReadLimit(1024)
+	for {
+		if _, _, err := conn.ReadMessage(); err != nil {
+			return
+		}
+	}
+}
+
 func (h *SocketHandler) AdminSocket(c *gin.Context) {
 	_, ok := middleware.CurrentUser(c)
 	if !ok {
@@ -202,8 +238,8 @@ func (h *SocketHandler) AdminSend(c *gin.Context) {
 		return
 	}
 	conversationID := strings.TrimSpace(c.Param("id"))
-	if conversation, found := h.store.FindSocketConversation(conversationID); !found || conversation.Status == "deleted" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "客服会话不存在"})
+	if conversation, found := h.store.FindSocketConversation(conversationID); !found || conversation.Status != "open" || !conversation.Online {
+		c.JSON(http.StatusConflict, gin.H{"error": "访客已离线，无法发送消息"})
 		return
 	}
 	var request models.SocketMessageRequest
@@ -284,6 +320,23 @@ func (h *SocketHandler) CustomerDeleteConversation(c *gin.Context) {
 	h.hub.closeConversation(conversationID)
 }
 
+func (h *SocketHandler) CustomerCloseConversation(c *gin.Context) {
+	conversationID := strings.TrimSpace(c.Param("id"))
+	visitorToken := strings.TrimSpace(c.PostForm("visitorToken"))
+	if visitorToken == "" || !h.store.ValidateSocketConversationToken(conversationID, hashSocketToken(visitorToken)) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "客服会话凭证无效"})
+		return
+	}
+	conversation, closed := h.store.CloseSocketConversation(conversationID)
+	if !closed {
+		c.JSON(http.StatusConflict, gin.H{"error": "客服会话已关闭"})
+		return
+	}
+	c.Status(http.StatusNoContent)
+	h.hub.broadcastAdmins(socketEnvelope{Type: "conversation", Conversation: &conversation})
+	h.hub.closeConversation(conversationID)
+}
+
 func (h *SocketHandler) AdminJoinConversation(c *gin.Context) {
 	user, ok := middleware.CurrentUser(c)
 	if !ok {
@@ -292,8 +345,8 @@ func (h *SocketHandler) AdminJoinConversation(c *gin.Context) {
 	}
 	conversationID := strings.TrimSpace(c.Param("id"))
 	conversation, found := h.store.FindSocketConversation(conversationID)
-	if !found || conversation.Status == "deleted" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "客服会话不存在"})
+	if !found || conversation.Status != "open" || !conversation.Online {
+		c.JSON(http.StatusConflict, gin.H{"error": "访客已离线，无法接入聊天"})
 		return
 	}
 	h.hub.broadcastConversation(conversationID, socketEnvelope{Type: "agent_joined", Conversation: &conversation, ActorName: user.Name})
@@ -339,8 +392,8 @@ func (h *SocketHandler) AdminUpload(c *gin.Context) {
 		return
 	}
 	conversationID := strings.TrimSpace(c.Param("id"))
-	if conversation, found := h.store.FindSocketConversation(conversationID); !found || conversation.Status == "deleted" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "客服会话不存在"})
+	if conversation, found := h.store.FindSocketConversation(conversationID); !found || conversation.Status != "open" || !conversation.Online {
+		c.JSON(http.StatusConflict, gin.H{"error": "访客已离线，无法发送文件"})
 		return
 	}
 	h.uploadMessage(c, conversationID, "agent", user.Name)
@@ -561,11 +614,24 @@ func (c *socketClient) close() {
 type socketHub struct {
 	mu        sync.RWMutex
 	admins    map[*socketClient]struct{}
+	observers map[*socketClient]struct{}
 	customers map[string]map[*socketClient]struct{}
 }
 
 func newSocketHub() *socketHub {
-	return &socketHub{admins: map[*socketClient]struct{}{}, customers: map[string]map[*socketClient]struct{}{}}
+	return &socketHub{admins: map[*socketClient]struct{}{}, observers: map[*socketClient]struct{}{}, customers: map[string]map[*socketClient]struct{}{}}
+}
+
+func (h *socketHub) addObserver(client *socketClient) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.observers[client] = struct{}{}
+}
+
+func (h *socketHub) removeObserver(client *socketClient) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.observers, client)
 }
 
 func (h *socketHub) addAdmin(client *socketClient) {
@@ -580,13 +646,14 @@ func (h *socketHub) removeAdmin(client *socketClient) {
 	delete(h.admins, client)
 }
 
-func (h *socketHub) addCustomer(id string, client *socketClient) {
+func (h *socketHub) addCustomer(id string, client *socketClient) int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.customers[id] == nil {
 		h.customers[id] = map[*socketClient]struct{}{}
 	}
 	h.customers[id][client] = struct{}{}
+	return len(h.customers[id])
 }
 
 func (h *socketHub) removeCustomer(id string, client *socketClient) int {
@@ -600,10 +667,28 @@ func (h *socketHub) removeCustomer(id string, client *socketClient) int {
 	return remaining
 }
 
+func (h *socketHub) customerCount(id string) int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.customers[id])
+}
+
 func (h *socketHub) broadcastAdmins(envelope socketEnvelope) {
 	h.mu.RLock()
 	clients := make([]*socketClient, 0, len(h.admins))
 	for client := range h.admins {
+		clients = append(clients, client)
+	}
+	h.mu.RUnlock()
+	for _, client := range clients {
+		client.write(envelope)
+	}
+}
+
+func (h *socketHub) broadcastObservers(envelope socketEnvelope) {
+	h.mu.RLock()
+	clients := make([]*socketClient, 0, len(h.observers))
+	for client := range h.observers {
 		clients = append(clients, client)
 	}
 	h.mu.RUnlock()

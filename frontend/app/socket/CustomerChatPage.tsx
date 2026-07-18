@@ -102,6 +102,20 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
   }, [conversationId, deleted]);
 
   useEffect(() => {
+    const closeConversationOnLeave = () => {
+      if (!conversationId || !tokenRef.current || deleted || intentionalCloseRef.current) return;
+      const form = new FormData();
+      form.set('visitorToken', tokenRef.current);
+      intentionalCloseRef.current = navigator.sendBeacon(
+        `${API_BASE_URL}/api/socket/customer/${encodeURIComponent(conversationId)}/close`,
+        form,
+      );
+    };
+    window.addEventListener('pagehide', closeConversationOnLeave);
+    return () => window.removeEventListener('pagehide', closeConversationOnLeave);
+  }, [conversationId, deleted]);
+
+  useEffect(() => {
     let active = true;
     let reconnectTimer = 0;
     intentionalCloseRef.current = false;
