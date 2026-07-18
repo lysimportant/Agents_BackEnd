@@ -171,8 +171,11 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
   const editorRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const selectionRef = useRef<Range | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [externalMedia, setExternalMedia] = useState<{ kind: 'link' | 'image' | 'video'; url: string; description: string } | null>(null);
+  const [externalMediaError, setExternalMediaError] = useState('');
 
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
@@ -181,31 +184,47 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
   }, [value]);
 
   const sync = () => onChange(editorRef.current?.innerHTML ?? '');
+  const restoreSelection = () => {
+    const selection = window.getSelection();
+    if (!selectionRef.current || !selection) return;
+    selection.removeAllRanges();
+    selection.addRange(selectionRef.current);
+  };
   const command = (name: string, commandValue?: string) => {
     editorRef.current?.focus();
+    restoreSelection();
     document.execCommand(name, false, commandValue);
     sync();
   };
   const insertHTML = (html: string) => {
     editorRef.current?.focus();
+    restoreSelection();
     document.execCommand('insertHTML', false, html);
     sync();
   };
-  const createLink = () => {
-    const url = normalizeExternalUrl(window.prompt('请输入链接地址（https://…）') ?? '');
-    if (url) command('createLink', url);
+  const openExternalMediaDialog = (kind: 'link' | 'image' | 'video') => {
+    const selection = window.getSelection();
+    if (selection?.rangeCount) selectionRef.current = selection.getRangeAt(0).cloneRange();
+    setExternalMediaError('');
+    setExternalMedia({ kind, url: '', description: kind === 'image' ? '文章配图' : '' });
   };
-  const insertExternalImage = () => {
-    const url = normalizeExternalUrl(window.prompt('请输入图片 URL（https://…）') ?? '');
-    if (url) {
-      const description = (window.prompt('请输入图片说明（用于替代文本和内容检索）') ?? '').trim() || '文章配图';
-      const safeDescription = escapeHtmlAttribute(description);
+  const confirmExternalMedia = () => {
+    if (!externalMedia) return;
+    const url = normalizeExternalUrl(externalMedia.url);
+    if (!url) {
+      setExternalMediaError('请输入以 http:// 或 https:// 开头的有效地址。');
+      return;
+    }
+    if (externalMedia.kind === 'link') command('createLink', url);
+    if (externalMedia.kind === 'image') {
+      const safeDescription = escapeHtmlAttribute(externalMedia.description.trim() || '文章配图');
       insertHTML(`<figure class="article-media image-media"><img src="${escapeHtmlAttribute(url)}" alt="${safeDescription}" title="${safeDescription}" loading="lazy" decoding="async" /><figcaption>${safeDescription}</figcaption></figure><p><br /></p>`);
     }
-  };
-  const insertExternalVideo = () => {
-    const url = normalizeExternalUrl(window.prompt('请输入视频 URL（mp4 / webm / ogg，https://…）') ?? '');
-    if (url) insertHTML(`<figure class="article-media video-media"><video controls preload="metadata" src="${escapeHtmlAttribute(url)}">当前浏览器不支持视频播放。</video><figcaption>视频</figcaption></figure><p><br /></p>`);
+    if (externalMedia.kind === 'video') {
+      insertHTML(`<figure class="article-media video-media"><video controls preload="metadata" src="${escapeHtmlAttribute(url)}">当前浏览器不支持视频播放。</video><figcaption>视频</figcaption></figure><p><br /></p>`);
+    }
+    setExternalMedia(null);
+    setExternalMediaError('');
   };
   const uploadMedia = async (event: ChangeEvent<HTMLInputElement>, kind: 'image' | 'video') => {
     const file = event.target.files?.[0];
@@ -254,10 +273,10 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
       <ToolbarButton label="二级标题" text="H2" onClick={() => command('formatBlock', 'h2')} />
       <ToolbarButton label="无序列表" icon={<UnorderedListOutlined />} onClick={() => command('insertUnorderedList')} />
       <ToolbarButton label="有序列表" icon={<OrderedListOutlined />} onClick={() => command('insertOrderedList')} />
-      <ToolbarButton label="插入链接" icon={<LinkOutlined />} onClick={createLink} />
-      <ToolbarButton label="插入图片 URL" icon={<PictureOutlined />} onClick={insertExternalImage} />
+      <ToolbarButton label="插入链接" icon={<LinkOutlined />} onClick={() => openExternalMediaDialog('link')} />
+      <ToolbarButton label="插入图片 URL" icon={<PictureOutlined />} onClick={() => openExternalMediaDialog('image')} />
       <ToolbarButton label="上传本地图片" text="本地图" onClick={() => imageInputRef.current?.click()} />
-      <ToolbarButton label="插入视频 URL" icon={<PlayCircleOutlined />} onClick={insertExternalVideo} />
+      <ToolbarButton label="插入视频 URL" icon={<PlayCircleOutlined />} onClick={() => openExternalMediaDialog('video')} />
       <ToolbarButton label="上传本地视频" text="本地视频" onClick={() => videoInputRef.current?.click()} />
       <ToolbarButton label="清除格式" text="Tx" onClick={() => command('removeFormat')} />
     </div>
@@ -266,6 +285,29 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
     {isUploading && <div className="rich-editor-media-state">正在上传并插入媒体…</div>}
     {uploadError && <div className="rich-editor-media-error">{uploadError}</div>}
     <div ref={editorRef} className="rich-editor-content" contentEditable suppressContentEditableWarning data-placeholder="从这里开始写作……" onInput={(event) => onChange(event.currentTarget.innerHTML)} />
+    <Modal
+      open={Boolean(externalMedia)}
+      title={externalMedia?.kind === 'link' ? '插入链接' : externalMedia?.kind === 'image' ? '插入图片 URL' : '插入视频 URL'}
+      okText="插入"
+      cancelText="取消"
+      onOk={confirmExternalMedia}
+      onCancel={() => { setExternalMedia(null); setExternalMediaError(''); }}
+      destroyOnHidden
+    >
+      <Space direction="vertical" size={14} style={{ width: '100%' }}>
+        {externalMediaError && <Alert type="error" showIcon title={externalMediaError} />}
+        <label className="article-dialog-field">
+          地址
+          <Input value={externalMedia?.url ?? ''} placeholder="https://example.com/resource" onChange={(event) => externalMedia && setExternalMedia({ ...externalMedia, url: event.target.value })} onPressEnter={confirmExternalMedia} />
+        </label>
+        {externalMedia?.kind === 'image' && (
+          <label className="article-dialog-field">
+            图片说明
+            <Input value={externalMedia.description} placeholder="用于替代文本和内容检索" onChange={(event) => setExternalMedia({ ...externalMedia, description: event.target.value })} />
+          </label>
+        )}
+      </Space>
+    </Modal>
   </section>;
 }
 

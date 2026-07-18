@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { Button, Space } from 'antd';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Button, Input, Modal, Space } from 'antd';
 import {
   BoldOutlined,
   ItalicOutlined,
@@ -20,6 +20,10 @@ type RichTextEditorProps = {
 
 export function RichTextEditor({ value, onChange, minHeight = 260, placeholder = '请输入内容…' }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
+  const selectionRef = useRef<Range | null>(null);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkError, setLinkError] = useState('');
 
   useEffect(() => {
     // 编辑器可能在异步读取文本完成后才首次挂载。不能仅用 ref 中的初始值判断，
@@ -35,14 +39,33 @@ export function RichTextEditor({ value, onChange, minHeight = 260, placeholder =
 
   const runCommand = (command: string, argument?: string) => {
     editorRef.current?.focus();
+    const selection = window.getSelection();
+    if (selectionRef.current && selection) {
+      selection.removeAllRanges();
+      selection.addRange(selectionRef.current);
+    }
     document.execCommand(command, false, argument);
     syncContent();
   };
 
   const createLink = () => {
-    const url = window.prompt('请输入链接地址，例如 https://example.com');
-    if (!url) return;
+    const url = linkUrl.trim();
+    if (!/^https?:\/\//i.test(url)) {
+      setLinkError('请输入以 http:// 或 https:// 开头的有效地址。');
+      return;
+    }
     runCommand('createLink', url);
+    setLinkDialogOpen(false);
+    setLinkUrl('');
+    setLinkError('');
+  };
+
+  const openLinkDialog = () => {
+    const selection = window.getSelection();
+    if (selection?.rangeCount) selectionRef.current = selection.getRangeAt(0).cloneRange();
+    setLinkUrl('');
+    setLinkError('');
+    setLinkDialogOpen(true);
   };
 
   return (
@@ -55,7 +78,7 @@ export function RichTextEditor({ value, onChange, minHeight = 260, placeholder =
         <Button size="small" onClick={() => runCommand('formatBlock', 'p')}>正文</Button>
         <Button size="small" icon={<UnorderedListOutlined />} onClick={() => runCommand('insertUnorderedList')}>无序</Button>
         <Button size="small" icon={<OrderedListOutlined />} onClick={() => runCommand('insertOrderedList')}>有序</Button>
-        <Button size="small" icon={<LinkOutlined />} onClick={createLink}>链接</Button>
+        <Button size="small" icon={<LinkOutlined />} onClick={openLinkDialog}>链接</Button>
         <Button size="small" onClick={() => runCommand('removeFormat')}>清除格式</Button>
       </Space>
       <div
@@ -68,6 +91,12 @@ export function RichTextEditor({ value, onChange, minHeight = 260, placeholder =
         onInput={syncContent}
         onBlur={syncContent}
       />
+      <Modal open={linkDialogOpen} title="插入链接" okText="插入" cancelText="取消" onOk={createLink} onCancel={() => setLinkDialogOpen(false)} destroyOnHidden>
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          {linkError && <Alert type="error" showIcon title={linkError} />}
+          <Input value={linkUrl} onChange={(event) => setLinkUrl(event.target.value)} onPressEnter={createLink} placeholder="https://example.com" />
+        </Space>
+      </Modal>
     </div>
   );
 }

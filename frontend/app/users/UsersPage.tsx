@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Button, Checkbox, Col, Descriptions, Modal, Row, Switch, Tag, Tooltip, Tree } from 'antd';
+import { Button, Checkbox, Col, Descriptions, Modal, Popconfirm, Row, Switch, Tag, Tooltip, Tree } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { LockKeyhole } from 'lucide-react';
 import { actionPermissionGroups, allActionPermissionCodes } from '../lib/actionPermissions';
@@ -281,7 +281,18 @@ export function UsersPage({
                               编辑
                             </button>
                             )}
-                            {canDeleteTarget && <button className="danger" type="button" onClick={() => onDeleteUser(user.id)}>删除</button>}
+                            {canDeleteTarget && (
+                              <Popconfirm
+                                title="确认删除该用户？"
+                                description={`账号“${user.username}”删除后不可恢复。`}
+                                okText="确认删除"
+                                cancelText="取消"
+                                okButtonProps={{ danger: true }}
+                                onConfirm={() => onDeleteUser(user.id)}
+                              >
+                                <button className="danger" type="button">删除</button>
+                              </Popconfirm>
+                            )}
                           </>
                           );
                         })()}

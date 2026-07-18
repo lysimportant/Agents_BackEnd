@@ -28,7 +28,7 @@ import {
   Drawer,
   Layout,
   Menu,
-  Select,
+  Popover,
   Space,
   Tag,
   Tooltip,
@@ -45,7 +45,6 @@ import {
   getAdminTheme,
   resolveThemeId,
   THEME_STORAGE_KEY,
-  type AdminTheme,
   type AdminThemeId,
 } from '../theme/themes';
 
@@ -64,12 +63,6 @@ type MainLayoutProps = {
   onNavigate: (page: PageKey) => void;
   onLogout: () => void;
   children: ReactNode;
-};
-
-type ThemeSelectOption = {
-  value: AdminThemeId;
-  label: string;
-  theme: AdminTheme;
 };
 
 const menuIconByCode: Record<string, ReactNode> = {
@@ -305,28 +298,32 @@ export function MainLayout({
               />
             </div>
             <Space size={10} wrap className="antd-header-actions">
-              <Select<AdminThemeId, ThemeSelectOption>
-                aria-label="选择界面主题"
-                className="antd-theme-select"
-                value={themeId}
-                onChange={changeTheme}
-                suffix={<BgColorsOutlined />}
-                popupMatchSelectWidth={220}
-                options={adminThemes.map((theme) => ({ value: theme.id, label: theme.label, theme }))}
-                optionRender={(option) => {
-                  const optionTheme = option.data.theme;
-                  return (
-                    <span className="theme-option">
-                      <span className="theme-option-swatch" style={{ background: optionTheme.swatch }} />
-                      <span className="theme-option-copy">
-                        <strong>{optionTheme.label}</strong>
-                        <small>{optionTheme.description}</small>
-                      </span>
-                      <Tag variant="filled">{optionTheme.kind === 'gradient' ? '渐变' : '纯色'}</Tag>
-                    </span>
-                  );
-                }}
-              />
+              <Popover
+                trigger={['hover', 'click']}
+                placement="bottomRight"
+                title="选择界面主题"
+                content={(
+                  <div className="theme-picker-panel" role="listbox" aria-label="界面主题">
+                    {adminThemes.map((theme) => (
+                      <button
+                        key={theme.id}
+                        type="button"
+                        role="option"
+                        aria-selected={theme.id === themeId}
+                        className={`theme-picker-option${theme.id === themeId ? ' is-active' : ''}`}
+                        onClick={() => changeTheme(theme.id)}
+                      >
+                        <span className="theme-option-swatch" style={{ background: theme.swatch }} />
+                        <span className="theme-option-copy"><strong>{theme.label}</strong><small>{theme.description}</small></span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              >
+                <Tooltip title={`主题：${currentTheme.label}`}>
+                  <Button className="antd-theme-trigger" type="text" aria-label={`切换主题，当前为${currentTheme.label}`} icon={<BgColorsOutlined />} />
+                </Tooltip>
+              </Popover>
               <Tooltip title={isFullscreen ? '退出全屏' : '全屏'}>
                 <Button type="text" icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />} onClick={toggleFullscreen} />
               </Tooltip>

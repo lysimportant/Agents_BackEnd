@@ -407,9 +407,6 @@ export function useAdminWorkspace() {
   };
 
   const handleDeleteUser = async (userId: number) => {
-    if (!window.confirm('确认删除该用户吗？')) {
-      return;
-    }
     const response = await requestWithSession(`${API_BASE_URL}/api/users/${userId}`, { method: 'DELETE' });
     if (!response.ok) {
       setError(await parseError(response, '删除用户失败'));
@@ -726,9 +723,6 @@ export function useAdminWorkspace() {
   };
 
   const handleDeleteMenu = async (menuId: number) => {
-    if (!window.confirm('确认删除该菜单吗？')) {
-      return;
-    }
     const response = await requestWithSession(`${API_BASE_URL}/api/menus/${menuId}`, { method: 'DELETE' });
     if (!response.ok) {
       setError(await parseError(response, '删除菜单失败'));

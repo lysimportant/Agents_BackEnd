@@ -1,0 +1,27 @@
+.customer-chat-page { min-height: 100vh; padding: clamp(16px, 3vw, 40px); background: radial-gradient(circle at 14% 10%, color-mix(in srgb, var(--theme-primary) 24%, transparent), transparent 34%), var(--theme-page-background, var(--surface-page)); }
+.customer-chat-shell { width: min(980px, 100%); min-height: calc(100vh - clamp(32px, 6vw, 80px)); margin: 0 auto; display: grid; grid-template-rows: auto auto minmax(320px, 1fr) auto; overflow: hidden; border: 1px solid color-mix(in srgb, var(--theme-primary) 28%, var(--border-subtle)); border-radius: 24px; background: var(--surface-panel); box-shadow: 0 28px 80px color-mix(in srgb, var(--shadow-color) 72%, transparent); }
+.customer-chat-header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 22px 26px; color: var(--theme-on-primary); background: var(--theme-hero); }
+.customer-chat-agent { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.customer-chat-avatar { width: 52px; height: 52px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 16px; background: rgba(255,255,255,.18); font-size: 26px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.24); }
+.customer-chat-header h1 { margin: 0 0 5px !important; color: inherit !important; font-size: clamp(22px, 3vw, 30px) !important; }
+.customer-chat-header .ant-typography { color: inherit; }
+.customer-chat-shell > .ant-alert { margin: 14px 18px 0; }
+.customer-chat-messages { min-height: 0; overflow: auto; padding: 24px; background: color-mix(in srgb, var(--theme-primary) 4%, var(--surface-elevated)); }
+.customer-chat-messages > .ant-spin, .customer-chat-messages > .ant-empty { display: block; margin: 90px auto; }
+.customer-chat-message { display: flex; margin: 0 0 16px; }
+.customer-chat-message.is-visitor { justify-content: flex-end; }
+.customer-chat-bubble { max-width: min(72%, 620px); padding: 12px 14px; border: 1px solid var(--border-subtle); border-radius: 16px 16px 16px 5px; background: var(--surface-panel); box-shadow: 0 8px 22px rgba(15,23,42,.07); }
+.customer-chat-message.is-visitor .customer-chat-bubble { border-color: color-mix(in srgb, var(--theme-primary) 38%, var(--border-subtle)); border-radius: 16px 16px 5px 16px; background: color-mix(in srgb, var(--theme-primary) 12%, var(--surface-panel)); }
+.customer-chat-bubble small { display: block; margin-bottom: 6px; color: var(--text-tertiary); }
+.customer-chat-bubble p { margin: 0; white-space: pre-wrap; word-break: break-word; }
+.customer-chat-bubble img { display: block; max-width: min(100%, 460px); max-height: 360px; border-radius: 11px; object-fit: contain; }
+.customer-chat-file { display: flex; align-items: center; gap: 10px; color: var(--theme-primary); }
+.customer-chat-file > span { display: grid; }
+.customer-chat-composer { padding: 16px 20px 18px; border-top: 1px solid var(--border-subtle); background: var(--surface-panel); }
+.customer-chat-composer textarea { width: 100%; resize: none; border: 1px solid var(--border-subtle); border-radius: 13px; padding: 12px 14px; color: var(--text-primary); background: var(--surface-elevated); outline: none; font: inherit; }
+.customer-chat-composer textarea:focus { border-color: var(--theme-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-primary) 16%, transparent); }
+.customer-chat-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.customer-chat-emoji-grid { display: grid; grid-template-columns: repeat(6, 36px); gap: 4px; }
+.customer-chat-emoji-grid button { border: 0; border-radius: 8px; padding: 5px; background: transparent; cursor: pointer; font-size: 20px; }
+.customer-chat-emoji-grid button:hover { background: var(--surface-hover); }
+@media (max-width: 640px) { .customer-chat-page { padding: 0; } .customer-chat-shell { min-height: 100vh; border: 0; border-radius: 0; } .customer-chat-header { align-items: flex-start; flex-direction: column; padding: 18px; } .customer-chat-header > .ant-btn { align-self: flex-end; } .customer-chat-messages { padding: 16px 12px; } .customer-chat-bubble { max-width: 88%; } .customer-chat-actions { align-items: stretch; flex-direction: column; } .customer-chat-actions > .ant-btn { width: 100%; } }

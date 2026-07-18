@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { LockOutlined, MailOutlined, PhoneOutlined, SafetyCertificateOutlined, UserOutlined } from '@ant-design/icons';
-import { Alert, Avatar, Button, Input, InputNumber, Skeleton, Tag } from 'antd';
+import { Alert, Avatar, Button, Input, InputNumber, Modal, Skeleton, Tag } from 'antd';
 import { API_BASE_URL } from '../lib/constants';
 import { requestWithSession } from '../lib/api';
 import type { AuthUser, ProfileForm, User } from '../types/admin';
@@ -58,6 +58,7 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
   const [isSaving, setIsSaving] = useState(false);
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [error, setError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
@@ -159,6 +160,7 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
       if (!response.ok) throw new Error(await parseProfileError(response, '修改密码失败'));
       setPasswordForm({ code: '', newPassword: '', confirmPassword: '' });
       setPasswordMessage('密码已修改，请使用新密码重新登录。');
+      setPasswordDialogOpen(false);
       onPasswordChanged();
     } catch (changeError) {
       setPasswordError(changeError instanceof Error ? changeError.message : '修改密码失败');
@@ -214,7 +216,7 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
                 </label>
                 <label>
                   邮箱绑定
-                  <Input type="email" maxLength={120} value={form.email} prefix={<MailOutlined />} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="name@example.com" />
+                  <Input className={styles.alignedInput} type="email" maxLength={120} value={form.email} prefix={<MailOutlined />} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="name@example.com" />
                 </label>
                 <label>
                   联系电话
@@ -232,54 +234,52 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
               </div>
 
               <div className="rich-editor-actions">
+                <Button icon={<SafetyCertificateOutlined />} onClick={() => {
+                  setPasswordError('');
+                  setPasswordMessage('');
+                  setPasswordDialogOpen(true);
+                }}>修改密码</Button>
                 <Button type="primary" htmlType="submit" loading={isSaving}>保存资料</Button>
-              </div>
-            </form>
-          </section>
-
-          <section className="panel-card">
-            <form className={styles.form} onSubmit={(event) => void changePassword(event)}>
-              <div className="panel-heading">
-                <div>
-                  <p className="page-kicker">安全验证</p>
-                  <h2>修改密码</h2>
-                  <span>验证码发送到当前账号绑定邮箱，Redis 缓存有效期为 3 分钟。</span>
-                </div>
-                <SafetyCertificateOutlined className="profile-security-icon" />
-              </div>
-
-              {passwordError && <Alert type="error" showIcon title={passwordError} />}
-              {passwordMessage && <Alert type="success" showIcon title={passwordMessage} />}
-
-              <div className={styles.fields}>
-                <label className={styles.spanTwo}>
-                  绑定邮箱
-                  <Input value={form.email || '当前账号未绑定邮箱'} prefix={<MailOutlined />} disabled />
-                </label>
-                <label className={styles.spanTwo}>
-                  邮箱验证码
-                  <div className="profile-code-row">
-                    <Input size="large" value={passwordForm.code} maxLength={6} prefix={<SafetyCertificateOutlined />} onChange={(event) => setPasswordForm({ ...passwordForm, code: event.target.value })} placeholder="请输入 6 位验证码" />
-                    <Button size="large" onClick={() => void sendCode()} loading={isSendingCode} disabled={!form.email.trim()}>发送验证码</Button>
-                  </div>
-                </label>
-                <label>
-                  新密码
-                  <Input.Password value={passwordForm.newPassword} prefix={<LockOutlined />} onChange={(event) => setPasswordForm({ ...passwordForm, newPassword: event.target.value })} placeholder="至少 6 位" />
-                </label>
-                <label>
-                  确认新密码
-                  <Input.Password value={passwordForm.confirmPassword} prefix={<LockOutlined />} onChange={(event) => setPasswordForm({ ...passwordForm, confirmPassword: event.target.value })} placeholder="再次输入新密码" />
-                </label>
-              </div>
-
-              <div className="rich-editor-actions">
-                <Button type="primary" htmlType="submit" loading={isChangingPassword}>确认修改密码</Button>
               </div>
             </form>
           </section>
         </section>
       )}
+
+      <Modal
+        open={passwordDialogOpen}
+        title="修改密码"
+        footer={null}
+        destroyOnHidden
+        onCancel={() => {
+          setPasswordDialogOpen(false);
+          setPasswordForm({ code: '', newPassword: '', confirmPassword: '' });
+          setPasswordError('');
+          setPasswordMessage('');
+        }}
+      >
+        <form className={styles.form} onSubmit={(event) => void changePassword(event)}>
+          <p className={styles.dialogDescription}>验证码发送到当前账号绑定邮箱，3 分钟内有效。</p>
+          {passwordError && <Alert type="error" showIcon title={passwordError} />}
+          {passwordMessage && <Alert type="success" showIcon title={passwordMessage} />}
+          <div className={styles.fields}>
+            <label className={styles.spanTwo}>绑定邮箱<Input value={form.email || '当前账号未绑定邮箱'} prefix={<MailOutlined />} disabled /></label>
+            <label className={styles.spanTwo}>
+              邮箱验证码
+              <div className="profile-code-row">
+                <Input size="large" value={passwordForm.code} maxLength={6} prefix={<SafetyCertificateOutlined />} onChange={(event) => setPasswordForm({ ...passwordForm, code: event.target.value })} placeholder="请输入 6 位验证码" />
+                <Button size="large" onClick={() => void sendCode()} loading={isSendingCode} disabled={!form.email.trim()}>发送验证码</Button>
+              </div>
+            </label>
+            <label>新密码<Input.Password value={passwordForm.newPassword} prefix={<LockOutlined />} onChange={(event) => setPasswordForm({ ...passwordForm, newPassword: event.target.value })} placeholder="至少 6 位" /></label>
+            <label>确认新密码<Input.Password value={passwordForm.confirmPassword} prefix={<LockOutlined />} onChange={(event) => setPasswordForm({ ...passwordForm, confirmPassword: event.target.value })} placeholder="再次输入新密码" /></label>
+          </div>
+          <div className="rich-editor-actions">
+            <Button onClick={() => setPasswordDialogOpen(false)}>取消</Button>
+            <Button type="primary" htmlType="submit" loading={isChangingPassword}>确认修改密码</Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
-import { Button, Descriptions, Modal, Space, Tag } from 'antd';
+import { Button, Descriptions, Modal, Popconfirm, Space, Tag } from 'antd';
 import type { ResourceActionAccess } from '../lib/actionPermissions';
 import type { Menu, MenuForm, MenuNode } from '../types/admin';
 import { menuStatusOptions } from '../lib/constants';
@@ -101,7 +101,18 @@ export function MenusPage({ menus, menuTree, menuForm, editingMenuId, isLoading,
                     <div className="action-group">
                       <button type="button" onClick={() => setViewingMenu(menu)}>查看</button>
                       {actions.update && <button type="button" onClick={() => openEdit(menu)}>编辑</button>}
-                      {actions.delete && <button className="danger" type="button" onClick={() => onDeleteMenu(menu.id)}>删除</button>}
+                      {actions.delete && (
+                        <Popconfirm
+                          title="确认删除该菜单？"
+                          description={`菜单“${menu.name}”删除后不可恢复。`}
+                          okText="确认删除"
+                          cancelText="取消"
+                          okButtonProps={{ danger: true }}
+                          onConfirm={() => onDeleteMenu(menu.id)}
+                        >
+                          <button className="danger" type="button">删除</button>
+                        </Popconfirm>
+                      )}
                     </div>
                   </td>
                 </tr>

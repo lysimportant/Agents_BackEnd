@@ -191,6 +191,8 @@ npm run dev
 
 管理端“工作台 → Socket 客服”会实时列出全部客服会话，显示访客在线状态、最近消息和消息数量；选择会话后可监视完整聊天记录。具有 `socket.send` 动作权限的客服还可以回复文字、表情、图片和文件。管理端连接与历史接口需要 `socket-support` 菜单及相应动作权限：
 
+独立访客聊天窗口位于 `http://localhost:3000/socket/chat/new`，页面标题为“客服咨询”。首次连接成功后，地址会自动替换为 `/socket/chat/<聊天ID>`，URL 中不携带后端 API 地址。这个完整聊天页面与下方可嵌入其他网站的右下角悬浮组件是两个彼此独立的入口。
+
 - `GET /api/socket/admin`: 管理端 WebSocket，推送客户上线、离线和新消息
 - `GET /api/socket/conversations`: 获取全部客服会话
 - `GET /api/socket/conversations/:id/messages`: 获取指定会话历史消息
