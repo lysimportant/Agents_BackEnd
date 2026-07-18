@@ -12,6 +12,23 @@
 - `frontend/`：Next.js App Router + React + TypeScript 管理后台，提供登录、工作台、用户、部门、角色、菜单权限、文章和文件管理界面。
 - `README.md`：面向开发者的启动方法、环境变量和公开 API 说明；接口或配置变化时应同步更新。
 
+当前仓库不是 monorepo 工具链工程：根目录没有统一的构建、测试或启动脚本。`backend/` 与 `frontend/` 各自拥有依赖锁定和运行入口，命令必须在对应目录执行。根目录的 `package-lock.json` 是遗留文件，不表示应在根目录安装前端依赖。
+
+## 核心业务模型
+
+- 登录会话由后端生成随机会话 ID，写入 HttpOnly Cookie，并持久化到 SQLite `sessions` 表；前端不保存访问令牌。
+- 权限分为两层：菜单权限决定用户能进入哪些页面，动作权限使用稳定的 `resource.action` 编码控制查询、查看、创建、编辑、删除、授权等操作。前端按钮隐藏只是体验优化，后端中间件才是安全边界。
+- 用户有效菜单是启用的直属部门菜单、启用的角色菜单与个人附加菜单的并集，并递归补齐父级菜单；用户有效动作是角色默认动作与个人附加动作的并集。
+- `super-admin` 与 `system-admin` 固定拥有全部动作和菜单；只有 `super-admin` 可创建、分配或修改超级管理员。安全判断使用不可变 `roleCode`，不得依赖可编辑的角色显示名称。
+- 文章和文件都有 `ownerId`、`isPrivate`：公开资源对有相应菜单/动作权限的用户可见，私密资源仅所有者或管理员可见；修改和删除仍要求所有者或管理员。
+- 文件删除默认是软删除，通过 `deletedAt` 进入回收站；永久删除会同时删除 SQLite 记录和物理文件，是高风险操作。
+
+## 主要运行链路
+
+后端启动顺序固定为：加载配置 → 打开 SQLite → 迁移与幂等种子 → 补录上传目录中缺少数据库记录的文件 → 初始化会话与密码验证码服务 → 注册 Gin 路由。迁移或种子失败时服务不会启动，禁止通过删除数据库来“修复”。
+
+前端只有 App Router 根路由 `/`，登录后由 `useAdminWorkspace` 和 `activePage` 在客户端切换工作台及各管理页面；这些功能页不是独立 URL。刷新位置恢复依赖 `sessionStorage`，侧栏展开状态再根据当前页面和异步菜单树推导。
+
 ## 跨目录约定
 
 - 后端默认监听 `http://localhost:8080`，健康检查为 `GET /health`，业务 API 统一位于 `/api`。
@@ -20,6 +37,20 @@
 - API JSON 字段使用 camelCase，用户可见文案默认使用简体中文。
 - 修改 API 路径、请求/响应结构、鉴权或菜单权限时，同时检查后端路由与模型、前端类型与调用方，以及 `README.md`。
 - 不要在仓库根目录混装前后端依赖；Go 命令在 `backend/` 执行，npm 命令在 `frontend/` 执行。
+
+## 改动联动矩阵
+
+| 改动类型 | 必查位置 |
+| --- | --- |
+| API 路径或 HTTP 方法 | `backend/routes/`、对应 `handlers/`、`frontend/app/hooks/useAdminWorkspace.ts` 或 `frontend/app/lib/`、`README.md` |
+| 请求/响应字段 | `backend/models/models.go`、repository 扫描/写入、handler、`frontend/app/types/admin.ts`、所有调用方 |
+| 菜单或页面 | 后端菜单种子与 `RequireMenu`、前端 `PageKey/pageKeys/pageTitles`、`MainLayout` 图标/页面映射、`app/page.tsx` |
+| 动作权限 | `backend/permissions/actions.go`、路由 `RequireAction`、repository 有效权限合并、`frontend/app/lib/actionPermissions.ts`、按钮显隐 |
+| 角色/部门规则 | repository 迁移与种子、用户关联名称同步、保护性测试、前端角色/部门选择器 |
+| SQLite 表或迁移 | `repository/sqlite_store.go`、扫描列顺序、幂等迁移测试；不得手改正式数据库 |
+| 文件能力 | 后端路由/handler/repository、`frontend/app/lib/fileApi.ts`、`FilesPage.tsx`、上传限制与回收站语义 |
+| 文章导出 | 后端批量 CSV/PDF 导出与前端单篇导出是两条独立路径；同时检查 `articleExport.ts` 和 `articleMarkdown.ts` |
+| 主题或全局视觉 | `frontend/app/theme/themes.ts`、`globals.css`、Ant Design token、桌面/移动端 Browser 验收 |
 
 ## 开发与验证
 
@@ -44,6 +75,8 @@ npm run dev
 
 联调时验证 `GET http://localhost:8080/health` 和 `http://localhost:3000`。当前没有根级统一构建命令，应分别验证两个应用。
 
+最小验证应与改动范围匹配：纯文档改动执行 `git diff --check` 并核对文档中的路径/命令；后端改动至少执行 `go test ./...` 与 `go vet ./...`；前端改动至少执行严格类型检查和生产构建；跨栈改动还要启动隔离的联调环境验证健康检查与目标页面。
+
 ## 官方工具恢复与验收
 
 - 需要浏览器交互或视觉验收时，必须优先使用当前 Codex 环境提供的官方 Browser 插件及其技能说明，不得用未获用户指定的第三方浏览器工具替代，也不得因插件异常直接跳过验收。
@@ -55,6 +88,10 @@ npm run dev
 - `backend/data/` 中的 SQLite 数据库及其 WAL/SHM 文件、`backend/uploads/` 中的上传内容都是用户业务数据。
 - 测试和验收必须通过 `SQLITE_PATH`、`UPLOAD_DIR` 使用独立临时目录，禁止覆盖、重置、清空或借助真实业务 API 批量清理业务数据。
 - 保留工作区已有改动，只修改完成当前任务所需的文件；生成物和临时文件不得混入业务源码目录。
+- `.workspace-temp/` 用于任务级临时数据库、上传目录、日志和中间产物；使用可识别的任务子目录。不要把临时文件写入 `backend/data/`、`backend/uploads/` 或源码目录。
+- `.next/`、`node_modules/`、`tsconfig.tsbuildinfo`、后端可执行文件及运行日志都是生成物，不应手工编辑或提交。
+- `output/` 可能包含用户生成的图片或其他成果；除非用户明确将其纳入当前任务，否则不得修改、删除、暂存或提交。
+- Git 提交前使用明确路径暂存，检查 `git diff --cached --check` 与 `git status --short`，避免把业务数据、临时目录或无关用户改动带入提交。
 
 # 跨业务团队通用执行规则
 
