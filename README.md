@@ -69,7 +69,7 @@ npm run dev
 动作权限使用稳定的 `resource.action` 编码，前端应按 `actionPermissions` 控制 CRUD 按钮，后端仍会对每个接口独立校验，不能只依赖按钮隐藏：
 
 - 查询/查看：`dashboard.query|view`、`users.query|view`、`departments.query|view`、`roles.query|view`、`menus.query|view`、`articles.query|view`、`files.query|view`、`socket.query|view`。
-- 写动作：`dashboard.create`；各管理资源的 `create`、`update`、`delete`；以及 `users.permissions.update`、`departments.permissions.update`、`roles.permissions.update`、`files.restore`、`files.permanent-delete`、`socket.send`。
+- 写动作：`dashboard.create`；各管理资源的 `create`、`update`、`delete`；以及 `users.permissions.update`、`departments.permissions.update`、`roles.permissions.update`、`files.restore`、`files.permanent-delete`、`socket.send`、`socket.delete`。
 - `roleCode=super-admin`（超级管理员）与 `roleCode=system-admin`（系统管理员）固定拥有全部当前动作；其他角色默认只有查询/查看动作，管理员可再为普通用户追加个人动作权限。
 - 超级管理员是最高保护角色；只有超级管理员可以创建或分配超级管理员，系统管理员和其他角色不能创建、修改、删除或降级超级管理员。除本人维护 `/api/profile` 外，受控 CRUD、权限配置、文件恢复及彻底删除由动作权限决定。
 
@@ -189,7 +189,7 @@ npm run dev
 
 ### Socket 在线客服
 
-管理端“工作台 → Socket 客服”会实时列出全部客服会话，显示访客在线状态、最近消息和消息数量；选择会话后可监视完整聊天记录。具有 `socket.send` 动作权限的客服还可以回复文字、表情、图片和文件。管理端连接与历史接口需要 `socket-support` 菜单及相应动作权限：
+管理端“工作台 → Socket 客服”会实时列出全部客服会话，显示会话标题、访客在线状态、最近消息和消息数量，并支持按标题和更新时间范围搜索；选择会话后可监视完整聊天记录，访客端会收到客服接入通知。具有 `socket.send` 动作权限的客服可以回复文字、表情、图片和文件，具有 `socket.delete` 权限的人员可以软删除会话。软删除只从列表隐藏会话，聊天记录与附件继续保留。管理端连接与历史接口需要 `socket-support` 菜单及相应动作权限：
 
 独立访客聊天窗口位于 `http://localhost:3000/socket/chat/new`，页面标题为“客服咨询”。首次连接成功后，地址会自动替换为 `/socket/chat/<聊天ID>`，URL 中不携带后端 API 地址。这个完整聊天页面与下方可嵌入其他网站的右下角悬浮组件是两个彼此独立的入口。
 
@@ -198,13 +198,19 @@ npm run dev
 - `GET /api/socket/conversations/:id/messages`: 获取指定会话历史消息
 - `POST /api/socket/conversations/:id/messages`: 发送文字或表情，Body：`{"messageType":"text","content":"您好"}`
 - `POST /api/socket/conversations/:id/files`: 发送图片或文件，`multipart/form-data` 字段为 `file`
+- `POST /api/socket/conversations/:id/join`: 标记客服进入会话，并通知访客端
+- `DELETE /api/socket/conversations/:id`: 软删除会话，不物理删除聊天记录与附件
 - `GET /api/socket/conversations/:id/files/:messageId`: 管理端预览附件；增加 `?download=1` 下载
 
 访客组件使用以下公开接口：
 
 - `GET /api/socket/customer`: 访客 WebSocket；首次连接会返回随机会话 ID 和访客令牌，重连时携带二者
+- `PUT /api/socket/customer/:id/title`: 访客修改会话标题，请求头携带 `X-Socket-Visitor-Token`
+- `DELETE /api/socket/customer/:id`: 访客软删除自己的会话，请求头携带 `X-Socket-Visitor-Token`
 - `POST /api/socket/customer/:id/files`: 访客发送图片或文件，请求头携带 `X-Socket-Visitor-Token`
 - `GET /api/socket/customer/:id/files/:messageId`: 访客读取本会话附件，请求头携带 `X-Socket-Visitor-Token`
+
+新会话在服务端按来源 IP 限制为每分钟最多 3 个，独立聊天页还会同步禁用频繁点击。访客发出的第一条文字消息会自动成为会话标题，之后可在咨询页手动修改；关闭或刷新正在进行的咨询时浏览器会显示离开确认。管理端会在右下角提示访客上线，访客端会在右下角提示客服接入，发送、刷新、改名和删除等操作结果使用页面顶部居中的 Message 提示。
 
 可复用悬浮客服组件位于 `frontend/public/socket/socket-customer-widget.js`，API 等公共参数位于 `frontend/public/socket/socket-config.js`。将下面脚本加入任意网站，右下角会出现客服按钮；访客首次点击并连接后，会话 ID 会自动登记到管理端 Socket 客服页面，访客页面 URL 不需要携带 API 参数：
 

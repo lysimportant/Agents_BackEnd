@@ -92,7 +92,7 @@ export default function Home() {
       )}
 
       {workspace.activePage === 'socket-support' && (
-        <SocketSupportPage canSend={hasAction('socket.send')} />
+        <SocketSupportPage canSend={hasAction('socket.send')} canDelete={hasAction('socket.delete')} />
       )}
 
       {workspace.activePage === 'users' && (

@@ -36,12 +36,43 @@ func TestSocketConversationAndMessagePersistence(t *testing.T) {
 	if len(conversations) != 1 || conversations[0].LastMessage != "你好" || conversations[0].MessageCount != 1 {
 		t.Fatalf("unexpected socket conversation summary: %+v", conversations)
 	}
+	if err := store.MigrateAndSeed(); err != nil {
+		t.Fatalf("rerun migration for socket title backfill: %v", err)
+	}
+	backfilled, ok := store.FindSocketConversation(conversation.ID)
+	if !ok || backfilled.Title != "你好" {
+		t.Fatalf("existing conversation title was not backfilled: %+v", backfilled)
+	}
+	if _, err := store.db.Exec(`UPDATE socket_conversations SET title='' WHERE id=?`, conversation.ID); err != nil {
+		t.Fatalf("prepare empty title: %v", err)
+	}
 	if !store.SetSocketConversationOnline(conversation.ID, false) {
 		t.Fatal("socket conversation presence was not updated")
 	}
 	updated, ok := store.FindSocketConversation(conversation.ID)
 	if !ok || updated.Online {
 		t.Fatalf("conversation should be offline: %+v", updated)
+	}
+	titled, ok := store.SetSocketConversationTitle(conversation.ID, "第一句咨询标题", true)
+	if !ok || titled.Title != "第一句咨询标题" {
+		t.Fatalf("conversation title was not initialized: %+v", titled)
+	}
+	unchanged, ok := store.SetSocketConversationTitle(conversation.ID, "不应覆盖", true)
+	if !ok || unchanged.Title != titled.Title {
+		t.Fatalf("first-message title should not be overwritten: %+v", unchanged)
+	}
+	renamed, ok := store.SetSocketConversationTitle(conversation.ID, "客户自定义标题", false)
+	if !ok || renamed.Title != "客户自定义标题" {
+		t.Fatalf("conversation title was not renamed: %+v", renamed)
+	}
+	if !store.SoftDeleteSocketConversation(conversation.ID) {
+		t.Fatal("soft delete conversation failed")
+	}
+	if store.ValidateSocketConversationToken(conversation.ID, "hashed-token") {
+		t.Fatal("deleted conversation token should be rejected")
+	}
+	if len(store.ListSocketConversations()) != 0 || len(store.ListSocketMessages(conversation.ID)) != 1 {
+		t.Fatal("soft delete should hide conversation while preserving messages")
 	}
 }
 

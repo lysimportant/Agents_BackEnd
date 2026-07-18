@@ -25,7 +25,7 @@ func (s *SQLiteStore) CreateSocketConversation(id, visitorName, tokenHash string
 
 func (s *SQLiteStore) FindSocketConversation(id string) (models.SocketConversation, bool) {
 	return scanSocketConversation(s.db.QueryRow(`
-		SELECT c.id,c.visitor_name,c.status,c.online,c.last_seen_at,c.created_at,c.updated_at,
+		SELECT c.id,c.visitor_name,c.title,c.status,c.online,c.last_seen_at,c.created_at,c.updated_at,
 			COALESCE((SELECT CASE WHEN m.content<>'' THEN m.content ELSE m.attachment_name END FROM socket_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1),''),
 			(SELECT COUNT(1) FROM socket_messages m WHERE m.conversation_id=c.id)
 		FROM socket_conversations c WHERE c.id=?
@@ -34,7 +34,7 @@ func (s *SQLiteStore) FindSocketConversation(id string) (models.SocketConversati
 
 func (s *SQLiteStore) ValidateSocketConversationToken(id, tokenHash string) bool {
 	var count int
-	if err := s.db.QueryRow(`SELECT COUNT(1) FROM socket_conversations WHERE id=? AND visitor_token_hash=?`, strings.TrimSpace(id), tokenHash).Scan(&count); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(1) FROM socket_conversations WHERE id=? AND visitor_token_hash=? AND status<>'deleted'`, strings.TrimSpace(id), tokenHash).Scan(&count); err != nil {
 		return false
 	}
 	return count == 1
@@ -42,7 +42,7 @@ func (s *SQLiteStore) ValidateSocketConversationToken(id, tokenHash string) bool
 
 func (s *SQLiteStore) SetSocketConversationOnline(id string, online bool) bool {
 	now := timeText(time.Now().UTC())
-	result, err := s.db.Exec(`UPDATE socket_conversations SET online=?,last_seen_at=?,updated_at=? WHERE id=?`, online, now, now, strings.TrimSpace(id))
+	result, err := s.db.Exec(`UPDATE socket_conversations SET online=?,last_seen_at=?,updated_at=? WHERE id=? AND status<>'deleted'`, online, now, now, strings.TrimSpace(id))
 	if err != nil {
 		return false
 	}
@@ -52,10 +52,10 @@ func (s *SQLiteStore) SetSocketConversationOnline(id string, online bool) bool {
 
 func (s *SQLiteStore) ListSocketConversations() []models.SocketConversation {
 	rows, err := s.db.Query(`
-		SELECT c.id,c.visitor_name,c.status,c.online,c.last_seen_at,c.created_at,c.updated_at,
+		SELECT c.id,c.visitor_name,c.title,c.status,c.online,c.last_seen_at,c.created_at,c.updated_at,
 			COALESCE((SELECT CASE WHEN m.content<>'' THEN m.content ELSE m.attachment_name END FROM socket_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1),''),
 			(SELECT COUNT(1) FROM socket_messages m WHERE m.conversation_id=c.id)
-		FROM socket_conversations c ORDER BY c.online DESC,c.updated_at DESC
+		FROM socket_conversations c WHERE c.status<>'deleted' ORDER BY c.online DESC,c.updated_at DESC
 	`)
 	if err != nil {
 		return []models.SocketConversation{}
@@ -68,6 +68,41 @@ func (s *SQLiteStore) ListSocketConversations() []models.SocketConversation {
 		}
 	}
 	return items
+}
+
+func (s *SQLiteStore) SetSocketConversationTitle(id, title string, onlyIfEmpty bool) (models.SocketConversation, bool) {
+	id = strings.TrimSpace(id)
+	title = strings.TrimSpace(title)
+	if id == "" || title == "" {
+		return models.SocketConversation{}, false
+	}
+	now := timeText(time.Now().UTC())
+	query := `UPDATE socket_conversations SET title=?,updated_at=? WHERE id=? AND status<>'deleted'`
+	if onlyIfEmpty {
+		query += ` AND trim(title)=''`
+	}
+	result, err := s.db.Exec(query, title, now, id)
+	if err != nil {
+		return models.SocketConversation{}, false
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 && onlyIfEmpty {
+		return s.FindSocketConversation(id)
+	}
+	if rows != 1 {
+		return models.SocketConversation{}, false
+	}
+	return s.FindSocketConversation(id)
+}
+
+func (s *SQLiteStore) SoftDeleteSocketConversation(id string) bool {
+	now := timeText(time.Now().UTC())
+	result, err := s.db.Exec(`UPDATE socket_conversations SET status='deleted',online=0,last_seen_at=?,updated_at=? WHERE id=? AND status<>'deleted'`, now, now, strings.TrimSpace(id))
+	if err != nil {
+		return false
+	}
+	rows, _ := result.RowsAffected()
+	return rows == 1
 }
 
 func (s *SQLiteStore) CreateSocketMessage(message models.SocketMessage) (models.SocketMessage, bool) {
@@ -118,7 +153,7 @@ func scanSocketConversation(row scanner) (models.SocketConversation, bool) {
 	var item models.SocketConversation
 	var online int
 	var lastSeen, created, updated string
-	if err := row.Scan(&item.ID, &item.VisitorName, &item.Status, &online, &lastSeen, &created, &updated, &item.LastMessage, &item.MessageCount); err != nil {
+	if err := row.Scan(&item.ID, &item.VisitorName, &item.Title, &item.Status, &online, &lastSeen, &created, &updated, &item.LastMessage, &item.MessageCount); err != nil {
 		return models.SocketConversation{}, false
 	}
 	item.Online = online != 0

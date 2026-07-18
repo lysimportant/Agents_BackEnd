@@ -239,6 +239,7 @@ func (s *SQLiteStore) migrate() error {
 		`CREATE TABLE IF NOT EXISTS socket_conversations (
 			id TEXT PRIMARY KEY,
 			visitor_name TEXT NOT NULL DEFAULT '访客',
+			title TEXT NOT NULL DEFAULT '',
 			visitor_token_hash TEXT NOT NULL,
 			status TEXT NOT NULL DEFAULT 'open',
 			online INTEGER NOT NULL DEFAULT 0,
@@ -284,11 +285,28 @@ func (s *SQLiteStore) migrate() error {
 		{"articles", "is_private", "ALTER TABLE articles ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0"},
 		{"files", "owner_id", "ALTER TABLE files ADD COLUMN owner_id INTEGER NOT NULL DEFAULT 0"},
 		{"files", "is_private", "ALTER TABLE files ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0"},
+		{"socket_conversations", "title", "ALTER TABLE socket_conversations ADD COLUMN title TEXT NOT NULL DEFAULT ''"},
 	}
 	for _, migration := range columnMigrations {
 		if err := s.ensureColumn(migration.table, migration.column, migration.ddl); err != nil {
 			return err
 		}
+	}
+	if _, err := s.db.Exec(`
+		UPDATE socket_conversations AS conversation
+		SET title = COALESCE((
+			SELECT substr(trim(message.content), 1, 60)
+			FROM socket_messages AS message
+			WHERE message.conversation_id = conversation.id
+				AND message.sender_type = 'visitor'
+				AND message.message_type = 'text'
+				AND trim(message.content) <> ''
+			ORDER BY message.id
+			LIMIT 1
+		), '')
+		WHERE trim(title) = ''
+	`); err != nil {
+		return err
 	}
 	indexes := []string{
 		`CREATE INDEX IF NOT EXISTS idx_departments_parent_id ON departments(parent_id)`,

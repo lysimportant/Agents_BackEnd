@@ -255,6 +255,7 @@ type FileContentRequest struct {
 type SocketConversation struct {
 	ID           string    `json:"id"`
 	VisitorName  string    `json:"visitorName"`
+	Title        string    `json:"title"`
 	Status       string    `json:"status"`
 	Online       bool      `json:"online"`
 	LastSeenAt   time.Time `json:"lastSeenAt"`
@@ -262,6 +263,10 @@ type SocketConversation struct {
 	UpdatedAt    time.Time `json:"updatedAt"`
 	LastMessage  string    `json:"lastMessage"`
 	MessageCount int       `json:"messageCount"`
+}
+
+type SocketConversationTitleRequest struct {
+	Title string `json:"title" binding:"required"`
 }
 
 type SocketMessage struct {

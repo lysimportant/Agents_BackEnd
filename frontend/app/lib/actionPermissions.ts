@@ -107,6 +107,7 @@ export const actionPermissionGroups: ActionPermissionGroup[] = [
       { code: 'socket.query', label: '查询', description: '查询在线客户与历史会话' },
       { code: 'socket.view', label: '查看', description: '监视客户聊天内容' },
       { code: 'socket.send', label: '回复', description: '发送文字、图片、文件和表情' },
+      { code: 'socket.delete', label: '删除', description: '软删除客服会话并从列表隐藏' },
     ],
   },
 ];

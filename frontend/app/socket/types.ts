@@ -1,6 +1,7 @@
 export type SocketConversation = {
   id: string;
   visitorName: string;
+  title: string;
   status: string;
   online: boolean;
   lastSeenAt: string;
@@ -24,11 +25,12 @@ export type SocketMessage = {
 };
 
 export type SocketEnvelope = {
-  type: 'conversations' | 'conversation' | 'message' | 'history' | 'session' | 'error';
+  type: 'conversations' | 'conversation' | 'conversation_deleted' | 'agent_joined' | 'message' | 'history' | 'session' | 'error';
   conversation?: SocketConversation;
   conversations?: SocketConversation[];
   message?: SocketMessage;
   messages?: SocketMessage[];
   visitorToken?: string;
+  actorName?: string;
   error?: string;
 };

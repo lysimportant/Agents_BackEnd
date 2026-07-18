@@ -3,15 +3,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CustomerServiceOutlined,
+  DeleteOutlined,
   EyeOutlined,
   FileImageOutlined,
   MessageOutlined,
   PaperClipOutlined,
   ReloadOutlined,
+  SearchOutlined,
   SendOutlined,
   SmileOutlined,
 } from '@ant-design/icons';
-import { Alert, Badge, Button, Card, Empty, Input, Popover, Space, Spin, Statistic, Tag, Typography } from 'antd';
+import { Alert, Badge, Button, Card, DatePicker, Empty, Input, Popconfirm, Popover, Space, Spin, Statistic, Tag, Typography, message, notification } from 'antd';
+import type { Dayjs } from 'dayjs';
 import { MAX_UPLOAD_SIZE } from '../lib/constants';
 import { socketAttachmentURL, socketWidgetConfigURL, socketWidgetScriptURL } from './socketApi';
 import type { SocketConversation, SocketMessage } from './types';
@@ -19,25 +22,53 @@ import { useSocketSupport } from './useSocketSupport';
 
 const emojiOptions = ['😀', '😁', '😂', '😊', '😍', '🤝', '👍', '🎉', '❤️', '🙏', '📦', '✅'];
 
-export function SocketSupportPage({ canSend }: { canSend: boolean }) {
+export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; canDelete: boolean }) {
   const socket = useSocketSupport();
+  const [messageApi, messageContext] = message.useMessage();
+  const [notificationApi, notificationContext] = notification.useNotification();
   const [draft, setDraft] = useState('');
   const [fileError, setFileError] = useState('');
+  const [searchTitle, setSearchTitle] = useState('');
+  const [searchDates, setSearchDates] = useState<[Dayjs | null, Dayjs | null] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const onlineCount = socket.conversations.filter((item) => item.online).length;
   const messageCount = socket.conversations.reduce((sum, item) => sum + item.messageCount, 0);
   const embedCode = useMemo(() => `<script src="${socketWidgetConfigURL()}"></script>\n<script src="${socketWidgetScriptURL()}" data-title="在线客服" data-session-key="default"></script>`, []);
+  const filteredConversations = useMemo(() => {
+    const keyword = searchTitle.trim().toLowerCase();
+    const start = searchDates?.[0]?.startOf('day').valueOf() ?? Number.NEGATIVE_INFINITY;
+    const end = searchDates?.[1]?.endOf('day').valueOf() ?? Number.POSITIVE_INFINITY;
+    return socket.conversations.filter((conversation) => {
+      const titleMatches = !keyword || [conversation.title, conversation.id, conversation.lastMessage]
+        .some((value) => String(value || '').toLowerCase().includes(keyword));
+      const time = Date.parse(conversation.updatedAt);
+      return titleMatches && time >= start && time <= end;
+    });
+  }, [searchDates, searchTitle, socket.conversations]);
 
   useEffect(() => {
     const messageList = messageListRef.current;
     if (messageList) messageList.scrollTop = messageList.scrollHeight;
   }, [socket.messages]);
 
+  useEffect(() => {
+    if (!socket.presenceEvent) return;
+    const conversation = socket.presenceEvent.conversation;
+    notificationApi.success({
+      placement: 'bottomRight',
+      message: `${conversation.title || '新咨询'} 用户上线了`,
+      description: `会话 ${conversation.id} 已连接。`,
+    });
+  }, [notificationApi, socket.presenceEvent]);
+
   const submitMessage = async () => {
     const content = draft.trim();
     if (!content || !canSend) return;
-    if (await socket.sendMessage(content)) setDraft('');
+    if (await socket.sendMessage(content)) {
+      setDraft('');
+      void messageApi.success('消息发送完成');
+    } else void messageApi.error('消息发送失败，请查看页面提示');
   };
 
   const handleFile = async (file?: File) => {
@@ -48,12 +79,15 @@ export function SocketSupportPage({ canSend }: { canSend: boolean }) {
       return;
     }
     setFileError('');
-    await socket.sendFile(file);
+    if (await socket.sendFile(file)) void messageApi.success('文件发送完成');
+    else void messageApi.error('文件发送失败，请查看页面提示');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   return (
     <div className="socket-support-page">
+      {messageContext}
+      {notificationContext}
       <Card className="socket-hero-card" data-tilt-holographic="true">
         <div className="socket-hero-content">
           <div>
@@ -63,7 +97,7 @@ export function SocketSupportPage({ canSend }: { canSend: boolean }) {
           </div>
           <Space wrap>
             <Badge status={socket.connected ? 'success' : 'error'} text={socket.connected ? 'Socket 已连接' : 'Socket 重连中'} />
-            <Button icon={<ReloadOutlined />} onClick={() => void socket.refresh()} loading={socket.loading}>刷新</Button>
+            <Button icon={<ReloadOutlined />} onClick={() => void socket.refresh().then((ok) => { void (ok ? messageApi.success('刷新完成') : messageApi.error('刷新失败，请查看页面提示')); })} loading={socket.loading}>刷新</Button>
           </Space>
         </div>
       </Card>
@@ -78,16 +112,23 @@ export function SocketSupportPage({ canSend }: { canSend: boolean }) {
       </div>
 
       <div className="socket-console-grid" data-tilt-disabled="true">
-        <Card className="socket-conversation-panel" title="客户会话" extra={<Tag>{onlineCount} 在线</Tag>}>
+        <Card className="socket-conversation-panel" title="客户会话" extra={<Tag>{filteredConversations.length} 条结果</Tag>}>
+          <div className="socket-conversation-search">
+            <Input allowClear value={searchTitle} prefix={<SearchOutlined />} placeholder="搜索会话标题" onChange={(event) => setSearchTitle(event.target.value)} />
+            <DatePicker.RangePicker value={searchDates} onChange={(dates) => setSearchDates(dates)} allowEmpty={[true, true]} placeholder={['开始时间', '结束时间']} />
+          </div>
           <Spin spinning={socket.loading}>
-            {socket.conversations.length === 0 ? <Empty description="等待客户接入" /> : (
+            {filteredConversations.length === 0 ? <Empty description={socket.conversations.length === 0 ? '等待客户接入' : '没有匹配的会话'} /> : (
               <div className="socket-conversation-list">
-                {socket.conversations.map((conversation) => (
+                {filteredConversations.map((conversation) => (
                   <ConversationItem
                     key={conversation.id}
                     conversation={conversation}
                     active={conversation.id === socket.selectedConversationId}
-                    onClick={() => void socket.selectConversation(conversation.id)}
+                    onClick={() => void socket.selectConversation(conversation.id).then((ok) => {
+                      if (!ok) return;
+                      notificationApi.info({ placement: 'bottomRight', message: '已接入客户聊天', description: conversation.title || '新咨询' });
+                    })}
                   />
                 ))}
               </div>
@@ -97,8 +138,18 @@ export function SocketSupportPage({ canSend }: { canSend: boolean }) {
 
         <Card
           className="socket-chat-panel"
-          title={socket.selectedConversation ? `${socket.selectedConversation.visitorName} · ${socket.selectedConversation.id}` : '聊天监视窗口'}
-          extra={socket.selectedConversation && <Tag color={socket.selectedConversation.online ? 'success' : 'default'}>{socket.selectedConversation.online ? '在线' : '离线'}</Tag>}
+          title={socket.selectedConversation ? `${socket.selectedConversation.title || '新咨询'} · ${socket.selectedConversation.id}` : '聊天监视窗口'}
+          extra={socket.selectedConversation && <Space>
+            <Tag color={socket.selectedConversation.online ? 'success' : 'default'}>{socket.selectedConversation.online ? '在线' : '离线'}</Tag>
+            {canDelete && <Popconfirm
+              title="确认删除该会话？"
+              description="会话会从列表隐藏，聊天数据和附件会安全保留。"
+              okText="确认删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => void socket.deleteConversation(socket.selectedConversationId).then((ok) => { void (ok ? messageApi.success('会话删除完成') : messageApi.error('会话删除失败，请查看页面提示')); })}
+            ><Button danger size="small" icon={<DeleteOutlined />}>删除</Button></Popconfirm>}
+          </Space>}
         >
           {!socket.selectedConversation ? <Empty image={<EyeOutlined className="socket-empty-icon" />} description="选择左侧客户查看聊天" /> : (
             <>
@@ -155,7 +206,7 @@ function ConversationItem({ conversation, active, onClick }: { conversation: Soc
     <button type="button" className={`socket-conversation-item ${active ? 'is-active' : ''}`} onClick={onClick}>
       <span className={`socket-presence ${conversation.online ? 'is-online' : ''}`} />
       <span className="socket-conversation-copy">
-        <strong>{conversation.visitorName}</strong>
+        <strong>{conversation.title || '新咨询'}</strong>
         <small>{conversation.id}</small>
         <span>{conversation.lastMessage || '新会话，等待消息'}</span>
       </span>

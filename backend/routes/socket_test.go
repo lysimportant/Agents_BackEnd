@@ -2,6 +2,8 @@ package routes
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -91,5 +93,57 @@ func TestPublicSocketUploadRejectsInvalidToken(t *testing.T) {
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("invalid visitor token status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSocketConversationTitleAndSoftDeleteRoutes(t *testing.T) {
+	router, store, _ := setupTestRouter(t)
+	visitorToken := "route-visitor-token"
+	tokenSum := sha256.Sum256([]byte(visitorToken))
+	conversation, ok := store.CreateSocketConversation("chat-title-test", "网页访客", hex.EncodeToString(tokenSum[:]))
+	if !ok {
+		t.Fatal("create title test conversation")
+	}
+
+	body, _ := json.Marshal(models.SocketConversationTitleRequest{Title: "订单查询"})
+	req := httptest.NewRequest(http.MethodPut, "/api/socket/customer/"+conversation.ID+"/title", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Socket-Visitor-Token", visitorToken)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update customer title status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	updated, found := store.FindSocketConversation(conversation.ID)
+	if !found || updated.Title != "订单查询" {
+		t.Fatalf("customer title was not persisted: %+v", updated)
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/socket/customer/"+conversation.ID, nil)
+	req.Header.Set("X-Socket-Visitor-Token", visitorToken)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent || len(store.ListSocketConversations()) != 0 {
+		t.Fatalf("customer soft delete status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAdminSocketDeleteRequiresDeletePermission(t *testing.T) {
+	router, store, _ := setupTestRouter(t)
+	conversation, ok := store.CreateSocketConversation("chat-delete-test", "网页访客", "token-hash")
+	if !ok {
+		t.Fatal("create delete test conversation")
+	}
+	mhCookie := loginCookie(t, router, "MH", "123")
+	req := httptest.NewRequest(http.MethodDelete, "/api/socket/conversations/"+conversation.ID, nil)
+	req.AddCookie(&http.Cookie{Name: "sessionId", Value: mhCookie})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("admin soft delete status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	deleted, found := store.FindSocketConversation(conversation.ID)
+	if !found || deleted.Status != "deleted" {
+		t.Fatalf("conversation was not soft deleted: %+v", deleted)
 	}
 }

@@ -34,7 +34,7 @@ export const DEFAULT_TILT_CARD_OPTIONS = {
   scale: 1.01,
   lift: 4,
   smoothing: 0.14,
-  glareStrength: 0.28,
+  glareStrength: 0.44,
   parallax: 6,
   perspective: 1100,
 } as const;

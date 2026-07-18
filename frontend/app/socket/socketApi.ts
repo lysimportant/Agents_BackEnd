@@ -52,6 +52,16 @@ export async function sendSocketMessage(conversationId: string, content: string,
   return await response.json() as SocketMessage;
 }
 
+export async function joinSocketConversation(conversationId: string) {
+  const response = await requestWithSession(`${API_BASE_URL}/api/socket/conversations/${encodeURIComponent(conversationId)}/join`, { method: 'POST' });
+  if (!response.ok) throw new Error(await responseError(response, '接入客户聊天失败'));
+}
+
+export async function deleteSocketConversation(conversationId: string) {
+  const response = await requestWithSession(`${API_BASE_URL}/api/socket/conversations/${encodeURIComponent(conversationId)}`, { method: 'DELETE' });
+  if (!response.ok) throw new Error(await responseError(response, '删除客服会话失败'));
+}
+
 export function socketAttachmentURL(message: SocketMessage, download = false) {
   const suffix = download ? '?download=1' : '';
   return `${API_BASE_URL}/api/socket/conversations/${encodeURIComponent(message.conversationId)}/files/${message.id}${suffix}`;

@@ -3764,9 +3764,10 @@ tbody tr:hover,
   background:
     radial-gradient(
       circle at var(--tilt-glare-x) var(--tilt-glare-y),
-      color-mix(in srgb, white 92%, var(--theme-primary)) 0,
-      color-mix(in srgb, white 34%, transparent) 16%,
-      transparent 49%
+      color-mix(in srgb, var(--theme-primary) 42%, white) 0,
+      color-mix(in srgb, var(--theme-primary) 32%, white 34%) 18%,
+      color-mix(in srgb, var(--theme-primary) 12%, transparent) 38%,
+      transparent 56%
     );
   opacity: var(--tilt-glare-opacity);
   mix-blend-mode: soft-light;
@@ -3774,7 +3775,7 @@ tbody tr:hover,
 
 .tilt-card-surface::after {
   background:
-    radial-gradient(circle at var(--tilt-glare-x) var(--tilt-glare-y), color-mix(in srgb, white 42%, var(--theme-primary)) 0, transparent 32%),
+    radial-gradient(circle at var(--tilt-glare-x) var(--tilt-glare-y), color-mix(in srgb, var(--theme-primary) 64%, white) 0, color-mix(in srgb, var(--theme-accent) 34%, transparent) 22%, transparent 42%),
     repeating-linear-gradient(118deg, transparent 0 12px, color-mix(in srgb, var(--theme-accent) 38%, transparent) 13px 14px, transparent 15px 27px),
     conic-gradient(
       from 210deg at var(--tilt-glare-x) var(--tilt-glare-y),
@@ -3788,7 +3789,7 @@ tbody tr:hover,
   background-size: auto, 160% 160%, auto;
   background-position: center, var(--tilt-glare-x) var(--tilt-glare-y), center;
   opacity: var(--tilt-holographic-opacity);
-  filter: saturate(1.25) drop-shadow(0 0 12px color-mix(in srgb, var(--theme-primary) 42%, transparent));
+  filter: saturate(1.55) contrast(1.08) drop-shadow(0 0 16px color-mix(in srgb, var(--theme-primary) 58%, transparent));
   mix-blend-mode: color-dodge;
 }
 

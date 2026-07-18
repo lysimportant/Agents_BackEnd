@@ -29,6 +29,8 @@ type SocketStore interface {
 	FindSocketConversation(id string) (models.SocketConversation, bool)
 	ValidateSocketConversationToken(id, tokenHash string) bool
 	SetSocketConversationOnline(id string, online bool) bool
+	SetSocketConversationTitle(id, title string, onlyIfEmpty bool) (models.SocketConversation, bool)
+	SoftDeleteSocketConversation(id string) bool
 	ListSocketConversations() []models.SocketConversation
 	CreateSocketMessage(message models.SocketMessage) (models.SocketMessage, bool)
 	ListSocketMessages(conversationID string) []models.SocketMessage
@@ -36,10 +38,12 @@ type SocketStore interface {
 }
 
 type SocketHandler struct {
-	store     SocketStore
-	uploadDir string
-	upgrader  websocket.Upgrader
-	hub       *socketHub
+	store                   SocketStore
+	uploadDir               string
+	upgrader                websocket.Upgrader
+	hub                     *socketHub
+	rateMu                  sync.Mutex
+	newConversationAttempts map[string][]time.Time
 }
 
 type socketEnvelope struct {
@@ -49,6 +53,7 @@ type socketEnvelope struct {
 	Message       *models.SocketMessage       `json:"message,omitempty"`
 	Messages      []models.SocketMessage      `json:"messages,omitempty"`
 	VisitorToken  string                      `json:"visitorToken,omitempty"`
+	ActorName     string                      `json:"actorName,omitempty"`
 	Error         string                      `json:"error,omitempty"`
 }
 
@@ -68,11 +73,13 @@ func NewSocketHandler(store SocketStore, uploadDir string) *SocketHandler {
 			WriteBufferSize: 4096,
 			CheckOrigin:     func(*http.Request) bool { return true },
 		},
-		hub: newSocketHub(),
+		hub:                     newSocketHub(),
+		newConversationAttempts: map[string][]time.Time{},
 	}
 }
 
 func (h *SocketHandler) CustomerSocket(c *gin.Context) {
+	requestedConversationID := strings.TrimSpace(c.Query("conversationId"))
 	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
@@ -80,16 +87,20 @@ func (h *SocketHandler) CustomerSocket(c *gin.Context) {
 	client := &socketClient{conn: conn}
 	defer client.close()
 
-	conversationID := strings.TrimSpace(c.Query("conversationId"))
+	conversationID := requestedConversationID
 	visitorToken := strings.TrimSpace(c.Query("visitorToken"))
 	visitorName := strings.TrimSpace(c.Query("visitorName"))
 	conversation, found := h.store.FindSocketConversation(conversationID)
-	if found {
+	if found && conversation.Status != "deleted" {
 		if visitorToken == "" || !h.store.ValidateSocketConversationToken(conversationID, hashSocketToken(visitorToken)) {
 			_ = client.write(socketEnvelope{Type: "error", Error: "客服会话凭证无效"})
 			return
 		}
-	} else {
+	} else if conversationID == "" {
+		if allowed, _ := h.allowNewConversation(c.ClientIP()); !allowed {
+			_ = client.write(socketEnvelope{Type: "error", Error: "新咨询创建过于频繁，每分钟最多创建 3 个"})
+			return
+		}
 		conversationID = newSocketID("chat")
 		visitorToken = newSocketToken()
 		conversation, found = h.store.CreateSocketConversation(conversationID, visitorName, hashSocketToken(visitorToken))
@@ -97,6 +108,9 @@ func (h *SocketHandler) CustomerSocket(c *gin.Context) {
 			_ = client.write(socketEnvelope{Type: "error", Error: "创建客服会话失败"})
 			return
 		}
+	} else {
+		_ = client.write(socketEnvelope{Type: "error", Error: "客服会话不存在或已关闭"})
+		return
 	}
 
 	h.hub.addCustomer(conversationID, client)
@@ -142,6 +156,11 @@ func (h *SocketHandler) CustomerSocket(c *gin.Context) {
 			_ = client.write(socketEnvelope{Type: "error", Error: "保存消息失败"})
 			continue
 		}
+		if messageType == "text" {
+			if updated, titleOK := h.store.SetSocketConversationTitle(conversationID, deriveConversationTitle(content), true); titleOK {
+				conversation = updated
+			}
+		}
 		h.broadcastMessage(created)
 	}
 }
@@ -183,7 +202,7 @@ func (h *SocketHandler) AdminSend(c *gin.Context) {
 		return
 	}
 	conversationID := strings.TrimSpace(c.Param("id"))
-	if _, found := h.store.FindSocketConversation(conversationID); !found {
+	if conversation, found := h.store.FindSocketConversation(conversationID); !found || conversation.Status == "deleted" {
 		c.JSON(http.StatusNotFound, gin.H{"error": "客服会话不存在"})
 		return
 	}
@@ -218,11 +237,88 @@ func (h *SocketHandler) ListConversations(c *gin.Context) {
 
 func (h *SocketHandler) ListMessages(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
-	if _, ok := h.store.FindSocketConversation(id); !ok {
+	if conversation, ok := h.store.FindSocketConversation(id); !ok || conversation.Status == "deleted" {
 		c.JSON(http.StatusNotFound, gin.H{"error": "客服会话不存在"})
 		return
 	}
 	c.JSON(http.StatusOK, h.store.ListSocketMessages(id))
+}
+
+func (h *SocketHandler) CustomerUpdateTitle(c *gin.Context) {
+	conversationID := strings.TrimSpace(c.Param("id"))
+	if !h.validateCustomerToken(c, conversationID) {
+		return
+	}
+	var request models.SocketConversationTitleRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请输入会话标题"})
+		return
+	}
+	title, ok := normalizeConversationTitle(request.Title)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "会话标题需要 1 到 60 个字符"})
+		return
+	}
+	conversation, updated := h.store.SetSocketConversationTitle(conversationID, title, false)
+	if !updated {
+		c.JSON(http.StatusNotFound, gin.H{"error": "客服会话不存在或已关闭"})
+		return
+	}
+	h.hub.broadcastAdmins(socketEnvelope{Type: "conversation", Conversation: &conversation})
+	h.hub.broadcastConversation(conversationID, socketEnvelope{Type: "conversation", Conversation: &conversation})
+	c.JSON(http.StatusOK, conversation)
+}
+
+func (h *SocketHandler) CustomerDeleteConversation(c *gin.Context) {
+	conversationID := strings.TrimSpace(c.Param("id"))
+	if !h.validateCustomerToken(c, conversationID) {
+		return
+	}
+	if !h.store.SoftDeleteSocketConversation(conversationID) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "客服会话不存在或已删除"})
+		return
+	}
+	c.Status(http.StatusNoContent)
+	h.hub.broadcastAdmins(socketEnvelope{Type: "conversation_deleted", Conversation: &models.SocketConversation{ID: conversationID}})
+	h.hub.broadcastConversation(conversationID, socketEnvelope{Type: "conversation_deleted", Conversation: &models.SocketConversation{ID: conversationID}})
+	h.hub.closeConversation(conversationID)
+}
+
+func (h *SocketHandler) AdminJoinConversation(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
+		return
+	}
+	conversationID := strings.TrimSpace(c.Param("id"))
+	conversation, found := h.store.FindSocketConversation(conversationID)
+	if !found || conversation.Status == "deleted" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "客服会话不存在"})
+		return
+	}
+	h.hub.broadcastConversation(conversationID, socketEnvelope{Type: "agent_joined", Conversation: &conversation, ActorName: user.Name})
+	c.Status(http.StatusNoContent)
+}
+
+func (h *SocketHandler) AdminDeleteConversation(c *gin.Context) {
+	conversationID := strings.TrimSpace(c.Param("id"))
+	if !h.store.SoftDeleteSocketConversation(conversationID) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "客服会话不存在或已删除"})
+		return
+	}
+	c.Status(http.StatusNoContent)
+	h.hub.broadcastAdmins(socketEnvelope{Type: "conversation_deleted", Conversation: &models.SocketConversation{ID: conversationID}})
+	h.hub.broadcastConversation(conversationID, socketEnvelope{Type: "conversation_deleted", Conversation: &models.SocketConversation{ID: conversationID}})
+	h.hub.closeConversation(conversationID)
+}
+
+func (h *SocketHandler) validateCustomerToken(c *gin.Context, conversationID string) bool {
+	visitorToken := strings.TrimSpace(c.GetHeader(socketVisitorTokenHeader))
+	if visitorToken == "" || !h.store.ValidateSocketConversationToken(conversationID, hashSocketToken(visitorToken)) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "客服会话凭证无效"})
+		return false
+	}
+	return true
 }
 
 func (h *SocketHandler) CustomerUpload(c *gin.Context) {
@@ -243,7 +339,7 @@ func (h *SocketHandler) AdminUpload(c *gin.Context) {
 		return
 	}
 	conversationID := strings.TrimSpace(c.Param("id"))
-	if _, found := h.store.FindSocketConversation(conversationID); !found {
+	if conversation, found := h.store.FindSocketConversation(conversationID); !found || conversation.Status == "deleted" {
 		c.JSON(http.StatusNotFound, gin.H{"error": "客服会话不存在"})
 		return
 	}
@@ -376,6 +472,53 @@ func normalizeSocketMessage(messageType, content string) (string, string, bool) 
 	return messageType, content, true
 }
 
+func normalizeConversationTitle(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	runes := []rune(value)
+	if len(runes) == 0 || len(runes) > 60 {
+		return "", false
+	}
+	return value, true
+}
+
+func deriveConversationTitle(content string) string {
+	content = strings.TrimSpace(content)
+	if index := strings.IndexAny(content, "\r\n。！？!?；;"); index >= 0 {
+		content = strings.TrimSpace(content[:index])
+	}
+	runes := []rune(content)
+	if len(runes) > 40 {
+		content = string(runes[:40]) + "…"
+	}
+	if content == "" {
+		return "新咨询"
+	}
+	return content
+}
+
+func (h *SocketHandler) allowNewConversation(clientKey string) (bool, time.Duration) {
+	clientKey = strings.TrimSpace(clientKey)
+	if clientKey == "" {
+		clientKey = "unknown"
+	}
+	now := time.Now()
+	windowStart := now.Add(-time.Minute)
+	h.rateMu.Lock()
+	defer h.rateMu.Unlock()
+	attempts := h.newConversationAttempts[clientKey][:0]
+	for _, attempt := range h.newConversationAttempts[clientKey] {
+		if attempt.After(windowStart) {
+			attempts = append(attempts, attempt)
+		}
+	}
+	if len(attempts) >= 3 {
+		h.newConversationAttempts[clientKey] = attempts
+		return false, time.Until(attempts[0].Add(time.Minute))
+	}
+	h.newConversationAttempts[clientKey] = append(attempts, now)
+	return true, 0
+}
+
 func newSocketID(prefix string) string {
 	bytes := make([]byte, 12)
 	if _, err := rand.Read(bytes); err != nil {
@@ -478,5 +621,17 @@ func (h *socketHub) broadcastConversation(id string, envelope socketEnvelope) {
 	h.mu.RUnlock()
 	for _, client := range clients {
 		client.write(envelope)
+	}
+}
+
+func (h *socketHub) closeConversation(id string) {
+	h.mu.RLock()
+	clients := make([]*socketClient, 0, len(h.customers[id]))
+	for client := range h.customers[id] {
+		clients = append(clients, client)
+	}
+	h.mu.RUnlock()
+	for _, client := range clients {
+		client.close()
 	}
 }

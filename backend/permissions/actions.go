@@ -51,9 +51,10 @@ const (
 	FilesRestore         = "files.restore"
 	FilesPermanentDelete = "files.permanent-delete"
 
-	SocketQuery = "socket.query"
-	SocketView  = "socket.view"
-	SocketSend  = "socket.send"
+	SocketQuery  = "socket.query"
+	SocketView   = "socket.view"
+	SocketSend   = "socket.send"
+	SocketDelete = "socket.delete"
 )
 
 func IsSuperAdminRoleCode(code string) bool {
@@ -115,6 +116,7 @@ var definitions = []Definition{
 	{SocketQuery, "socket", "query", "查询客服会话", true},
 	{SocketView, "socket", "view", "查看客服聊天", true},
 	{SocketSend, "socket", "send", "回复客服消息", false},
+	{SocketDelete, "socket", "delete", "删除客服会话", false},
 }
 
 func Definitions() []Definition {

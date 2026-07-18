@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   listSocketConversations,
   listSocketMessages,
+  deleteSocketConversation,
+  joinSocketConversation,
   sendSocketMessage,
   socketAdminWebSocketURL,
   uploadSocketFile,
@@ -28,6 +30,8 @@ export function useSocketSupport() {
   const [error, setError] = useState('');
   const selectedRef = useRef('');
   const socketRef = useRef<WebSocket | null>(null);
+  const [presenceEvent, setPresenceEvent] = useState<{ conversation: SocketConversation; sequence: number } | null>(null);
+  const initialConversationsReceived = useRef(false);
 
   useEffect(() => {
     selectedRef.current = selectedConversationId;
@@ -39,9 +43,12 @@ export function useSocketSupport() {
     setError('');
     try {
       setMessages(await listSocketMessages(conversationId));
+      await joinSocketConversation(conversationId);
+      return true;
     } catch (loadError) {
       setMessages([]);
       setError(loadError instanceof Error ? loadError.message : '加载聊天记录失败');
+      return false;
     }
   }, []);
 
@@ -59,8 +66,10 @@ export function useSocketSupport() {
         setSelectedConversationId('');
         setMessages([]);
       }
+      return true;
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : '加载 Socket 客服失败');
+      return false;
     } finally {
       setLoading(false);
     }
@@ -86,11 +95,22 @@ export function useSocketSupport() {
         }
         if (envelope.type === 'conversations' && envelope.conversations) {
           setConversations(sortConversations(envelope.conversations));
+          initialConversationsReceived.current = true;
         } else if (envelope.type === 'conversation' && envelope.conversation) {
-          setConversations((current) => sortConversations([
-            envelope.conversation!,
-            ...current.filter((item) => item.id !== envelope.conversation!.id),
-          ]));
+          setConversations((current) => {
+            const previous = current.find((item) => item.id === envelope.conversation!.id);
+            if (initialConversationsReceived.current && envelope.conversation!.online && !previous?.online) {
+              setPresenceEvent({ conversation: envelope.conversation!, sequence: Date.now() });
+            }
+            return sortConversations([envelope.conversation!, ...current.filter((item) => item.id !== envelope.conversation!.id)]);
+          });
+        } else if (envelope.type === 'conversation_deleted' && envelope.conversation) {
+          setConversations((current) => current.filter((item) => item.id !== envelope.conversation!.id));
+          if (selectedRef.current === envelope.conversation.id) {
+            selectedRef.current = '';
+            setSelectedConversationId('');
+            setMessages([]);
+          }
         } else if (envelope.type === 'message' && envelope.message) {
           if (envelope.message.conversationId === selectedRef.current) {
             setMessages((current) => upsertMessage(current, envelope.message!));
@@ -142,6 +162,23 @@ export function useSocketSupport() {
     }
   }, []);
 
+  const deleteConversation = useCallback(async (conversationId: string) => {
+    setError('');
+    try {
+      await deleteSocketConversation(conversationId);
+      setConversations((current) => current.filter((item) => item.id !== conversationId));
+      if (selectedRef.current === conversationId) {
+        selectedRef.current = '';
+        setSelectedConversationId('');
+        setMessages([]);
+      }
+      return true;
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : '删除客服会话失败');
+      return false;
+    }
+  }, []);
+
   return {
     conversations,
     selectedConversationId,
@@ -150,9 +187,11 @@ export function useSocketSupport() {
     connected,
     loading,
     error,
+    presenceEvent,
     refresh,
     selectConversation,
     sendMessage,
     sendFile,
+    deleteConversation,
   };
 }
