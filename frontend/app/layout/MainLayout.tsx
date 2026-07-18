@@ -365,12 +365,13 @@ function AdminNavigation({
   onLogout: () => void;
   onToggleSidebar?: () => void;
 }) {
-  const { items, openKeys } = useMemo(() => {
+  const { items, availableOpenKeys, activeParentKeys } = useMemo(() => {
     const enabled = menus
       .filter((menu) => menu.status === '启用')
       .sort((a, b) => a.sort - b.sort || a.id - b.id);
 
     const roots = enabled.filter((menu) => menu.parentId == null);
+    const menuById = new Map(enabled.map((menu) => [menu.id, menu]));
     const childrenOf = (parentId: number) => enabled.filter((menu) => menu.parentId === parentId);
 
     const mapItem = (menu: AdminMenu): NonNullable<MenuProps['items']>[number] | null => {
@@ -404,8 +405,28 @@ function AdminNavigation({
       .map((item) => (item && typeof item === 'object' && 'key' in item ? String(item.key) : ''))
       .filter(Boolean);
 
-    return { items: navItems, openKeys: keys };
-  }, [menus]);
+    const parentKeys: string[] = [];
+    let current = enabled.find((menu) => resolvePageKey(menu) === activePage);
+    while (current?.parentId != null) {
+      const parent = menuById.get(current.parentId);
+      if (!parent) break;
+      parentKeys.unshift(String(resolvePageKey(parent) ?? `menu-${parent.id}`));
+      current = parent;
+    }
+
+    return { items: navItems, availableOpenKeys: keys, activeParentKeys: parentKeys };
+  }, [activePage, menus]);
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
+
+  useEffect(() => {
+    const available = new Set(availableOpenKeys);
+    setExpandedKeys((current) => [
+      ...new Set([
+        ...current.filter((key) => available.has(key)),
+        ...activeParentKeys.filter((key) => available.has(key)),
+      ]),
+    ]);
+  }, [activeParentKeys, availableOpenKeys]);
 
   return (
     <div className="antd-sider-inner">
@@ -423,8 +444,9 @@ function AdminNavigation({
         inlineIndent={16}
         items={items}
         selectedKeys={[activePage]}
-        defaultOpenKeys={collapsed ? [] : openKeys}
+        openKeys={collapsed ? [] : expandedKeys}
         inlineCollapsed={collapsed}
+        onOpenChange={(keys) => setExpandedKeys(keys.map(String))}
         onClick={({ key }) => {
           if (['dashboard', 'users', 'departments', 'roles', 'menus', 'articles', 'files', 'profile'].includes(key)) {
             onNavigate(key as PageKey);

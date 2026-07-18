@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Button, Checkbox, Descriptions, Modal, Switch, Tag, Tree } from 'antd';
+import { Button, Checkbox, Col, Descriptions, Modal, Row, Switch, Tag, Tooltip, Tree } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { LockKeyhole } from 'lucide-react';
 import { actionPermissionGroups, allActionPermissionCodes } from '../lib/actionPermissions';
@@ -87,6 +87,8 @@ export function UsersPage({
   const [actionPermissionOpen, setActionPermissionOpen] = useState(false);
   const [keyword, setKeyword] = useState('');
   const selectedRole = useMemo(() => roles.find((role) => role.id === selectedUser?.roleId) ?? null, [roles, selectedUser]);
+  const departmentPermissionSource = selectedUser?.department || '未分配部门';
+  const rolePermissionSource = selectedRole?.name || selectedUser?.role || '未分配角色';
   const isAdministratorTarget = isAdministratorRoleCode(selectedUser?.roleCode);
   const actorIsSuperAdmin = isSuperAdminRoleCode(actorRoleCode);
   const canEditSelectedPermissions = canConfigurePermissions && !isAdministratorTarget;
@@ -351,23 +353,29 @@ export function UsersPage({
           </div>
           <Tag color="blue">有效 {isAdministratorTarget ? menus.filter((menu) => menu.status === '启用').length : effectiveMenuIds.length} 项</Tag>
         </div>
-        <div className="permission-source-grid">
-          <article>
-            <span>部门权限</span>
-            <strong>{departmentMenuIds.length}</strong>
-            <small>{selectedUser?.department || '未分配部门'}</small>
-          </article>
-          <article>
-            <span>角色权限</span>
-            <strong>{roleMenuIds.length}</strong>
-            <small>{selectedRole?.name || selectedUser?.role || '未分配角色'}</small>
-          </article>
-          <article className="is-extra">
-            <span>用户额外权限</span>
-            <strong>{draftMenuIds.length}</strong>
-            <small>可在下方单独调整</small>
-          </article>
-        </div>
+        <Row gutter={[10, 10]} className="permission-source-grid">
+          <Col xs={24} sm={8}>
+            <article>
+              <Tooltip title="用户所属部门提供的菜单权限"><span title="用户所属部门提供的菜单权限">部门权限</span></Tooltip>
+              <strong>{departmentMenuIds.length}</strong>
+              <Tooltip title={departmentPermissionSource}><small title={departmentPermissionSource}>{departmentPermissionSource}</small></Tooltip>
+            </article>
+          </Col>
+          <Col xs={24} sm={8}>
+            <article>
+              <Tooltip title="用户所属角色提供的菜单权限"><span title="用户所属角色提供的菜单权限">角色权限</span></Tooltip>
+              <strong>{roleMenuIds.length}</strong>
+              <Tooltip title={rolePermissionSource}><small title={rolePermissionSource}>{rolePermissionSource}</small></Tooltip>
+            </article>
+          </Col>
+          <Col xs={24} sm={8}>
+            <article className="is-extra">
+              <Tooltip title="只对当前用户单独追加的菜单权限"><span title="只对当前用户单独追加的菜单权限">用户额外权限</span></Tooltip>
+              <strong>{draftMenuIds.length}</strong>
+              <Tooltip title="可在下方菜单树中单独调整"><small title="可在下方菜单树中单独调整">可在下方单独调整</small></Tooltip>
+            </article>
+          </Col>
+        </Row>
         <div className="permission-inheritance-note">
           <LockKeyhole size={15} />
           <span>{isAdministratorTarget ? '管理员全权限已锁定，不允许移除。' : `继承权限 ${inheritedMenuIds.length} 项，个人额外权限 ${draftMenuIds.length} 项，当前有效权限共 ${effectiveMenuIds.length} 项。`}</span>
@@ -399,29 +407,41 @@ export function UsersPage({
           >
             <span>
               <strong>按钮权限</strong>
-              <small>控制查询、查看、新增、编辑、删除等具体操作</small>
+              <Tooltip title="控制查询、查看、新增、编辑、删除等具体操作">
+                <small title="控制查询、查看、新增、编辑、删除等具体操作">控制查询、查看、新增、编辑、删除等具体操作</small>
+              </Tooltip>
             </span>
             <Tag color="purple">有效 {draftEffectiveActionCodes.length} 项</Tag>
           </button>
           {actionPermissionOpen && (
-            <>
-              <div className="permission-source-grid permission-action-sources">
-                <article>
-                  <span>角色动作</span>
-                  <strong>{inheritedActionCodes.length}</strong>
-                  <small>{isAdministratorTarget ? '管理员全权限' : selectedRole?.name || selectedUser?.role || '未分配角色'}</small>
-                </article>
-                <article className="is-extra">
-                  <span>个人附加动作</span>
-                  <strong>{isAdministratorTarget ? 0 : draftActionCodes.length}</strong>
-                  <small>{isAdministratorTarget ? '无需个人追加' : '可由管理员调整'}</small>
-                </article>
-                <article>
-                  <span>当前有效动作</span>
-                  <strong>{isAdministratorTarget ? allActionPermissionCodes.length : draftEffectiveActionCodes.length}</strong>
-                  <small>角色与个人附加权限并集</small>
-                </article>
-              </div>
+            <div className="permission-collapse-body">
+              <Row gutter={[10, 10]} className="permission-source-grid permission-action-sources">
+                <Col xs={24} sm={8}>
+                  <article>
+                    <Tooltip title="用户所属角色继承的按钮操作权限"><span title="用户所属角色继承的按钮操作权限">角色动作</span></Tooltip>
+                    <strong>{inheritedActionCodes.length}</strong>
+                    <Tooltip title={isAdministratorTarget ? '管理员全权限' : rolePermissionSource}>
+                      <small title={isAdministratorTarget ? '管理员全权限' : rolePermissionSource}>{isAdministratorTarget ? '管理员全权限' : rolePermissionSource}</small>
+                    </Tooltip>
+                  </article>
+                </Col>
+                <Col xs={24} sm={8}>
+                  <article className="is-extra">
+                    <Tooltip title="只对当前用户额外授予的按钮操作权限"><span title="只对当前用户额外授予的按钮操作权限">个人附加动作</span></Tooltip>
+                    <strong>{isAdministratorTarget ? 0 : draftActionCodes.length}</strong>
+                    <Tooltip title={isAdministratorTarget ? '管理员已经拥有全部按钮权限，无需个人追加' : '可由管理员在下方单独调整'}>
+                      <small title={isAdministratorTarget ? '管理员已经拥有全部按钮权限，无需个人追加' : '可由管理员在下方单独调整'}>{isAdministratorTarget ? '无需个人追加' : '可由管理员调整'}</small>
+                    </Tooltip>
+                  </article>
+                </Col>
+                <Col xs={24} sm={8}>
+                  <article>
+                    <Tooltip title="角色继承权限与个人附加权限合并后的结果"><span title="角色继承权限与个人附加权限合并后的结果">当前有效动作</span></Tooltip>
+                    <strong>{isAdministratorTarget ? allActionPermissionCodes.length : draftEffectiveActionCodes.length}</strong>
+                    <Tooltip title="角色继承权限与个人附加权限的并集"><small title="角色继承权限与个人附加权限的并集">角色与个人附加权限并集</small></Tooltip>
+                  </article>
+                </Col>
+              </Row>
               <div className="permission-inheritance-note">
                 <LockKeyhole size={15} />
                 <span>
@@ -430,47 +450,49 @@ export function UsersPage({
                     : `后端已返回角色动作 ${roleActionCodes.length} 项、个人附加动作 ${userActionCodes.length} 项、有效动作 ${effectiveActionCodes.length} 项；勾选变化将作为该用户的个人附加动作保存。`}
                 </span>
               </div>
-              <div className="action-permission-groups">
+              <Row gutter={[12, 12]} className="action-permission-groups">
                 {actionPermissionGroups.map((group) => (
-                  <details className="action-permission-group" key={group.resource}>
-                    <summary className="action-permission-group-title">
-                      <span>
-                        <strong>{group.label}</strong>
-                        <small>{group.resource}</small>
-                      </span>
-                      <Tag color="blue">{group.actions.filter((action) => draftEffectiveActionCodes.includes(action.code)).length} / {group.actions.length}</Tag>
-                    </summary>
-                    <div className="action-permission-options">
-                      {group.actions.map((action) => {
-                        const inherited = inheritedActionCodes.includes(action.code);
-                        const personal = !isAdministratorTarget && draftActionCodes.includes(action.code);
-                        const effective = isAdministratorTarget || inherited || personal;
-                        return (
-                          <label className={`action-permission-option${effective ? ' is-checked' : ''}${inherited ? ' is-inherited' : ''}`} key={action.code}>
-                            <Checkbox
-                              checked={effective}
-                              disabled={!canEditSelectedPermissions || inherited}
-                              onChange={(event) => {
-                                if (!canEditSelectedPermissions || inherited) return;
-                                setDraftActionCodes((current) => event.target.checked
-                                  ? [...new Set([...current, action.code])]
-                                  : current.filter((code) => code !== action.code));
-                              }}
-                            />
-                            <span>
-                              <strong>{action.label}</strong>
-                              <small>{action.description}</small>
-                            </span>
-                            {inherited && <em>{isAdministratorTarget ? '管理员全权限' : '角色继承'}</em>}
-                            {personal && <em className="is-personal">个人附加</em>}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </details>
+                  <Col xs={24} md={12} lg={8} className="action-permission-group-column" key={group.resource}>
+                    <details className="action-permission-group">
+                      <summary className="action-permission-group-title">
+                        <span>
+                          <Tooltip title={`${group.label}（${group.resource}）`}><strong title={`${group.label}（${group.resource}）`}>{group.label}</strong></Tooltip>
+                          <Tooltip title={`权限资源：${group.resource}`}><small title={`权限资源：${group.resource}`}>{group.resource}</small></Tooltip>
+                        </span>
+                        <Tag color="blue">{group.actions.filter((action) => draftEffectiveActionCodes.includes(action.code)).length} / {group.actions.length}</Tag>
+                      </summary>
+                      <div className="action-permission-options">
+                        {group.actions.map((action) => {
+                          const inherited = inheritedActionCodes.includes(action.code);
+                          const personal = !isAdministratorTarget && draftActionCodes.includes(action.code);
+                          const effective = isAdministratorTarget || inherited || personal;
+                          return (
+                            <label className={`action-permission-option${effective ? ' is-checked' : ''}${inherited ? ' is-inherited' : ''}`} key={action.code}>
+                              <Checkbox
+                                checked={effective}
+                                disabled={!canEditSelectedPermissions || inherited}
+                                onChange={(event) => {
+                                  if (!canEditSelectedPermissions || inherited) return;
+                                  setDraftActionCodes((current) => event.target.checked
+                                    ? [...new Set([...current, action.code])]
+                                    : current.filter((code) => code !== action.code));
+                                }}
+                              />
+                              <span>
+                                <Tooltip title={`${action.label}（${action.code}）`}><strong title={`${action.label}（${action.code}）`}>{action.label}</strong></Tooltip>
+                                <Tooltip title={action.description}><small title={action.description}>{action.description}</small></Tooltip>
+                              </span>
+                              {inherited && <em>{isAdministratorTarget ? '管理员全权限' : '角色继承'}</em>}
+                              {personal && <em className="is-personal">个人附加</em>}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  </Col>
                 ))}
-              </div>
-            </>
+              </Row>
+            </div>
           )}
         </section>
       </Modal>

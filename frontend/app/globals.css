@@ -2540,13 +2540,11 @@ html[data-theme='dark'] .ant-breadcrumb-separator {
 }
 
 .permission-source-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
   margin: 14px 0 12px;
 }
 
 .permission-source-grid article {
+  height: 100%;
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--border-subtle);
@@ -2615,14 +2613,16 @@ html[data-theme='dark'] .ant-breadcrumb-separator {
 }
 
 .action-permission-groups {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  gap: 12px;
   margin-top: 12px;
 }
 
+.action-permission-group-column {
+  display: flex;
+  align-items: flex-start;
+}
+
 .action-permission-group {
+  width: 100%;
   overflow: hidden;
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
@@ -2777,13 +2777,6 @@ html[data-theme='dark'] .ant-breadcrumb-separator {
     max-height: 48dvh;
   }
 
-  .permission-source-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .action-permission-groups {
-    grid-template-columns: 1fr;
-  }
 }
 
 .user-layout,
@@ -2922,17 +2915,17 @@ html[data-theme='dark'] .ant-breadcrumb-separator {
 }
 
 .permission-collapse-summary small {
+  display: block;
+  overflow: hidden;
   color: var(--text-secondary);
   font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.permission-collapse > :not(.permission-collapse-summary) {
-  display: block;
-  margin-inline: 12px;
-}
-
-.permission-collapse > :last-child {
-  margin-bottom: 12px;
+.permission-collapse-body {
+  min-width: 0;
+  padding: 0 12px 12px;
 }
 
 .profile-layout {
@@ -3705,33 +3698,106 @@ tbody tr:hover,
   color: var(--theme-on-primary) !important;
 }
 
-@media (hover: hover) and (pointer: fine) and (min-width: 769px) {
-  :is(
-    .menu-summary-card,
-    .dashboard-stat-card,
-    .file-kind-card,
-    .file-card,
-    .article-library-card,
-    .article-stat-grid > .ant-card
-  ) {
-    transform-style: preserve-3d;
-    transform-origin: center;
-    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), border-color 220ms ease, box-shadow 220ms ease;
-  }
+/* Reusable 3D tilt surface. Runtime updates only these custom properties. */
+.tilt-card-surface {
+  --tilt-perspective: 1100px;
+  --tilt-rotate-x: 0deg;
+  --tilt-rotate-y: 0deg;
+  --tilt-scale: 1;
+  --tilt-lift: 0px;
+  --tilt-glare-x: 50%;
+  --tilt-glare-y: 50%;
+  --tilt-glare-opacity: 0;
+  --tilt-holographic-opacity: 0;
+  --tilt-layer-subtle-x: 0px;
+  --tilt-layer-subtle-y: 0px;
+  --tilt-layer-medium-x: 0px;
+  --tilt-layer-medium-y: 0px;
+  --tilt-layer-strong-x: 0px;
+  --tilt-layer-strong-y: 0px;
+  position: relative;
+  isolation: isolate;
+  perspective: var(--tilt-perspective);
+  transform:
+    perspective(var(--tilt-perspective))
+    translate3d(0, var(--tilt-lift), 0)
+    rotateX(var(--tilt-rotate-x))
+    rotateY(var(--tilt-rotate-y))
+    scale(var(--tilt-scale));
+  transform-origin: center;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  transition: border-color 220ms ease, box-shadow 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
 
-  :is(
-    .menu-summary-card,
-    .dashboard-stat-card,
-    .file-kind-card,
-    .file-card,
-    .article-library-card,
-    .article-stat-grid > .ant-card
-  ):hover {
-    z-index: 1;
-    transform: perspective(900px) translate3d(0, -3px, 8px) rotateX(1deg) rotateY(-0.7deg);
-    border-color: color-mix(in srgb, var(--theme-primary) 34%, var(--border-subtle));
-    box-shadow: 0 14px 30px color-mix(in srgb, var(--shadow-color) 78%, transparent);
-  }
+.tilt-card-surface::before,
+.tilt-card-surface::after {
+  position: absolute;
+  z-index: 4;
+  inset: -1px;
+  border-radius: inherit;
+  content: '';
+  pointer-events: none;
+}
+
+.tilt-card-surface::before {
+  background:
+    radial-gradient(
+      circle at var(--tilt-glare-x) var(--tilt-glare-y),
+      color-mix(in srgb, white 92%, var(--theme-primary)) 0,
+      color-mix(in srgb, white 34%, transparent) 16%,
+      transparent 49%
+    );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, white 32%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 54%, transparent);
+  opacity: var(--tilt-glare-opacity);
+  mix-blend-mode: soft-light;
+}
+
+.tilt-card-surface::after {
+  background:
+    radial-gradient(circle at var(--tilt-glare-x) var(--tilt-glare-y), transparent 0 24%, rgba(255, 255, 255, 0.2) 44%, transparent 68%),
+    conic-gradient(from 210deg at var(--tilt-glare-x) var(--tilt-glare-y), #ff6b9d, #ffd66b, #6bf0c1, #70a5ff, #b47cff, #ff6b9d);
+  opacity: 0;
+  mix-blend-mode: color-dodge;
+}
+
+.tilt-card--holographic::after,
+.tilt-card-surface[data-tilt-holographic='true']::after {
+  opacity: var(--tilt-holographic-opacity);
+}
+
+.tilt-card-surface[data-tilt-active='true'] {
+  z-index: 2;
+  border-color: color-mix(in srgb, var(--theme-primary) 27%, var(--border-subtle));
+  box-shadow:
+    0 15px 32px color-mix(in srgb, var(--shadow-color) 72%, transparent),
+    0 5px 13px color-mix(in srgb, var(--theme-primary) 8%, transparent);
+  will-change: transform;
+}
+
+/* Existing cards get a safe default layer; explicit layers can choose depth. */
+.tilt-card-surface > * {
+  translate: var(--tilt-layer-subtle-x) var(--tilt-layer-subtle-y);
+  transform-style: preserve-3d;
+}
+
+.tilt-card-surface > :is(img, picture, figure, .file-card-preview, .dashboard-stat-icon),
+.tilt-card-surface [data-tilt-layer='strong'] {
+  translate: var(--tilt-layer-strong-x) var(--tilt-layer-strong-y);
+}
+
+.tilt-card-surface [data-tilt-layer='medium'] {
+  translate: var(--tilt-layer-medium-x) var(--tilt-layer-medium-y);
+}
+
+.tilt-card-surface [data-tilt-layer='subtle'] {
+  translate: var(--tilt-layer-subtle-x) var(--tilt-layer-subtle-y);
+}
+
+html[data-theme='dark'] .tilt-card-surface::before {
+  mix-blend-mode: screen;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3749,14 +3815,33 @@ tbody tr:hover,
     scroll-behavior: auto !important;
   }
 
-  :is(
-    .menu-summary-card,
-    .dashboard-stat-card,
-    .file-kind-card,
-    .file-card,
-    .article-library-card,
-    .article-stat-grid > .ant-card
-  ):hover {
+  .tilt-card-surface {
     transform: none !important;
+  }
+
+  .tilt-card-surface > *,
+  .tilt-card-surface [data-tilt-layer] {
+    translate: none !important;
+  }
+
+  .tilt-card-surface::before,
+  .tilt-card-surface::after {
+    display: none !important;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .tilt-card-surface {
+    transform: none !important;
+  }
+
+  .tilt-card-surface > *,
+  .tilt-card-surface [data-tilt-layer] {
+    translate: none !important;
+  }
+
+  .tilt-card-surface::before,
+  .tilt-card-surface::after {
+    display: none !important;
   }
 }

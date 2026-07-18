@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { AntdRegistry } from '@ant-design/nextjs-registry';
+import { TiltCardEffects } from './components/TiltCardEffects';
 import { ADMIN_THEME_BOOTSTRAP_SCRIPT } from './theme/themes';
 import './globals.css';
 
@@ -52,6 +53,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </head>
       <body>
         <AntdRegistry>
+          <TiltCardEffects />
           <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: structuredData }} />
           {children}
         </AntdRegistry>
