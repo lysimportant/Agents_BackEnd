@@ -251,3 +251,35 @@ type FileMetadataRequest struct {
 type FileContentRequest struct {
 	Content string `json:"content" binding:"required"`
 }
+
+type SocketConversation struct {
+	ID           string    `json:"id"`
+	VisitorName  string    `json:"visitorName"`
+	Status       string    `json:"status"`
+	Online       bool      `json:"online"`
+	LastSeenAt   time.Time `json:"lastSeenAt"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+	LastMessage  string    `json:"lastMessage"`
+	MessageCount int       `json:"messageCount"`
+}
+
+type SocketMessage struct {
+	ID                int       `json:"id"`
+	ConversationID    string    `json:"conversationId"`
+	SenderType        string    `json:"senderType"`
+	SenderName        string    `json:"senderName"`
+	MessageType       string    `json:"messageType"`
+	Content           string    `json:"content"`
+	AttachmentName    string    `json:"attachmentName"`
+	AttachmentType    string    `json:"attachmentType"`
+	AttachmentSize    int64     `json:"attachmentSize"`
+	AttachmentStorage string    `json:"-"`
+	CreatedAt         time.Time `json:"createdAt"`
+}
+
+type SocketMessageRequest struct {
+	ConversationID string `json:"conversationId"`
+	MessageType    string `json:"messageType" binding:"required"`
+	Content        string `json:"content"`
+}

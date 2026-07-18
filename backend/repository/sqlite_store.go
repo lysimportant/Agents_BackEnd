@@ -58,7 +58,9 @@ type applicationMenuSeed struct {
 
 func (s *SQLiteStore) reconcileApplicationMenus() error {
 	seeds := []applicationMenuSeed{
-		{Name: "工作台", Code: "dashboard", Path: "dashboard", Icon: "dashboard", Sort: 10},
+		{Name: "工作台", Code: "workspace", Icon: "dashboard", Sort: 10},
+		{Name: "预览台", Code: "dashboard", Path: "dashboard", Icon: "dashboard", ParentCode: "workspace", Sort: 11},
+		{Name: "Socket 客服", Code: "socket-support", Path: "socket-support", Icon: "message", ParentCode: "workspace", Sort: 12},
 		{Name: "系统管理", Code: "system", Icon: "setting", Sort: 20},
 		{Name: "用户管理", Code: "users", Path: "users", Icon: "team", ParentCode: "system", Sort: 21},
 		{Name: "部门管理", Code: "departments", Path: "departments", Icon: "apartment", ParentCode: "system", Sort: 22},
@@ -95,6 +97,13 @@ func (s *SQLiteStore) reconcileApplicationMenus() error {
 		}
 		id, _ := result.LastInsertId()
 		ids[seed.Code] = int(id)
+	}
+	workspaceID := ids["workspace"]
+	if workspaceID == 0 {
+		return errors.New("工作台父级菜单初始化失败")
+	}
+	if _, err := tx.Exec(`UPDATE menus SET name='预览台',path='dashboard',icon='dashboard',parent_id=?,sort=11,updated_at=? WHERE code='dashboard'`, workspaceID, now); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
@@ -227,6 +236,30 @@ func (s *SQLiteStore) migrate() error {
 			updated_at TEXT NOT NULL,
 			deleted_at TEXT
 		)`,
+		`CREATE TABLE IF NOT EXISTS socket_conversations (
+			id TEXT PRIMARY KEY,
+			visitor_name TEXT NOT NULL DEFAULT '访客',
+			visitor_token_hash TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'open',
+			online INTEGER NOT NULL DEFAULT 0,
+			last_seen_at TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS socket_messages (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			conversation_id TEXT NOT NULL,
+			sender_type TEXT NOT NULL,
+			sender_name TEXT NOT NULL,
+			message_type TEXT NOT NULL,
+			content TEXT NOT NULL DEFAULT '',
+			attachment_name TEXT NOT NULL DEFAULT '',
+			attachment_type TEXT NOT NULL DEFAULT '',
+			attachment_size INTEGER NOT NULL DEFAULT 0,
+			attachment_storage TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			FOREIGN KEY (conversation_id) REFERENCES socket_conversations(id) ON DELETE CASCADE
+		)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.Exec(statement); err != nil {
@@ -263,6 +296,8 @@ func (s *SQLiteStore) migrate() error {
 		`CREATE INDEX IF NOT EXISTS idx_users_department_id ON users(department_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_department_menus_menu_id ON department_menus(menu_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_role_menus_menu_id ON role_menus(menu_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_socket_conversations_updated_at ON socket_conversations(updated_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_socket_messages_conversation_id ON socket_messages(conversation_id,id)`,
 	}
 	for _, statement := range indexes {
 		if _, err := s.db.Exec(statement); err != nil {

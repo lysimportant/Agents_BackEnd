@@ -274,7 +274,7 @@ func TestDepartmentPermissionsAPI(t *testing.T) {
 		t.Fatalf("get permission detail status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var detail models.UserPermissionDetail
-	if err := json.Unmarshal(rec.Body.Bytes(), &detail); err != nil || len(detail.DepartmentMenuIDs) != 1 || len(detail.RoleMenuIDs) != 1 || len(detail.UserMenuIDs) != 1 || len(detail.EffectiveMenuIDs) != 3 {
+	if err := json.Unmarshal(rec.Body.Bytes(), &detail); err != nil || len(detail.DepartmentMenuIDs) != 1 || len(detail.RoleMenuIDs) != 1 || len(detail.UserMenuIDs) != 1 || len(detail.EffectiveMenuIDs) != 4 {
 		t.Fatalf("unexpected permission detail: err=%v detail=%+v", err, detail)
 	}
 
@@ -287,14 +287,14 @@ func TestDepartmentPermissionsAPI(t *testing.T) {
 		t.Fatalf("list effective menus status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var effectiveMenus []models.Menu
-	if err := json.Unmarshal(rec.Body.Bytes(), &effectiveMenus); err != nil || len(effectiveMenus) != 3 {
+	if err := json.Unmarshal(rec.Body.Bytes(), &effectiveMenus); err != nil || len(effectiveMenus) != 4 {
 		t.Fatalf("unexpected effective menus: err=%v menus=%+v", err, effectiveMenus)
 	}
 	effectiveCodes := map[string]bool{}
 	for _, menu := range effectiveMenus {
 		effectiveCodes[menu.Code] = true
 	}
-	if !effectiveCodes["dashboard"] || !effectiveCodes["files"] || !effectiveCodes["content"] {
+	if !effectiveCodes["workspace"] || !effectiveCodes["dashboard"] || !effectiveCodes["files"] || !effectiveCodes["content"] {
 		t.Fatalf("effective menu ancestors missing: %+v", effectiveCodes)
 	}
 }

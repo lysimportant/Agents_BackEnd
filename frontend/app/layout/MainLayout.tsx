@@ -15,6 +15,7 @@ import {
   MenuFoldOutlined,
   MenuOutlined,
   MenuUnfoldOutlined,
+  MessageOutlined,
   SafetyCertificateOutlined,
   SettingOutlined,
   UserOutlined,
@@ -36,7 +37,7 @@ import {
   type MenuProps,
 } from 'antd';
 import type { AuthUser, Menu as AdminMenu, PageKey } from '../types/admin';
-import { pageTitles } from '../lib/constants';
+import { pageKeys, pageTitles } from '../lib/constants';
 import {
   adminThemes,
   applyAdminTheme,
@@ -73,6 +74,8 @@ type ThemeSelectOption = {
 
 const menuIconByCode: Record<string, ReactNode> = {
   dashboard: <DashboardOutlined />,
+  workspace: <DashboardOutlined />,
+  'socket-support': <MessageOutlined />,
   system: <SettingOutlined />,
   users: <UserOutlined />,
   departments: <ApartmentOutlined />,
@@ -88,6 +91,7 @@ function resolvePageKey(menu: AdminMenu): PageKey | null {
   const path = (menu.path || '').trim().toLowerCase().replace(/^\/+|\/+$/g, '');
   const pageByCode: Partial<Record<string, PageKey>> = {
     dashboard: 'dashboard',
+    'socket-support': 'socket-support',
     users: 'users',
     departments: 'departments',
     roles: 'roles',
@@ -448,7 +452,7 @@ function AdminNavigation({
         inlineCollapsed={collapsed}
         onOpenChange={(keys) => setExpandedKeys(keys.map(String))}
         onClick={({ key }) => {
-          if (['dashboard', 'users', 'departments', 'roles', 'menus', 'articles', 'files', 'profile'].includes(key)) {
+          if (pageKeys.includes(key as PageKey)) {
             onNavigate(key as PageKey);
           }
         }}

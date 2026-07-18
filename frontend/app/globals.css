@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "./article-file-enhancements.css";
+@import "./socket/socket.css";
 
 @custom-variant dark (&:is(.dark *));
 :root {
@@ -3757,9 +3758,21 @@ tbody tr:hover,
 
 .tilt-card-surface::after {
   background:
-    radial-gradient(circle at var(--tilt-glare-x) var(--tilt-glare-y), transparent 0 24%, rgba(255, 255, 255, 0.2) 44%, transparent 68%),
-    conic-gradient(from 210deg at var(--tilt-glare-x) var(--tilt-glare-y), #ff6b9d, #ffd66b, #6bf0c1, #70a5ff, #b47cff, #ff6b9d);
-  opacity: 0;
+    radial-gradient(circle at var(--tilt-glare-x) var(--tilt-glare-y), color-mix(in srgb, white 42%, var(--theme-primary)) 0, transparent 32%),
+    repeating-linear-gradient(118deg, transparent 0 12px, color-mix(in srgb, var(--theme-accent) 38%, transparent) 13px 14px, transparent 15px 27px),
+    conic-gradient(
+      from 210deg at var(--tilt-glare-x) var(--tilt-glare-y),
+      var(--theme-primary),
+      var(--theme-accent),
+      var(--theme-accent-alt),
+      color-mix(in srgb, var(--theme-primary) 54%, white),
+      var(--theme-accent),
+      var(--theme-primary)
+    );
+  background-size: auto, 160% 160%, auto;
+  background-position: center, var(--tilt-glare-x) var(--tilt-glare-y), center;
+  opacity: var(--tilt-holographic-opacity);
+  filter: saturate(1.25) drop-shadow(0 0 12px color-mix(in srgb, var(--theme-primary) 42%, transparent));
   mix-blend-mode: color-dodge;
 }
 
@@ -3773,7 +3786,9 @@ tbody tr:hover,
   border-color: color-mix(in srgb, var(--theme-primary) 27%, var(--border-subtle));
   box-shadow:
     0 15px 32px color-mix(in srgb, var(--shadow-color) 72%, transparent),
-    0 5px 13px color-mix(in srgb, var(--theme-primary) 8%, transparent);
+    0 5px 18px color-mix(in srgb, var(--theme-primary) 34%, transparent),
+    0 0 28px color-mix(in srgb, var(--theme-accent) 22%, transparent),
+    inset 0 0 20px color-mix(in srgb, var(--theme-primary) 8%, transparent);
   will-change: transform;
 }
 

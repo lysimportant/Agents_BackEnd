@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 
-export type PageKey = 'dashboard' | 'users' | 'departments' | 'roles' | 'menus' | 'articles' | 'files' | 'profile';
+export type PageKey = 'dashboard' | 'socket-support' | 'users' | 'departments' | 'roles' | 'menus' | 'articles' | 'files' | 'profile';
 
 export type AuthUser = {
   id: number;

@@ -1,0 +1,42 @@
+.socket-support-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; width: 100%; min-width: 0; }
+.socket-hero-card { overflow: hidden; background: var(--theme-hero) !important; border-color: color-mix(in srgb, var(--theme-primary) 34%, var(--border-subtle)) !important; }
+.socket-hero-content { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.socket-hero-content h2 { margin: 10px 0 4px !important; }
+.socket-hero-content p { margin: 0 !important; color: var(--text-secondary); }
+.socket-stat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.socket-stat-card .ant-statistic-content { color: var(--theme-primary); }
+.socket-console-grid { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 16px; min-height: 610px; }
+.socket-conversation-panel, .socket-chat-panel, .socket-embed-card { min-width: 0; }
+.socket-conversation-panel .ant-card-body, .socket-chat-panel .ant-card-body { height: 552px; padding: 0; }
+.socket-conversation-list { height: 552px; overflow: auto; padding: 8px; }
+.socket-conversation-item { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 12px; border: 1px solid transparent; border-radius: 12px; color: var(--text-primary); background: transparent; text-align: left; cursor: pointer; transition: 160ms ease; }
+.socket-conversation-item:hover { background: var(--surface-hover); }
+.socket-conversation-item.is-active { border-color: color-mix(in srgb, var(--theme-primary) 44%, var(--border-subtle)); background: color-mix(in srgb, var(--theme-primary) 10%, var(--surface-panel)); box-shadow: inset 3px 0 var(--theme-primary); }
+.socket-presence { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; background: var(--text-disabled); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-disabled) 16%, transparent); }
+.socket-presence.is-online { background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.16), 0 0 12px rgba(34,197,94,.42); }
+.socket-conversation-copy { min-width: 0; display: grid; gap: 3px; }
+.socket-conversation-copy strong, .socket-conversation-copy span, .socket-conversation-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.socket-conversation-copy small, .socket-conversation-meta small { color: var(--text-tertiary); font-size: 11px; }
+.socket-conversation-copy span { color: var(--text-secondary); font-size: 13px; }
+.socket-conversation-meta { display: grid; justify-items: end; gap: 8px; }
+.socket-chat-panel .ant-card-body { display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+.socket-message-list { overflow: auto; padding: 18px; background: color-mix(in srgb, var(--theme-primary) 3%, var(--surface-elevated)); }
+.socket-message-row { display: flex; margin-bottom: 14px; }
+.socket-message-row.is-agent { justify-content: flex-end; }
+.socket-message-bubble { max-width: min(76%, 620px); padding: 10px 12px; border-radius: 14px; border: 1px solid var(--border-subtle); background: var(--surface-panel); box-shadow: 0 6px 18px rgba(15,23,42,.06); }
+.socket-message-row.is-agent .socket-message-bubble { border-color: color-mix(in srgb, var(--theme-primary) 36%, var(--border-subtle)); background: color-mix(in srgb, var(--theme-primary) 12%, var(--surface-panel)); }
+.socket-message-author { display: block; margin-bottom: 5px; color: var(--text-tertiary); font-size: 11px; }
+.socket-message-bubble p { margin: 0; white-space: pre-wrap; word-break: break-word; }
+.socket-message-bubble img { display: block; max-width: min(100%, 360px); max-height: 300px; border-radius: 9px; object-fit: contain; }
+.socket-file-message { display: flex; align-items: center; gap: 10px; color: var(--theme-primary); }
+.socket-file-message span { display: grid; }
+.socket-file-message small { color: var(--text-tertiary); }
+.socket-composer { padding: 12px; border-top: 1px solid var(--border-subtle); background: var(--surface-panel); }
+.socket-composer-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.socket-emoji-grid { display: grid; grid-template-columns: repeat(6, 34px); gap: 4px; }
+.socket-emoji-grid button { border: 0; border-radius: 8px; background: transparent; cursor: pointer; font-size: 20px; }
+.socket-emoji-grid button:hover { background: var(--surface-hover); }
+.socket-embed-card pre { overflow: auto; margin: 12px 0; padding: 14px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-elevated); color: var(--theme-primary); }
+.socket-empty-icon { font-size: 42px; color: var(--text-disabled); }
+@media (max-width: 1000px) { .socket-console-grid { grid-template-columns: 1fr; } .socket-conversation-panel .ant-card-body { height: 300px; } .socket-conversation-list { height: 300px; } }
+@media (max-width: 640px) { .socket-hero-content { align-items: flex-start; flex-direction: column; } .socket-stat-grid { grid-template-columns: 1fr; } .socket-chat-panel .ant-card-body { height: 620px; } .socket-message-bubble { max-width: 88%; } .socket-composer-actions { align-items: stretch; flex-direction: column; } .socket-composer-actions > .ant-btn { width: 100%; } }

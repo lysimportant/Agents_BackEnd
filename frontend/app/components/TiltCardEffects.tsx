@@ -206,7 +206,7 @@ export function TiltCardEffects({ selector = DEFAULT_TILT_CARD_SELECTOR }: TiltC
         glareX: (normalizedX + 1) * 50,
         glareY: (normalizedY + 1) * 50,
         glareOpacity: motion.options.glareStrength,
-        holographicOpacity: motion.options.glareStrength * 0.54,
+        holographicOpacity: motion.options.glareStrength * 0.82,
         parallaxX: normalizedX * motion.options.parallax * parallaxFactor,
         parallaxY: normalizedY * motion.options.parallax * parallaxFactor,
       };

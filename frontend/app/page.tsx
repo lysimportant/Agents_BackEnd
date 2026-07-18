@@ -13,6 +13,7 @@ import { MenusPage } from './menus/MenusPage';
 import { ProfilePage } from './profile/ProfileDialog';
 import { RolesPage } from './roles/RolesPage';
 import { UsersPage } from './users/UsersPage';
+import { SocketSupportPage } from './socket/SocketSupportPage';
 
 export default function Home() {
   const workspace = useAdminWorkspace();
@@ -88,6 +89,10 @@ export default function Home() {
           isLoading={workspace.isLoading}
           onRefresh={workspace.loadData}
         />
+      )}
+
+      {workspace.activePage === 'socket-support' && (
+        <SocketSupportPage canSend={hasAction('socket.send')} />
       )}
 
       {workspace.activePage === 'users' && (

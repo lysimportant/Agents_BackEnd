@@ -22,6 +22,7 @@ type Store interface {
 	handlers.MenuStore
 	handlers.ArticleStore
 	handlers.FileStore
+	handlers.SocketStore
 }
 
 func Setup(router *gin.Engine, appStore Store, authService *auth.Service, passwordCodes *verification.PasswordCodeService, cfg config.Config) {
@@ -34,6 +35,8 @@ func Setup(router *gin.Engine, appStore Store, authService *auth.Service, passwo
 
 	api := router.Group("/api")
 	registerAuthRoutes(api, handlers.NewAuthHandler(appStore, authService))
+	socketHandler := handlers.NewSocketHandler(appStore, cfg.UploadDir)
+	registerPublicSocketRoutes(api, socketHandler)
 
 	protected := api.Group("")
 	protected.Use(middleware.RequireAuth(appStore, authService))
@@ -44,4 +47,5 @@ func Setup(router *gin.Engine, appStore Store, authService *auth.Service, passwo
 	registerMenuRoutes(protected, appStore, handlers.NewMenuHandler(appStore))
 	registerArticleRoutes(protected, appStore, handlers.NewArticleHandler(appStore))
 	registerFileRoutes(protected, appStore, handlers.NewFileHandler(appStore, cfg.UploadDir))
+	registerProtectedSocketRoutes(protected, appStore, socketHandler)
 }

@@ -4,6 +4,7 @@
 
 - `backend`: Go + Gin + SQLite API 服务
 - `frontend`: Next.js + TypeScript 企业后台管理界面
+- `Socket 客服`: WebSocket 实时会话、聊天监控、图片/文件/表情发送，以及可嵌入第三方网站的悬浮客服组件
 
 ## 启动后端
 
@@ -13,7 +14,7 @@ go mod tidy
 go run .
 ```
 
-后端默认运行在 `http://localhost:8080`，SQLite 数据库默认保存在 `backend/data/app.db`，上传文件默认保存在 `backend/uploads/`。
+后端默认运行在 `http://localhost:8080`，SQLite 数据库默认保存在 `backend/data/app.db`，普通上传文件默认保存在 `backend/uploads/`，客服聊天附件独立保存在 `backend/uploads/socket/<会话ID>/`。
 
 首次启动会幂等创建表、索引和初始数据；后续启动不会覆盖已有业务数据。预置管理员 `MH/123` 仅在账号不存在时写入，密码使用 bcrypt 哈希保存。
 
@@ -51,7 +52,7 @@ npm run dev
 
 ## API
 
-除 `GET /health` 和 `/api/auth/*` 外，`/api` 下接口都需要先登录并携带后端写入的 HttpOnly Cookie。前端请求默认使用 `credentials: 'include'`。
+除 `GET /health`、`/api/auth/*` 和访客客服入口 `/api/socket/customer*` 外，`/api` 下接口都需要先登录并携带后端写入的 HttpOnly Cookie。访客客服使用服务端生成的随机会话 ID 与访客令牌，令牌只以哈希形式持久化。前端管理请求默认使用 `credentials: 'include'`。
 
 ### 认证接口
 
@@ -67,8 +68,8 @@ npm run dev
 
 动作权限使用稳定的 `resource.action` 编码，前端应按 `actionPermissions` 控制 CRUD 按钮，后端仍会对每个接口独立校验，不能只依赖按钮隐藏：
 
-- 查询/查看：`dashboard.query|view`、`users.query|view`、`departments.query|view`、`roles.query|view`、`menus.query|view`、`articles.query|view`、`files.query|view`。
-- 写动作：`dashboard.create`；各管理资源的 `create`、`update`、`delete`；以及 `users.permissions.update`、`departments.permissions.update`、`roles.permissions.update`、`files.restore`、`files.permanent-delete`。
+- 查询/查看：`dashboard.query|view`、`users.query|view`、`departments.query|view`、`roles.query|view`、`menus.query|view`、`articles.query|view`、`files.query|view`、`socket.query|view`。
+- 写动作：`dashboard.create`；各管理资源的 `create`、`update`、`delete`；以及 `users.permissions.update`、`departments.permissions.update`、`roles.permissions.update`、`files.restore`、`files.permanent-delete`、`socket.send`。
 - `roleCode=super-admin`（超级管理员）与 `roleCode=system-admin`（系统管理员）固定拥有全部当前动作；其他角色默认只有查询/查看动作，管理员可再为普通用户追加个人动作权限。
 - 超级管理员是最高保护角色；只有超级管理员可以创建或分配超级管理员，系统管理员和其他角色不能创建、修改、删除或降级超级管理员。除本人维护 `/api/profile` 外，受控 CRUD、权限配置、文件恢复及彻底删除由动作权限决定。
 
@@ -110,6 +111,8 @@ npm run dev
 - `DELETE /api/menus/:id`: 删除菜单
 
 菜单 JSON 字段：`name`、`code`、`path`、`icon`、`parentId`、`sort`、`status`。
+
+“工作台”是一级分组，默认包含“预览台”（`dashboard`）和“Socket 客服”（`socket-support`）两个二级菜单。已有 `dashboard` 菜单 ID 和授权关系会保留，迁移只补充其工作台父级。
 
 ### 用户菜单权限
 
@@ -183,6 +186,38 @@ npm run dev
 - 删除默认采用可恢复软删除：文件移入回收站但物理上传内容保留，直到用户明确授权永久清理。
 - 服务端会校验存储名和最终路径，防止路径穿越。
 - 公开图片在管理界面中带描述性替代文本与 `ImageObject` 语义；私密图片不会输出该索引标记。真正面向搜索引擎公开收录时仍需部署无需登录的公开详情 URL。
+
+### Socket 在线客服
+
+管理端“工作台 → Socket 客服”会实时列出全部客服会话，显示访客在线状态、最近消息和消息数量；选择会话后可监视完整聊天记录。具有 `socket.send` 动作权限的客服还可以回复文字、表情、图片和文件。管理端连接与历史接口需要 `socket-support` 菜单及相应动作权限：
+
+- `GET /api/socket/admin`: 管理端 WebSocket，推送客户上线、离线和新消息
+- `GET /api/socket/conversations`: 获取全部客服会话
+- `GET /api/socket/conversations/:id/messages`: 获取指定会话历史消息
+- `POST /api/socket/conversations/:id/messages`: 发送文字或表情，Body：`{"messageType":"text","content":"您好"}`
+- `POST /api/socket/conversations/:id/files`: 发送图片或文件，`multipart/form-data` 字段为 `file`
+- `GET /api/socket/conversations/:id/files/:messageId`: 管理端预览附件；增加 `?download=1` 下载
+
+访客组件使用以下公开接口：
+
+- `GET /api/socket/customer`: 访客 WebSocket；首次连接会返回随机会话 ID 和访客令牌，重连时携带二者
+- `POST /api/socket/customer/:id/files`: 访客发送图片或文件，请求头携带 `X-Socket-Visitor-Token`
+- `GET /api/socket/customer/:id/files/:messageId`: 访客读取本会话附件，请求头携带 `X-Socket-Visitor-Token`
+
+可复用悬浮客服组件位于 `frontend/public/socket/socket-customer-widget.js`，API 等公共参数位于 `frontend/public/socket/socket-config.js`。将下面脚本加入任意网站，右下角会出现客服按钮；访客首次点击并连接后，会话 ID 会自动登记到管理端 Socket 客服页面，访客页面 URL 不需要携带 API 参数：
+
+```html
+<script src="http://localhost:3000/socket/socket-config.js"></script>
+<script
+  src="http://localhost:3000/socket/socket-customer-widget.js"
+  data-title="在线客服"
+  data-color="#1677ff"
+  data-position="right"
+  data-session-key="default"
+></script>
+```
+
+`socket-config.js` 中的 `apiBase` 是统一后端配置，本地默认为 `http://localhost:8000`。脚本同时暴露 `window.SocketCustomerWidget.mount(options)`，可在 SPA、CMS 或微前端中手动挂载多个定制实例。同一浏览器默认复用同一个访客会话；为不同站点、账号或窗口设置不同 `data-session-key` / `options.sessionKey`，即可在同一电脑创建多个独立客服会话。管理端可同时接收和切换查看任意数量的访客会话。生产环境应把配置文件中的 `apiBase` 和脚本地址改成实际 HTTPS 地址，并在 `CORS_ALLOWED_ORIGINS` 中明确允许嵌入站点来源。客服附件限制为 32 MiB，并独立存储在 `UPLOAD_DIR/socket/` 分类目录中。
 
 示例请求：
 

@@ -231,7 +231,7 @@ func TestDepartmentAndExtraMenuPermissions(t *testing.T) {
 	expectedDepartment := uniqueIDs(departmentMenuIDs)
 	expectedRole := []int{menuIDsByCode["dashboard"]}
 	expectedExtras := []int{menuIDsByCode["files"]}
-	expectedEffective := uniqueIDs(append(append(append([]int{}, expectedDepartment...), expectedExtras...), menuIDsByCode["content"]))
+	expectedEffective := uniqueIDs(append(append(append([]int{}, expectedDepartment...), expectedExtras...), menuIDsByCode["workspace"], menuIDsByCode["content"]))
 	if !reflect.DeepEqual(detail.DepartmentMenuIDs, expectedDepartment) ||
 		!reflect.DeepEqual(detail.RoleMenuIDs, expectedRole) ||
 		!reflect.DeepEqual(detail.UserMenuIDs, expectedExtras) ||
@@ -253,7 +253,7 @@ func TestDepartmentAndExtraMenuPermissions(t *testing.T) {
 		t.Fatalf("disable department: %s", message)
 	}
 	detail, message = store.GetUserPermissionDetail(user.ID)
-	expectedDisabledEffective := uniqueIDs(append(append(append([]int{}, expectedRole...), expectedExtras...), menuIDsByCode["content"]))
+	expectedDisabledEffective := uniqueIDs(append(append(append([]int{}, expectedRole...), expectedExtras...), menuIDsByCode["workspace"], menuIDsByCode["content"]))
 	if message != "" || !reflect.DeepEqual(detail.DepartmentMenuIDs, expectedDepartment) || !reflect.DeepEqual(detail.EffectiveMenuIDs, expectedDisabledEffective) {
 		t.Fatalf("disabled department still granted permissions: message=%s detail=%+v", message, detail)
 	}
@@ -571,12 +571,15 @@ func TestLegacyMigrationIsAdditive(t *testing.T) {
 	if !ok || editor.RoleID == nil || editor.RoleCode != "content-editor" || editor.Role != "内容编辑" {
 		t.Fatalf("known legacy role was not mapped exactly: %+v", editor)
 	}
-	var dashboardID int
+	var dashboardID, workspaceID int
 	if err := store.db.QueryRow(`SELECT id FROM menus WHERE code='dashboard'`).Scan(&dashboardID); err != nil {
 		t.Fatalf("find dashboard menu: %v", err)
 	}
+	if err := store.db.QueryRow(`SELECT id FROM menus WHERE code='workspace'`).Scan(&workspaceID); err != nil {
+		t.Fatalf("find workspace menu: %v", err)
+	}
 	editorPermissions, message := store.GetUserPermissionDetail(editor.ID)
-	if message != "" || !reflect.DeepEqual(editorPermissions.RoleMenuIDs, []int{dashboardID}) || !reflect.DeepEqual(editorPermissions.EffectiveMenuIDs, []int{dashboardID}) {
+	if message != "" || !reflect.DeepEqual(editorPermissions.RoleMenuIDs, []int{dashboardID}) || !reflect.DeepEqual(editorPermissions.EffectiveMenuIDs, uniqueIDs([]int{workspaceID, dashboardID})) {
 		t.Fatalf("legacy role mapping did not receive the dashboard baseline: message=%s detail=%+v", message, editorPermissions)
 	}
 	custom, ok := store.FindUserByUsername("legacy-custom")
@@ -643,13 +646,13 @@ func TestEffectiveMenusIncludeAncestors(t *testing.T) {
 	for _, menu := range menus {
 		codes[menu.Code] = true
 	}
-	for _, code := range []string{"articles", "content", "users", "system"} {
+	for _, code := range []string{"dashboard", "workspace", "articles", "content", "users", "system"} {
 		if !codes[code] {
 			t.Fatalf("effective menu closure missing %s: %+v", code, codes)
 		}
 	}
 	detail, message := store.GetUserPermissionDetail(user.ID)
-	if message != "" || !reflect.DeepEqual(detail.RoleMenuIDs, []int{menuIDs["dashboard"]}) || len(detail.UserMenuIDs) != 2 || len(detail.EffectiveMenuIDs) != 5 {
+	if message != "" || !reflect.DeepEqual(detail.RoleMenuIDs, []int{menuIDs["dashboard"]}) || len(detail.UserMenuIDs) != 2 || len(detail.EffectiveMenuIDs) != 6 {
 		t.Fatalf("unexpected permission closure detail: message=%s detail=%+v", message, detail)
 	}
 }
@@ -699,7 +702,7 @@ func TestRolePermissionsStatusAndSystemInvariants(t *testing.T) {
 		!reflect.DeepEqual(detail.UserMenuIDs, []int{menuIDs["dashboard"]}) {
 		t.Fatalf("unexpected direct permission layers: %+v", detail)
 	}
-	expectedEnabled := uniqueIDs([]int{menuIDs["dashboard"], menuIDs["system"], menuIDs["users"], menuIDs["content"], menuIDs["articles"]})
+	expectedEnabled := uniqueIDs([]int{menuIDs["workspace"], menuIDs["dashboard"], menuIDs["system"], menuIDs["users"], menuIDs["content"], menuIDs["articles"]})
 	if !reflect.DeepEqual(detail.EffectiveMenuIDs, expectedEnabled) {
 		t.Fatalf("unexpected enabled role effective menus: %+v", detail)
 	}
@@ -709,7 +712,7 @@ func TestRolePermissionsStatusAndSystemInvariants(t *testing.T) {
 		t.Fatalf("disable role: %s", message)
 	}
 	detail, message = store.GetUserPermissionDetail(user.ID)
-	expectedDisabled := uniqueIDs([]int{menuIDs["dashboard"], menuIDs["system"], menuIDs["users"]})
+	expectedDisabled := uniqueIDs([]int{menuIDs["workspace"], menuIDs["dashboard"], menuIDs["system"], menuIDs["users"]})
 	if message != "" || !reflect.DeepEqual(detail.RoleMenuIDs, []int{menuIDs["articles"]}) || !reflect.DeepEqual(detail.EffectiveMenuIDs, expectedDisabled) {
 		t.Fatalf("disabled role still granted permissions: message=%s detail=%+v", message, detail)
 	}
