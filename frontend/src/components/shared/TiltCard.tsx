@@ -30,7 +30,7 @@ export type TiltCardOptions = {
 export type TiltCardProps = HTMLAttributes<HTMLDivElement> & TiltCardOptions;
 
 export const DEFAULT_TILT_CARD_OPTIONS = {
-  maxTilt: 4.5,
+  maxTilt: 5.75,
   scale: 1.01,
   lift: 4,
   smoothing: 0.14,

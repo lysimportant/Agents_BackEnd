@@ -5,6 +5,7 @@ import {
   ApartmentOutlined,
   AppstoreOutlined,
   BgColorsOutlined,
+  BellOutlined,
   DashboardOutlined,
   FileTextOutlined,
   FolderOpenOutlined,
@@ -22,6 +23,7 @@ import {
 } from '@ant-design/icons';
 import {
   Avatar,
+  Badge,
   Breadcrumb,
   Button,
   ConfigProvider,
@@ -39,8 +41,9 @@ import {
 } from 'antd';
 import type { AuthUser, Menu as AdminMenu, PageKey } from '@/src/types/admin';
 import { pageKeys, pageTitles } from '@/src/config/constants';
-import { socketNotificationWebSocketURL } from '@/src/features/chat/socketApi';
-import type { SocketEnvelope } from '@/src/features/chat/types';
+import { listSocketConversations, socketNotificationWebSocketURL } from '@/src/features/chat/socketApi';
+import type { SocketConversation, SocketEnvelope } from '@/src/features/chat/types';
+import { isAdministratorRoleCode } from '@/src/utils/roleAccess';
 import {
   adminThemes,
   applyAdminTheme,
@@ -103,6 +106,25 @@ function getAvatarFallback(user: Pick<AuthUser, 'name' | 'username'>) {
   return Array.from(user.name.trim() || user.username || '?')[0]?.toUpperCase();
 }
 
+function sortHeaderConversations(items: SocketConversation[]) {
+  return [...items].sort((a, b) => Number(b.online) - Number(a.online) || Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+}
+
+function isHeaderConversationActive(conversation: SocketConversation) {
+  return conversation.online && conversation.status === 'open';
+}
+
+function filterHeaderConversations(items: SocketConversation[]) {
+  return sortHeaderConversations(items.filter(isHeaderConversationActive));
+}
+
+function upsertHeaderConversation(items: SocketConversation[], conversation: SocketConversation) {
+  if (!isHeaderConversationActive(conversation)) {
+    return items.filter((item) => item.id !== conversation.id);
+  }
+  return filterHeaderConversations([conversation, ...items.filter((item) => item.id !== conversation.id)]);
+}
+
 export function MainLayout({
   authUser,
   menus,
@@ -120,6 +142,7 @@ export function MainLayout({
   const [themeId, setThemeId] = useState<AdminThemeId>(DEFAULT_THEME_ID);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [headerConversations, setHeaderConversations] = useState<SocketConversation[]>([]);
   const [notificationApi, notificationContextHolder] = notification.useNotification();
 
   useEffect(() => {
@@ -153,11 +176,16 @@ export function MainLayout({
         try {
           const envelope = JSON.parse(String(event.data)) as SocketEnvelope;
           if (envelope.type === 'visitor_online' && envelope.conversation) {
+            setHeaderConversations((current) => upsertHeaderConversation(current, envelope.conversation!));
             notificationApi.success({
               placement: 'bottomRight',
               message: `${envelope.conversation.title || '新咨询'} 用户上线了`,
               description: `会话 ${envelope.conversation.id} 已连接。`,
             });
+          } else if (envelope.type === 'conversation' && envelope.conversation) {
+            setHeaderConversations((current) => upsertHeaderConversation(current, envelope.conversation!));
+          } else if (envelope.type === 'conversation_deleted' && envelope.conversation) {
+            setHeaderConversations((current) => current.filter((item) => item.id !== envelope.conversation!.id));
           } else if (envelope.type === 'account_login' && envelope.user) {
             notificationApi.success({
               placement: 'bottomRight',
@@ -215,6 +243,35 @@ export function MainLayout({
       });
     return keys;
   }, [menus]);
+
+  const canQuerySocketConversations = pageButtons.includes('socket-support') && (
+    isAdministratorRoleCode(authUser.roleCode)
+    || authUser.actionPermissions?.includes('socket.query') === true
+  );
+
+  useEffect(() => {
+    if (!canQuerySocketConversations) {
+      setHeaderConversations([]);
+      return;
+    }
+
+    let active = true;
+    const refreshHeaderConversations = async () => {
+      try {
+        const conversations = await listSocketConversations();
+        if (active) setHeaderConversations(filterHeaderConversations(conversations));
+      } catch {
+        // Keep the last known list during a transient refresh failure.
+      }
+    };
+
+    void refreshHeaderConversations();
+    const refreshTimer = window.setInterval(() => void refreshHeaderConversations(), 20_000);
+    return () => {
+      active = false;
+      window.clearInterval(refreshTimer);
+    };
+  }, [canQuerySocketConversations]);
 
   useEffect(() => {
     if (activePage !== 'profile' && menus.length > 0 && !pageButtons.includes(activePage) && pageButtons[0]) {
@@ -344,6 +401,42 @@ export function MainLayout({
               />
             </div>
             <Space size={10} wrap className="antd-header-actions">
+              {canQuerySocketConversations && (
+                <Popover
+                  trigger={['hover', 'click']}
+                  placement="bottomRight"
+                  title={`在线聊天（${headerConversations.length}）`}
+                  content={(
+                    <div className="header-chat-list" aria-label="聊天标题列表">
+                      {headerConversations.length === 0 ? (
+                        <Typography.Text type="secondary">暂无在线聊天会话</Typography.Text>
+                      ) : headerConversations.map((conversation) => (
+                        <button
+                          key={conversation.id}
+                          type="button"
+                          className="header-chat-item"
+                          onClick={() => navigate('socket-support')}
+                        >
+                          <span className={`header-chat-status${conversation.online ? ' is-online' : ''}`} aria-hidden="true" />
+                          <span>
+                            <strong>{conversation.title || '新咨询'}</strong>
+                            <small>{conversation.online ? '在线' : '离线'} · {conversation.visitorName || conversation.id}</small>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                >
+                  <Badge count={headerConversations.length} overflowCount={99} size="small">
+                    <Button
+                      type="text"
+                      className="antd-chat-notification"
+                      aria-label={`在线聊天，共 ${headerConversations.length} 个会话`}
+                      icon={<BellOutlined />}
+                    />
+                  </Badge>
+                </Popover>
+              )}
               <Popover
                 trigger={['hover', 'click']}
                 placement="bottomRight"
