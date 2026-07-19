@@ -208,11 +208,11 @@ npm run dev
 - `GET /api/socket/customer`: 访客 WebSocket；首次连接会返回随机会话 ID 和访客令牌，重连时携带二者
 - `PUT /api/socket/customer/:id/title`: 访客修改会话标题，请求头携带 `X-Socket-Visitor-Token`
 - `DELETE /api/socket/customer/:id`: 访客软删除自己的会话，请求头携带 `X-Socket-Visitor-Token`
-- `POST /api/socket/customer/:id/close`: 访客离开页面时关闭会话，使用 `sendBeacon` 提交访客令牌
+- `POST /api/socket/customer/:id/close`: 访客显式结束咨询时关闭会话
 - `POST /api/socket/customer/:id/files`: 访客发送图片或文件，请求头携带 `X-Socket-Visitor-Token`
 - `GET /api/socket/customer/:id/files/:messageId`: 访客读取本会话附件，请求头携带 `X-Socket-Visitor-Token`
 
-新会话在服务端按来源 IP 限制为每分钟最多 3 个，独立聊天页还会同步禁用频繁点击。访客发出的第一条文字消息会自动成为会话标题，之后可在咨询页手动修改；关闭或刷新正在进行的咨询时浏览器会显示离开确认，确认离开后立即关闭会话。网络意外中断时保留 10 秒重连窗口，超时后自动关闭，关闭后的访客链接不能重新接入。所有登录页面都会连接全局通知 WebSocket，并在右下角提示访客上线；访客端会在右下角提示客服接入，发送、刷新、改名和删除等操作结果使用页面顶部居中的 Message 提示。
+新会话在服务端按来源 IP 限制为每分钟最多 3 个，独立聊天页还会同步禁用频繁点击。访客发出的第一条文字消息会自动成为会话标题，之后可在咨询页手动修改；刷新页面时会在 10 秒断线宽限内自动恢复原会话，不会被误判为关闭，持续离线超过宽限时间后才关闭且原访客链接不能重新接入。意外断线弹窗可选择继续重连、开启新咨询或结束当前咨询。所有登录页面都会连接全局通知 WebSocket，并在右下角提示访客上线和后台账号登录；刚完成登录的用户本人也会收到登录成功提示。用户、部门、角色、菜单、文章、文件、个人资料及 Socket 等主要业务操作统一使用页面顶部居中的 Message 反馈。
 
 可复用悬浮客服组件位于 `frontend/public/socket/socket-customer-widget.js`，API 等公共参数位于 `frontend/public/socket/socket-config.js`。将下面脚本加入任意网站，右下角会出现客服按钮；访客首次点击并连接后，会话 ID 会自动登记到管理端 Socket 客服页面，访客页面 URL 不需要携带 API 参数：
 

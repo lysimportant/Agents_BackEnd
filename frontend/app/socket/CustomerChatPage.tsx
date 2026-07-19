@@ -102,20 +102,6 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
   }, [conversationId, deleted]);
 
   useEffect(() => {
-    const closeConversationOnLeave = () => {
-      if (!conversationId || !tokenRef.current || deleted || intentionalCloseRef.current) return;
-      const form = new FormData();
-      form.set('visitorToken', tokenRef.current);
-      intentionalCloseRef.current = navigator.sendBeacon(
-        `${API_BASE_URL}/api/socket/customer/${encodeURIComponent(conversationId)}/close`,
-        form,
-      );
-    };
-    window.addEventListener('pagehide', closeConversationOnLeave);
-    return () => window.removeEventListener('pagehide', closeConversationOnLeave);
-  }, [conversationId, deleted]);
-
-  useEffect(() => {
     let active = true;
     let reconnectTimer = 0;
     intentionalCloseRef.current = false;
@@ -396,10 +382,21 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
       <Modal
         open={disconnectDialogOpen && !deleted}
         title="咨询连接已意外关闭"
-        okText="结束咨询"
-        cancelText="继续等待重连"
-        okButtonProps={{ danger: true, loading: deleting }}
-        onOk={() => void deleteConversation()}
+        footer={(
+          <Space wrap>
+            <Button onClick={() => setDisconnectDialogOpen(false)}>继续等待重连</Button>
+            <Button
+              type="primary"
+              disabled={startingNew || newConsultationRetrySeconds > 0}
+              loading={startingNew}
+              onClick={() => {
+                setDisconnectDialogOpen(false);
+                startNewConsultation();
+              }}
+            >开启新咨询</Button>
+            <Button danger loading={deleting} onClick={() => void deleteConversation()}>结束当前咨询</Button>
+          </Space>
+        )}
         onCancel={() => setDisconnectDialogOpen(false)}
         closable={false}
         maskClosable={false}

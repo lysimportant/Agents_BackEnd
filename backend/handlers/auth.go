@@ -16,12 +16,21 @@ type AuthStore interface {
 }
 
 type AuthHandler struct {
-	store    AuthStore
-	sessions *auth.Service
+	store       AuthStore
+	sessions    *auth.Service
+	loginEvents LoginEventPublisher
 }
 
-func NewAuthHandler(store AuthStore, sessions *auth.Service) *AuthHandler {
-	return &AuthHandler{store: store, sessions: sessions}
+type LoginEventPublisher interface {
+	PublishUserLogin(user models.AuthUser)
+}
+
+func NewAuthHandler(store AuthStore, sessions *auth.Service, publishers ...LoginEventPublisher) *AuthHandler {
+	var loginEvents LoginEventPublisher
+	if len(publishers) > 0 {
+		loginEvents = publishers[0]
+	}
+	return &AuthHandler{store: store, sessions: sessions, loginEvents: loginEvents}
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {
@@ -59,7 +68,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	h.sessions.SetSessionCookie(c, sessionID, expiresAt)
-	c.JSON(http.StatusOK, gin.H{"user": auth.ToAuthUser(user, actionPermissions)})
+	authUser := auth.ToAuthUser(user, actionPermissions)
+	c.JSON(http.StatusOK, gin.H{"user": authUser})
+	if h.loginEvents != nil {
+		h.loginEvents.PublishUserLogin(authUser)
+	}
 }
 
 func (h *AuthHandler) GetSession(c *gin.Context) {

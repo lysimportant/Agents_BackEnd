@@ -23,7 +23,7 @@ import {
   StrikethroughOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons';
-import { Alert, Button, Card, Dropdown, Empty, Input, Modal, Popconfirm, Select, Space, Statistic, Switch, Tag, Tooltip } from 'antd';
+import { Alert, App, Button, Card, Dropdown, Empty, Input, Modal, Popconfirm, Select, Space, Statistic, Switch, Tag, Tooltip } from 'antd';
 import type { Article, ArticleForm } from '../types/admin';
 import type { ResourceActionAccess } from '../lib/actionPermissions';
 import { API_BASE_URL, articleStatusOptions, MAX_UPLOAD_SIZE } from '../lib/constants';
@@ -50,6 +50,7 @@ type ArticlesPageProps = {
 };
 
 export function ArticlesPage(props: ArticlesPageProps) {
+  const { message: feedbackMessage } = App.useApp();
   const {
     filteredArticles, actions, articleForm, editingArticleId, articleKeyword, articleStatus, isSavingArticle,
     onArticleFormChange, onSubmitArticle, onResetArticleForm, onArticleKeywordChange,
@@ -77,10 +78,13 @@ export function ArticlesPage(props: ArticlesPageProps) {
     setExportFeedback(null);
     setExportingArticle({ articleId: article.id, format });
     try {
-      const message = await exportArticle(article, format);
-      setExportFeedback({ type: 'success', message });
+      const exportedMessage = await exportArticle(article, format);
+      setExportFeedback({ type: 'success', message: exportedMessage });
+      void feedbackMessage.success(exportedMessage);
     } catch (error) {
-      setExportFeedback({ type: 'error', message: error instanceof Error ? error.message : `《${article.title}》导出失败，请重试。` });
+      const errorMessage = error instanceof Error ? error.message : `《${article.title}》导出失败，请重试。`;
+      setExportFeedback({ type: 'error', message: errorMessage });
+      void feedbackMessage.error(errorMessage);
     } finally {
       setExportingArticle(null);
     }

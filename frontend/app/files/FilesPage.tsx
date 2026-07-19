@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent, type WheelEvent } from 'react';
 import {
   Button,
+  App,
   Card,
   Drawer,
   Empty,
@@ -56,7 +57,7 @@ type FilesPageProps = {
   onDeleteFile: (fileId: number) => void;
   onRestoreFile: (fileId: number) => void;
   onLoadRecycleFiles: () => Promise<ManagedFile[]>;
-  onRefreshFiles: () => Promise<void>;
+  onRefreshFiles: () => Promise<unknown>;
 };
 
 type FileKind = 'all' | 'image' | 'pdf' | 'word' | 'spreadsheet' | 'presentation' | 'archive' | 'executable' | 'text' | 'other';
@@ -77,6 +78,7 @@ const FILE_KIND_OPTIONS: FileKindMeta[] = [
 const CATEGORY_PRESETS = ['制度文档', '图片素材', '合同资料', '报表台账', '安装包', '培训资料', '其它'];
 
 export function FilesPage(props: FilesPageProps) {
+  const { message } = App.useApp();
   const {
     actions,
     filteredFiles, recycleFiles, fileForm, selectedUploadFile, editingFileId, fileKeyword, isSavingFile,
@@ -126,7 +128,9 @@ export function FilesPage(props: FilesPageProps) {
       const content = await readTextFileContent(file.id);
       setTextEditorContent(content);
     } catch (error) {
-      setTextEditorError(error instanceof Error ? error.message : '读取文本内容失败');
+      const errorMessage = error instanceof Error ? error.message : '读取文本内容失败';
+      setTextEditorError(errorMessage);
+      void message.error(errorMessage);
     } finally {
       setIsTextLoading(false);
     }
@@ -146,8 +150,11 @@ export function FilesPage(props: FilesPageProps) {
       await onRefreshFiles();
       onResetFileForm();
       setTextEditorFile(null);
+      void message.success('文件内容保存完成');
     } catch (error) {
-      setTextEditorError(error instanceof Error ? error.message : '保存文件失败');
+      const errorMessage = error instanceof Error ? error.message : '保存文件失败';
+      setTextEditorError(errorMessage);
+      void message.error(errorMessage);
     } finally {
       setIsTextSaving(false);
     }
@@ -160,8 +167,11 @@ export function FilesPage(props: FilesPageProps) {
       await permanentlyDeleteFile(fileId);
       await onLoadRecycleFiles();
       await onRefreshFiles();
+      void message.success('文件永久删除完成');
     } catch (error) {
-      setRecycleError(error instanceof Error ? error.message : '永久删除文件失败');
+      const errorMessage = error instanceof Error ? error.message : '永久删除文件失败';
+      setRecycleError(errorMessage);
+      void message.error(errorMessage);
     } finally {
       setDeletingPermanentId(null);
     }

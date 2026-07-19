@@ -87,7 +87,7 @@ export default function Home() {
           articlesCount={workspace.articles.length}
           publishedArticles={workspace.articles.filter((article) => article.status === '已发布').length}
           isLoading={workspace.isLoading}
-          onRefresh={workspace.loadData}
+          onRefresh={workspace.refreshData}
         />
       )}
 
@@ -120,7 +120,7 @@ export default function Home() {
           isSavingUser={workspace.isSavingUser}
           isSavingPermission={workspace.isSavingPermission}
           isSavingActionPermission={workspace.isSavingActionPermission}
-          onRefresh={workspace.loadData}
+          onRefresh={workspace.refreshData}
           onUserFormChange={workspace.setUserForm}
           onSubmitUser={workspace.handleSubmitUser}
           onResetUserForm={workspace.resetUserForm}
@@ -142,7 +142,7 @@ export default function Home() {
           isLoading={workspace.isLoading}
           isSaving={workspace.isSavingRole}
           isSavingPermissions={workspace.isSavingRolePermission}
-          onRefresh={workspace.loadData}
+          onRefresh={workspace.refreshData}
           onSave={workspace.handleSaveRole}
           onDelete={workspace.handleDeleteRole}
           onLoadPermissions={workspace.loadRolePermissions}
@@ -160,7 +160,7 @@ export default function Home() {
           editingMenuId={workspace.editingMenuId}
           isLoading={workspace.isLoading}
           isSavingMenu={workspace.isSavingMenu}
-          onRefresh={workspace.loadData}
+          onRefresh={workspace.refreshData}
           onMenuFormChange={workspace.setMenuForm}
           onSubmitMenu={workspace.handleSubmitMenu}
           onResetMenuForm={workspace.resetMenuForm}
@@ -178,7 +178,7 @@ export default function Home() {
           isLoading={workspace.isLoading}
           isSaving={workspace.isSavingDepartment}
           isSavingPermissions={workspace.isSavingDepartmentPermission}
-          onRefresh={workspace.loadData}
+          onRefresh={workspace.refreshData}
           onSave={workspace.handleSaveDepartment}
           onDelete={workspace.handleDeleteDepartment}
           onLoadPermissions={workspace.loadDepartmentPermissions}

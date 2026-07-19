@@ -55,6 +55,7 @@ type socketEnvelope struct {
 	Messages      []models.SocketMessage      `json:"messages,omitempty"`
 	VisitorToken  string                      `json:"visitorToken,omitempty"`
 	ActorName     string                      `json:"actorName,omitempty"`
+	User          *models.AuthUser            `json:"user,omitempty"`
 	Error         string                      `json:"error,omitempty"`
 }
 
@@ -77,6 +78,10 @@ func NewSocketHandler(store SocketStore, uploadDir string) *SocketHandler {
 		hub:                     newSocketHub(),
 		newConversationAttempts: map[string][]time.Time{},
 	}
+}
+
+func (h *SocketHandler) PublishUserLogin(user models.AuthUser) {
+	h.hub.broadcastObservers(socketEnvelope{Type: "account_login", User: &user})
 }
 
 func (h *SocketHandler) CustomerSocket(c *gin.Context) {

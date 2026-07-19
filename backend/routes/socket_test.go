@@ -6,13 +6,16 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"collector-backend/auth"
 	"collector-backend/models"
+	"github.com/gorilla/websocket"
 )
 
 func TestSocketSupportRoutesAndSendPermission(t *testing.T) {
@@ -214,5 +217,62 @@ func TestSocketNotificationsAvailableToAnyLoggedInUser(t *testing.T) {
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("logged-in user should reach websocket upgrade without socket menu, status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAccountLoginBroadcastsToExistingAuthenticatedUsers(t *testing.T) {
+	router, store, _ := setupTestRouter(t)
+	var viewerRoleID int
+	for _, role := range store.ListRoles() {
+		if role.Code == "viewer" {
+			viewerRoleID = role.ID
+		}
+	}
+	canLogin := true
+	user, message := store.CreateUser(models.UserRequest{
+		Username: "wang-qiang", Name: "王强", RoleID: &viewerRoleID, Status: "在岗", CanLogin: &canLogin,
+	}, auth.MustHashPassword("pass1234"))
+	if message != "" {
+		t.Fatalf("create login broadcast user: %s", message)
+	}
+
+	server := httptest.NewServer(router)
+	defer server.Close()
+	jar, _ := cookiejar.New(nil)
+	adminClient := &http.Client{Jar: jar}
+	loginResponse, err := adminClient.Post(server.URL+"/api/auth/login", "application/json", strings.NewReader(`{"username":"MH","password":"123"}`))
+	if err != nil || loginResponse.StatusCode != http.StatusOK {
+		t.Fatalf("login observer admin: response=%v err=%v", loginResponse, err)
+	}
+	_ = loginResponse.Body.Close()
+	serverURL, _ := url.Parse(server.URL)
+	headers := http.Header{}
+	for _, cookie := range jar.Cookies(serverURL) {
+		headers.Add("Cookie", cookie.String())
+	}
+	connection, response, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/api/socket/notifications", headers)
+	if err != nil {
+		if response != nil {
+			_ = response.Body.Close()
+		}
+		t.Fatalf("connect notification observer: %v", err)
+	}
+	defer connection.Close()
+
+	loginResponse, err = http.Post(server.URL+"/api/auth/login", "application/json", strings.NewReader(`{"username":"wang-qiang","password":"pass1234"}`))
+	if err != nil || loginResponse.StatusCode != http.StatusOK {
+		t.Fatalf("login broadcast user: response=%v err=%v", loginResponse, err)
+	}
+	_ = loginResponse.Body.Close()
+	_ = connection.SetReadDeadline(time.Now().Add(3 * time.Second))
+	var envelope struct {
+		Type string          `json:"type"`
+		User models.AuthUser `json:"user"`
+	}
+	if err := connection.ReadJSON(&envelope); err != nil {
+		t.Fatalf("read login broadcast: %v", err)
+	}
+	if envelope.Type != "account_login" || envelope.User.ID != user.ID || envelope.User.Name != "王强" {
+		t.Fatalf("unexpected login broadcast: %+v", envelope)
 	}
 }

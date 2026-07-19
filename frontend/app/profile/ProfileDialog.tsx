@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { LockOutlined, MailOutlined, PhoneOutlined, SafetyCertificateOutlined, UserOutlined } from '@ant-design/icons';
-import { Alert, Avatar, Button, Input, InputNumber, Modal, Skeleton, Tag } from 'antd';
+import { Alert, App, Avatar, Button, Input, InputNumber, Modal, Skeleton, Tag } from 'antd';
 import { API_BASE_URL } from '../lib/constants';
 import { requestWithSession } from '../lib/api';
 import type { AuthUser, ProfileForm, User } from '../types/admin';
@@ -51,6 +51,7 @@ async function requestProfile(userId: number, init: RequestInit = {}) {
 }
 
 export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfilePageProps) {
+  const { message } = App.useApp();
   const [profile, setProfile] = useState<User | null>(null);
   const [form, setForm] = useState<ProfileForm>(() => toProfileForm(authUser));
   const [passwordForm, setPasswordForm] = useState<PasswordForm>({ code: '', newPassword: '', confirmPassword: '' });
@@ -112,8 +113,11 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
       setProfile(user);
       setForm(toProfileForm(user));
       onUpdated(user);
+      void message.success('个人资料保存完成');
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : '保存个人资料失败');
+      const errorMessage = saveError instanceof Error ? saveError.message : '保存个人资料失败';
+      setError(errorMessage);
+      void message.error(errorMessage);
     } finally {
       setIsSaving(false);
     }
@@ -131,8 +135,11 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
       });
       if (!response.ok) throw new Error(await parseProfileError(response, '发送验证码失败'));
       setPasswordMessage('验证码已发送到当前绑定邮箱，3 分钟内有效。');
+      void message.success('验证码发送完成');
     } catch (sendError) {
-      setPasswordError(sendError instanceof Error ? sendError.message : '发送验证码失败');
+      const errorMessage = sendError instanceof Error ? sendError.message : '发送验证码失败';
+      setPasswordError(errorMessage);
+      void message.error(errorMessage);
     } finally {
       setIsSendingCode(false);
     }
@@ -161,9 +168,12 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
       setPasswordForm({ code: '', newPassword: '', confirmPassword: '' });
       setPasswordMessage('密码已修改，请使用新密码重新登录。');
       setPasswordDialogOpen(false);
+      void message.success('密码修改完成');
       onPasswordChanged();
     } catch (changeError) {
-      setPasswordError(changeError instanceof Error ? changeError.message : '修改密码失败');
+      const errorMessage = changeError instanceof Error ? changeError.message : '修改密码失败';
+      setPasswordError(errorMessage);
+      void message.error(errorMessage);
     } finally {
       setIsChangingPassword(false);
     }

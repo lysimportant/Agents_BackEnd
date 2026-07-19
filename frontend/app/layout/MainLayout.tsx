@@ -158,6 +158,12 @@ export function MainLayout({
               message: `${envelope.conversation.title || '新咨询'} 用户上线了`,
               description: `会话 ${envelope.conversation.id} 已连接。`,
             });
+          } else if (envelope.type === 'account_login' && envelope.user) {
+            notificationApi.success({
+              placement: 'bottomRight',
+              message: `${envelope.user.name || envelope.user.username} 登录了`,
+              description: `账号 ${envelope.user.username} 已进入系统。`,
+            });
           }
         } catch {
           return;

@@ -34,8 +34,8 @@ func Setup(router *gin.Engine, appStore Store, authService *auth.Service, passwo
 	})
 
 	api := router.Group("/api")
-	registerAuthRoutes(api, handlers.NewAuthHandler(appStore, authService))
 	socketHandler := handlers.NewSocketHandler(appStore, cfg.UploadDir)
+	registerAuthRoutes(api, handlers.NewAuthHandler(appStore, authService, socketHandler))
 	registerPublicSocketRoutes(api, socketHandler)
 
 	protected := api.Group("")

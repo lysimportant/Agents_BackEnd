@@ -2,6 +2,7 @@
 
 import type { ChangeEvent, FormEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
+import { App } from 'antd';
 import type {
   Article,
   ArticleForm,
@@ -78,6 +79,7 @@ function getAccessiblePages(menus: Menu[]) {
 }
 
 export function useAdminWorkspace() {
+  const { message: globalMessage, notification: globalNotification } = App.useApp();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [loginForm, setLoginForm] = useState<LoginForm>({ username: 'MH', password: '123' });
@@ -235,11 +237,18 @@ export function useAdminWorkspace() {
         setUserActionCodes([]);
         setEffectiveActionCodes([]);
       }
+      return true;
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : '加载数据失败');
+      const message = loadError instanceof Error ? loadError.message : '加载数据失败';
+      setError(message);
+      return false;
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const refreshData = async () => {
+    if (await loadData()) void globalMessage.success('刷新完成');
   };
 
   useEffect(() => {
@@ -297,6 +306,10 @@ export function useAdminWorkspace() {
     }
   }, [activePage, authUser]);
 
+  useEffect(() => {
+    if (error) void globalMessage.error(error);
+  }, [error, globalMessage]);
+
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoggingIn(true);
@@ -313,8 +326,15 @@ export function useAdminWorkspace() {
       const payload = (await response.json()) as { user: AuthUser };
       setAuthUser(payload.user);
       setLoginForm({ username: 'MH', password: '123' });
+      globalNotification.success({
+        placement: 'bottomRight',
+        message: `${payload.user.name || payload.user.username} 登录成功`,
+        description: `账号 ${payload.user.username} 已进入系统。`,
+      });
     } catch (loginErrorValue) {
-      setLoginError(loginErrorValue instanceof Error ? loginErrorValue.message : '登录失败');
+      const message = loginErrorValue instanceof Error ? loginErrorValue.message : '登录失败';
+      setLoginError(message);
+      void globalMessage.error(message);
     } finally {
       setIsLoggingIn(false);
     }
@@ -340,6 +360,7 @@ export function useAdminWorkspace() {
     setRoleActionCodes([]);
     setUserActionCodes([]);
     setEffectiveActionCodes([]);
+    void globalMessage.success('已退出登录');
   };
 
   const resetUserForm = () => {
@@ -381,6 +402,7 @@ export function useAdminWorkspace() {
       }
       resetUserForm();
       await loadData();
+      void globalMessage.success(editingUserId ? '用户修改完成' : '用户创建完成');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : '保存用户失败');
     } finally {
@@ -423,6 +445,7 @@ export function useAdminWorkspace() {
       setEffectiveActionCodes([]);
     }
     await loadData();
+    void globalMessage.success('用户删除完成');
   };
 
   const handleSelectUser = async (userId: number) => {
@@ -476,6 +499,7 @@ export function useAdminWorkspace() {
         setEffectiveMenuIds([...new Set([...departmentMenuIds, ...roleMenuIds, ...savedIds])]);
         setError(refreshError instanceof Error ? `权限已保存，但刷新有效权限失败：${refreshError.message}` : '权限已保存，但刷新有效权限失败');
       }
+      void globalMessage.success('菜单权限保存完成');
       return true;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : '保存权限失败');
@@ -516,6 +540,7 @@ export function useAdminWorkspace() {
         setEffectiveActionCodes([...new Set([...roleActionCodes, ...savedCodes])]);
         setError(refreshError instanceof Error ? `按钮权限已保存，但刷新有效权限失败：${refreshError.message}` : '按钮权限已保存，但刷新有效权限失败');
       }
+      void globalMessage.success('按钮权限保存完成');
       return true;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : '保存按钮权限失败');
@@ -536,6 +561,7 @@ export function useAdminWorkspace() {
       });
       if (!response.ok) throw new Error(await parseError(response, '保存部门失败'));
       await loadData();
+      void globalMessage.success(departmentId ? '部门修改完成' : '部门创建完成');
       return true;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : '保存部门失败');
@@ -553,6 +579,7 @@ export function useAdminWorkspace() {
       return false;
     }
     await loadData();
+    void globalMessage.success('部门删除完成');
     return true;
   };
 
@@ -595,6 +622,7 @@ export function useAdminWorkspace() {
       });
       if (!response.ok) throw new Error(await parseError(response, '保存部门权限失败'));
       await loadData();
+      void globalMessage.success('部门权限保存完成');
       return true;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : '保存部门权限失败');
@@ -615,6 +643,7 @@ export function useAdminWorkspace() {
       });
       if (!response.ok) throw new Error(await parseError(response, '保存角色失败'));
       await loadData();
+      void globalMessage.success(roleId ? '角色修改完成' : '角色创建完成');
       return true;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : '保存角色失败');
@@ -633,6 +662,7 @@ export function useAdminWorkspace() {
         return false;
       }
       await loadData();
+      void globalMessage.success('角色删除完成');
       return true;
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : '删除角色失败');
@@ -684,6 +714,7 @@ export function useAdminWorkspace() {
       });
       if (!response.ok) throw new Error(await parseError(response, '保存角色权限失败'));
       await loadData();
+      void globalMessage.success('角色权限保存完成');
       return true;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : '保存角色权限失败');
@@ -708,6 +739,7 @@ export function useAdminWorkspace() {
       }
       resetMenuForm();
       await loadData();
+      void globalMessage.success(editingMenuId ? '菜单修改完成' : '菜单创建完成');
       return true;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : '保存菜单失败');
@@ -731,6 +763,7 @@ export function useAdminWorkspace() {
     setSelectedMenuIds((current) => current.filter((id) => id !== menuId));
     setRoleMenuIds((current) => current.filter((id) => id !== menuId));
     await loadData();
+    void globalMessage.success('菜单删除完成');
   };
 
   const handleSubmitArticle = async (event: FormEvent<HTMLFormElement>) => {
@@ -748,6 +781,7 @@ export function useAdminWorkspace() {
       }
       resetArticleForm();
       await loadData();
+      void globalMessage.success(editingArticleId ? '文章修改完成' : '文章创建完成');
       return true;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : '保存文章失败');
@@ -790,6 +824,7 @@ export function useAdminWorkspace() {
       return;
     }
     await loadData();
+    void globalMessage.success(nextArticle.status === '已发布' ? '文章发布完成' : '文章下架完成');
   };
 
   const handleDeleteArticle = async (articleId: number) => {
@@ -799,6 +834,7 @@ export function useAdminWorkspace() {
       return;
     }
     await loadData();
+    void globalMessage.success('文章删除完成');
   };
 
   const handleSelectUploadFile = (event: ChangeEvent<HTMLInputElement>) => {
@@ -841,6 +877,7 @@ export function useAdminWorkspace() {
       }
       resetFileForm();
       await loadData();
+      void globalMessage.success(editingFileId ? '文件信息修改完成' : '文件上传完成');
       return true;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : '保存文件失败');
@@ -863,6 +900,7 @@ export function useAdminWorkspace() {
 
   const handleDownloadFile = (fileId: number) => {
     window.open(`${API_BASE_URL}/api/files/${fileId}/download`, '_blank', 'noopener,noreferrer');
+    void globalMessage.success('已开始下载文件');
   };
 
   const handleDeleteFile = async (fileId: number) => {
@@ -874,6 +912,7 @@ export function useAdminWorkspace() {
     }
     try {
       await Promise.all([loadData(), loadRecycleFiles()]);
+      void globalMessage.success('文件已移入回收站');
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : '文件已移入回收站，但列表刷新失败');
     }
@@ -888,6 +927,7 @@ export function useAdminWorkspace() {
     }
     try {
       await Promise.all([loadData(), loadRecycleFiles()]);
+      void globalMessage.success('文件恢复完成');
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : '文件已恢复，但列表刷新失败');
     }
@@ -965,6 +1005,7 @@ export function useAdminWorkspace() {
     setArticleStatus,
     setFileKeyword,
     loadData,
+    refreshData,
     handleLogin,
     handleLogout,
     resetUserForm,

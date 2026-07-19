@@ -1,3 +1,5 @@
+import type { AuthUser } from '../types/admin';
+
 export type SocketConversation = {
   id: string;
   visitorName: string;
@@ -25,12 +27,13 @@ export type SocketMessage = {
 };
 
 export type SocketEnvelope = {
-  type: 'conversations' | 'conversation' | 'conversation_deleted' | 'agent_joined' | 'visitor_online' | 'message' | 'history' | 'session' | 'error';
+  type: 'conversations' | 'conversation' | 'conversation_deleted' | 'agent_joined' | 'visitor_online' | 'account_login' | 'message' | 'history' | 'session' | 'error';
   conversation?: SocketConversation;
   conversations?: SocketConversation[];
   message?: SocketMessage;
   messages?: SocketMessage[];
   visitorToken?: string;
   actorName?: string;
+  user?: AuthUser;
   error?: string;
 };
