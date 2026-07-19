@@ -2,6 +2,10 @@
 
 ## 适用范围
 
+## 后端新增功能说明
+
+新增接口按 `models -> repository -> handlers -> routes` 顺序实现：模型定义数据契约，repository 负责 SQLite 持久化，handler 负责鉴权、参数校验和响应，routes 负责路径及权限中间件绑定。涉及菜单时同步 `repository/sqlite_store.go`，涉及动作权限时同步 `permissions/actions.go`；前端请求封装放在 `frontend/src/services/`，页面挂载和状态编排放在 `frontend/app/page.tsx` 与 `frontend/src/features/workspace/`。
+
 本文件适用于 `backend/` 及其所有子目录，并补充仓库根目录的 `AGENTS.md`。
 
 ## 目录职责

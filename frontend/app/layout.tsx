@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import { AntdRegistry } from '@ant-design/nextjs-registry';
-import { TiltCardEffects } from './components/TiltCardEffects';
-import { GlobalFeedbackProvider } from './components/GlobalFeedbackProvider';
-import { ADMIN_THEME_BOOTSTRAP_SCRIPT } from './theme/themes';
+import { TiltCardEffects } from '@/src/components/shared/TiltCardEffects';
+import { GlobalFeedbackProvider } from '@/src/components/shared/GlobalFeedbackProvider';
+import { ADMIN_THEME_BOOTSTRAP_SCRIPT } from '@/src/theme/themes';
 import './globals.css';
 
 const siteUrl = new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000');

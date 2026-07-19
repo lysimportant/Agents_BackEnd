@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { CustomerChatPage } from '../../socket/CustomerChatPage';
+import { CustomerChatPage } from '@/src/features/chat/CustomerChatPage';
 
 export const metadata: Metadata = {
   title: '客服咨询',

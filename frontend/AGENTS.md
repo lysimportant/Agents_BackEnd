@@ -1,5 +1,13 @@
 # frontend/AGENTS.md
 
+## 目录与开发流程
+
+前端目录按职责组织：`app/` 只保留 Next.js App Router 路由入口、全局布局和全局样式；`src/admin-pages/` 存放管理页面；`src/features/` 存放跨页面业务功能；`src/components/` 存放共享组件；`src/services/` 存放 API 请求与后端服务封装；`src/utils/` 存放无状态工具；`src/config/` 存放常量；`src/types/` 存放共享类型；`src/theme/` 存放主题；`src/styles/` 存放全局增强样式。管理页面目录不能命名为 `src/pages/`，避免与 Next.js Pages Router 冲突。
+
+新增管理页面时，在 `src/admin-pages/<domain>/` 创建页面组件；在 `src/types/admin.ts` 与 `src/config/constants.ts` 增加类型、PageKey、标题及默认表单；在后端 `repository/sqlite_store.go` 增加菜单种子；然后在 `app/page.tsx` 按 `activePage` 挂载，并在 `src/components/layout/MainLayout.tsx` 补充导航图标映射。页面数据加载、保存、删除和错误状态统一放在 `src/features/workspace/useAdminWorkspace.ts`，再通过 props 传给页面。
+
+新增后端接口时，在 `backend/models/` 定义请求/响应模型，在 `backend/handlers/<domain>.go` 编写 handler，在 `backend/repository/<domain>.go` 编写持久化逻辑，在 `backend/routes/<domain>.go` 注册路由并绑定认证、菜单和动作权限。前端在 `src/services/` 增加请求函数并复用 `requestWithSession`，同步更新类型、权限和 `README.md`。后端至少执行 `go test ./...`、`go vet ./...`，前端执行严格类型检查和生产构建。
+
 ## 适用范围
 
 本文件适用于 `frontend/` 及其所有子目录，并补充仓库根目录的 `AGENTS.md`。

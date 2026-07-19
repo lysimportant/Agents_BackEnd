@@ -1,19 +1,19 @@
 ﻿'use client';
 
-import { ArticlesPage } from './articles/ArticlesPage';
-import type { ResourceActionAccess } from './lib/actionPermissions';
-import { isAdministratorRoleCode } from './lib/roleAccess';
-import { AuthPage } from './auth/AuthPage';
-import { DashboardPage } from './dashboard/DashboardPage';
-import { DepartmentsPage } from './departments/DepartmentsPage';
-import { FilesPage } from './files/FilesPage';
-import { useAdminWorkspace } from './hooks/useAdminWorkspace';
-import { MainLayout } from './layout/MainLayout';
-import { MenusPage } from './menus/MenusPage';
-import { ProfilePage } from './profile/ProfileDialog';
-import { RolesPage } from './roles/RolesPage';
-import { UsersPage } from './users/UsersPage';
-import { SocketSupportPage } from './socket/SocketSupportPage';
+import { ArticlesPage } from '@/src/admin-pages/articles/ArticlesPage';
+import type { ResourceActionAccess } from '@/src/utils/actionPermissions';
+import { isAdministratorRoleCode } from '@/src/utils/roleAccess';
+import { AuthPage } from '@/src/admin-pages/auth/AuthPage';
+import { DashboardPage } from '@/src/admin-pages/dashboard/DashboardPage';
+import { DepartmentsPage } from '@/src/admin-pages/departments/DepartmentsPage';
+import { FilesPage } from '@/src/admin-pages/files/FilesPage';
+import { useAdminWorkspace } from '@/src/features/workspace/useAdminWorkspace';
+import { MainLayout } from '@/src/components/layout/MainLayout';
+import { MenusPage } from '@/src/admin-pages/menus/MenusPage';
+import { ProfilePage } from '@/src/admin-pages/profile/ProfileDialog';
+import { RolesPage } from '@/src/admin-pages/roles/RolesPage';
+import { UsersPage } from '@/src/admin-pages/users/UsersPage';
+import { SocketSupportPage } from '@/src/features/chat/SocketSupportPage';
 
 export default function Home() {
   const workspace = useAdminWorkspace();

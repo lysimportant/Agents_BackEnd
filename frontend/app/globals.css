@@ -1,8 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "./article-file-enhancements.css";
-@import "./socket/socket.css";
+@import "../src/styles/article-file-enhancements.css";
+@import "../src/features/chat/socket.css";
 
 @custom-variant dark (&:is(.dark *));
 :root {
@@ -3678,8 +3678,8 @@ tbody tr:hover,
 .antd-content-view .file-card,
 .antd-content-view .recycle-file-card,
 .antd-content-view .menu-summary-card,
-.antd-content-view .socket-conversation-item,
-.antd-content-view .socket-message-row {
+  .antd-content-view .socket-conversation-item,
+  .antd-content-view .socket-message-row {
   animation: admin-component-enter 280ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
