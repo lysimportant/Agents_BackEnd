@@ -60,7 +60,7 @@ func (s *SQLiteStore) reconcileApplicationMenus() error {
 	seeds := []applicationMenuSeed{
 		{Name: "工作台", Code: "workspace", Icon: "dashboard", Sort: 10},
 		{Name: "预览台", Code: "dashboard", Path: "dashboard", Icon: "dashboard", ParentCode: "workspace", Sort: 11},
-		{Name: "Socket 客服", Code: "socket-support", Path: "socket-support", Icon: "message", ParentCode: "workspace", Sort: 12},
+		{Name: "在线聊天", Code: "socket-support", Path: "socket-support", Icon: "message", ParentCode: "workspace", Sort: 12},
 		{Name: "系统管理", Code: "system", Icon: "setting", Sort: 20},
 		{Name: "用户管理", Code: "users", Path: "users", Icon: "team", ParentCode: "system", Sort: 21},
 		{Name: "部门管理", Code: "departments", Path: "departments", Icon: "apartment", ParentCode: "system", Sort: 22},
@@ -103,6 +103,9 @@ func (s *SQLiteStore) reconcileApplicationMenus() error {
 		return errors.New("工作台父级菜单初始化失败")
 	}
 	if _, err := tx.Exec(`UPDATE menus SET name='预览台',path='dashboard',icon='dashboard',parent_id=?,sort=11,updated_at=? WHERE code='dashboard'`, workspaceID, now); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE menus SET name='在线聊天',path='socket-support',icon='message',parent_id=?,sort=12,updated_at=? WHERE code='socket-support'`, workspaceID, now); err != nil {
 		return err
 	}
 	return tx.Commit()

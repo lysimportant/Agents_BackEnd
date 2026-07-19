@@ -180,7 +180,7 @@
           button.addEventListener('click', function () {
             var link = document.createElement('a');
             link.href = objectUrl;
-            link.download = message.attachmentName || 'socket-file';
+            link.download = message.attachmentName || 'chat-file';
             link.click();
           });
         }

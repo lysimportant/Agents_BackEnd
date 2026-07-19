@@ -12,7 +12,7 @@ export const pageKeys = ['dashboard', 'socket-support', 'users', 'departments', 
 
 export const pageTitles: Record<(typeof pageKeys)[number], string> = {
   dashboard: '预览台',
-  'socket-support': 'Socket 客服',
+  'socket-support': '在线聊天',
   users: '用户管理',
   departments: '部门管理',
   roles: '角色管理',

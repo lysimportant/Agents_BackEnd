@@ -25,7 +25,7 @@ export function socketNotificationWebSocketURL() {
 
 export async function listSocketConversations() {
   const response = await requestWithSession(`${API_BASE_URL}/api/socket/conversations`);
-  if (!response.ok) throw new Error(await responseError(response, '加载 Socket 客服会话失败'));
+  if (!response.ok) throw new Error(await responseError(response, '加载在线聊天会话失败'));
   const payload = await response.json() as unknown;
   return Array.isArray(payload) ? payload as SocketConversation[] : [];
 }
@@ -74,11 +74,11 @@ export function socketAttachmentURL(message: SocketMessage, download = false) {
 }
 
 export function socketWidgetScriptURL() {
-  if (typeof window === 'undefined') return '/socket/socket-customer-widget.js';
-  return `${window.location.origin}/socket/socket-customer-widget.js`;
+  if (typeof window === 'undefined') return '/chat/customer-widget.js';
+  return `${window.location.origin}/chat/customer-widget.js`;
 }
 
 export function socketWidgetConfigURL() {
-  if (typeof window === 'undefined') return '/socket/socket-config.js';
-  return `${window.location.origin}/socket/socket-config.js`;
+  if (typeof window === 'undefined') return '/chat/config.js';
+  return `${window.location.origin}/chat/config.js`;
 }

@@ -7,6 +7,14 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
+        source: '/chat/config.js',
+        destination: '/socket/socket-config.js',
+      },
+      {
+        source: '/chat/customer-widget.js',
+        destination: '/socket/socket-customer-widget.js',
+      },
+      {
         source: '/api/backend/:path*',
         destination: 'http://localhost:8080/api/:path*',
       },

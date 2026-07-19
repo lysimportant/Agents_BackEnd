@@ -149,7 +149,7 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
           setTitleDraft(envelope.conversation.title || '新咨询');
           if (!initialConversationId) {
             recordNewConsultation();
-            router.replace(`/socket/chat/${encodeURIComponent(id)}`);
+            router.replace(`/chat/${encodeURIComponent(id)}`);
           }
         } else if (envelope.type === 'history' && envelope.messages) {
           seenMessageIds.current = new Set(envelope.messages.map((message) => message.id));
@@ -294,7 +294,7 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
       return;
     }
     setStartingNew(true);
-    router.push('/socket/chat/new');
+    router.push('/chat/new');
   };
 
   const emojiPanel = useMemo(() => (
@@ -454,7 +454,7 @@ function CustomerAttachment({ message, token }: { message: SocketMessage; token:
 
 function formatTime(value: string) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '--' : new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' }).format(date);
+  return Number.isNaN(date.getTime()) ? '--' : new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
 function formatBytes(size: number) {

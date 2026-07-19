@@ -238,7 +238,7 @@ func (h *SocketHandler) AdminSocket(c *gin.Context) {
 			return
 		}
 		_ = incoming
-		_ = client.write(socketEnvelope{Type: "error", Error: "客服回复请使用受 socket.send 权限保护的发送接口"})
+		_ = client.write(socketEnvelope{Type: "error", Error: "客服回复权限不足或发送方式无效"})
 	}
 }
 
@@ -445,20 +445,20 @@ func (h *SocketHandler) uploadMessage(c *gin.Context, conversationID, senderType
 	storageName := fmt.Sprintf("%d_%s%s", time.Now().UnixNano(), utils.SanitizeFileName(strings.TrimSuffix(fileHeader.Filename, ext)), ext)
 	directory := filepath.Join(h.uploadDir, conversationID)
 	if err := os.MkdirAll(directory, 0o755); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建 Socket 文件目录失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建聊天文件目录失败"})
 		return
 	}
 	path := filepath.Join(directory, storageName)
 	dst, err := os.Create(path)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存 Socket 文件失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存聊天文件失败"})
 		return
 	}
 	size, copyErr := io.Copy(dst, src)
 	closeErr := dst.Close()
 	if copyErr != nil || closeErr != nil {
 		_ = os.Remove(path)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "写入 Socket 文件失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "写入聊天文件失败"})
 		return
 	}
 	contentType := strings.TrimSpace(fileHeader.Header.Get("Content-Type"))
@@ -481,7 +481,7 @@ func (h *SocketHandler) uploadMessage(c *gin.Context, conversationID, senderType
 	})
 	if !ok {
 		_ = os.Remove(path)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存 Socket 文件消息失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存聊天文件消息失败"})
 		return
 	}
 	h.broadcastMessage(created)
@@ -496,12 +496,12 @@ func (h *SocketHandler) serveAttachment(c *gin.Context, conversationID string) {
 	}
 	message, ok := h.store.FindSocketMessage(messageID)
 	if !ok || message.ConversationID != conversationID || message.AttachmentStorage == "" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Socket 文件不存在"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "聊天文件不存在"})
 		return
 	}
 	path := filepath.Join(h.uploadDir, conversationID, filepath.Base(message.AttachmentStorage))
 	if _, err := os.Stat(path); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Socket 物理文件不存在"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "聊天物理文件不存在"})
 		return
 	}
 	if message.AttachmentType != "" {

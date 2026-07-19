@@ -102,7 +102,7 @@ export const actionPermissionGroups: ActionPermissionGroup[] = [
   },
   {
     resource: 'socket',
-    label: 'Socket 客服',
+    label: '在线聊天',
     actions: [
       { code: 'socket.query', label: '查询', description: '查询在线客户与历史会话' },
       { code: 'socket.view', label: '查看', description: '监视客户聊天内容' },

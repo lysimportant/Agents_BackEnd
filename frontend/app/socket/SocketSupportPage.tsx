@@ -13,8 +13,7 @@ import {
   SendOutlined,
   SmileOutlined,
 } from '@ant-design/icons';
-import { Alert, Badge, Button, Card, DatePicker, Empty, Input, Popconfirm, Popover, Space, Spin, Statistic, Tag, Typography, message, notification } from 'antd';
-import type { Dayjs } from 'dayjs';
+import { Alert, Badge, Button, Card, Empty, Input, Popconfirm, Popover, Skeleton, Space, Spin, Statistic, Tag, Typography, message, notification } from 'antd';
 import { MAX_UPLOAD_SIZE } from '../lib/constants';
 import { socketAttachmentURL, socketWidgetConfigURL, socketWidgetScriptURL } from './socketApi';
 import type { SocketConversation, SocketMessage } from './types';
@@ -29,7 +28,6 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
   const [draft, setDraft] = useState('');
   const [fileError, setFileError] = useState('');
   const [searchTitle, setSearchTitle] = useState('');
-  const [searchDates, setSearchDates] = useState<[Dayjs | null, Dayjs | null] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const onlineCount = socket.conversations.filter((item) => item.online).length;
@@ -38,15 +36,12 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
   const embedCode = useMemo(() => `<script src="${socketWidgetConfigURL()}"></script>\n<script src="${socketWidgetScriptURL()}" data-title="在线客服" data-session-key="default"></script>`, []);
   const filteredConversations = useMemo(() => {
     const keyword = searchTitle.trim().toLowerCase();
-    const start = searchDates?.[0]?.startOf('day').valueOf() ?? Number.NEGATIVE_INFINITY;
-    const end = searchDates?.[1]?.endOf('day').valueOf() ?? Number.POSITIVE_INFINITY;
     return socket.conversations.filter((conversation) => {
       const titleMatches = !keyword || [conversation.title, conversation.id, conversation.lastMessage]
         .some((value) => String(value || '').toLowerCase().includes(keyword));
-      const time = Date.parse(conversation.updatedAt);
-      return titleMatches && time >= start && time <= end;
+      return titleMatches;
     });
-  }, [searchDates, searchTitle, socket.conversations]);
+  }, [searchTitle, socket.conversations]);
 
   useEffect(() => {
     const messageList = messageListRef.current;
@@ -83,11 +78,11 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
         <div className="socket-hero-content">
           <div>
             <Tag color="processing" icon={<CustomerServiceOutlined />}>实时客服中心</Tag>
-            <Typography.Title level={2}>Socket 在线客户监控</Typography.Title>
+            <Typography.Title level={2}>在线聊天客户监控</Typography.Title>
             <Typography.Paragraph>查看所有访客会话、实时监视聊天，并直接回复文字、图片、文件与表情。</Typography.Paragraph>
           </div>
           <Space wrap>
-            <Badge status={socket.connected ? 'success' : 'error'} text={socket.connected ? 'Socket 已连接' : 'Socket 重连中'} />
+            <Badge status={socket.connected ? 'success' : 'error'} text={socket.connected ? '实时通道已连接' : '实时通道重连中'} />
             <Button icon={<ReloadOutlined />} onClick={() => void socket.refresh().then((ok) => { void (ok ? messageApi.success('刷新完成') : messageApi.error('刷新失败，请查看页面提示')); })} loading={socket.loading}>刷新</Button>
           </Space>
         </div>
@@ -107,15 +102,11 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
           <div className="socket-conversation-search">
             <div className="socket-search-row">
               <Input allowClear value={searchTitle} prefix={<SearchOutlined />} placeholder="搜索标题、消息或 ID" onChange={(event) => setSearchTitle(event.target.value)} />
-              <Button className="socket-search-clear" type="text" size="small" disabled={!searchTitle && !searchDates?.some(Boolean)} onClick={() => { setSearchTitle(''); setSearchDates(null); }}>清除</Button>
-            </div>
-            <div className="socket-search-date-row">
-              <span>更新时间</span>
-              <DatePicker.RangePicker value={searchDates} onChange={(dates) => setSearchDates(dates)} allowEmpty={[true, true]} allowClear placeholder={['开始日期', '结束日期']} />
+              <Button className="socket-search-clear" type="text" size="small" disabled={!searchTitle} onClick={() => setSearchTitle('')}>清除</Button>
             </div>
           </div>
           <Spin spinning={socket.loading}>
-            {filteredConversations.length === 0 ? <Empty description={socket.conversations.length === 0 ? '等待客户接入' : '没有匹配的会话'} /> : (
+            {socket.loading && socket.conversations.length === 0 ? <div className="socket-conversation-loading"><Skeleton active paragraph={{ rows: 5 }} /></div> : filteredConversations.length === 0 ? <Empty description={socket.conversations.length === 0 ? '等待客户接入' : '没有匹配的会话'} /> : (
               <div className="socket-conversation-list">
                 {filteredConversations.map((conversation) => (
                   <ConversationItem
@@ -163,7 +154,7 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
                   value={draft}
                   disabled={!canReply}
                   autoSize={{ minRows: 2, maxRows: 5 }}
-                  placeholder={canReply ? '输入客服回复，Ctrl + Enter 发送' : socket.selectedConversation.online ? '没有 socket.send 回复权限' : '访客已离线，仅可查看历史消息'}
+                  placeholder={canReply ? '输入客服回复，Ctrl + Enter 发送' : socket.selectedConversation.online ? '没有在线聊天回复权限' : '访客已离线，仅可查看历史消息'}
                   onChange={(event) => setDraft(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.ctrlKey && event.key === 'Enter') void submitMessage();
@@ -191,11 +182,11 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
       <Card className="socket-embed-card" title="可复用网站客服组件" extra={<FileImageOutlined />}>
         <Typography.Paragraph>把下面一行加入任意网站，页面右下角会出现客服按钮；首次打开即生成会话 ID，并自动登记到本页。</Typography.Paragraph>
         <pre><code>{embedCode}</code></pre>
-        <Typography.Text type="secondary">API 地址统一写在 socket-config.js；可通过 data-title、data-color、data-position 和 data-session-key 自定义实例。不同 sessionKey 会在同一电脑创建独立访客会话。</Typography.Text>
+        <Typography.Text type="secondary">API 地址统一写在聊天配置文件中；可通过 data-title、data-color、data-position 和 data-session-key 自定义实例。不同 sessionKey 会在同一电脑创建独立访客会话。</Typography.Text>
       </Card>
       <Card className="socket-embed-card" title="独立访客聊天页" extra={<CustomerServiceOutlined />}>
         <Typography.Paragraph>独立聊天页与右下角悬浮组件是两个不同入口。打开后先创建会话，再自动把地址替换为当前聊天 ID。</Typography.Paragraph>
-        <Button type="primary" href="/socket/chat/new" target="_blank">打开客服咨询页</Button>
+        <Button type="primary" href="/chat/new" target="_blank">打开客服咨询页</Button>
       </Card>
     </div>
   );
@@ -255,7 +246,7 @@ function MessageBubble({ message }: { message: SocketMessage }) {
 function formatTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '--';
-  return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
+  return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
 function formatBytes(size: number) {

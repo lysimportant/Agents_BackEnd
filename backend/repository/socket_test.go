@@ -95,7 +95,7 @@ func TestWorkspaceSocketMenuHierarchy(t *testing.T) {
 	if workspace.ID == 0 || dashboard.ParentID == nil || *dashboard.ParentID != workspace.ID || dashboard.Name != "预览台" {
 		t.Fatalf("unexpected dashboard hierarchy: workspace=%+v dashboard=%+v", workspace, dashboard)
 	}
-	if socketSupport.ID == 0 || socketSupport.ParentID == nil || *socketSupport.ParentID != workspace.ID || socketSupport.Path != "socket-support" {
+	if socketSupport.ID == 0 || socketSupport.ParentID == nil || *socketSupport.ParentID != workspace.ID || socketSupport.Path != "socket-support" || socketSupport.Name != "在线聊天" {
 		t.Fatalf("unexpected socket menu hierarchy: %+v", socketSupport)
 	}
 }

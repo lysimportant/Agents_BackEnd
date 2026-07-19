@@ -10,11 +10,10 @@
 .socket-conversation-panel .ant-card-body, .socket-chat-panel .ant-card-body { height: 552px; min-height: 0; padding: 0; overflow: hidden; }
 .socket-conversation-panel .ant-card-body { display: flex; flex-direction: column; }
 .socket-conversation-panel .ant-card-head { min-height: 44px; padding-inline: 12px; }
-.socket-conversation-search { display: grid; flex: 0 0 auto; gap: 7px; padding: 7px 10px 8px; border-bottom: 1px solid var(--border-subtle); }
+.socket-conversation-search { display: grid; flex: 0 0 auto; gap: 0; padding: 2px 8px 4px; border-bottom: 1px solid var(--border-subtle); }
 .socket-search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; align-items: center; min-width: 0; }
 .socket-search-clear { flex: 0 0 auto; padding-inline: 5px !important; color: var(--text-tertiary) !important; }
-.socket-search-date-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px; align-items: center; min-width: 0; color: var(--text-tertiary); font-size: 11px; }
-.socket-search-date-row .ant-picker { width: 100%; min-width: 0; }
+.socket-conversation-loading { padding: 10px 8px; }
 .socket-conversation-panel .ant-spin-nested-loading { min-height: 0; flex: 1 1 0; overflow: hidden; }
 .socket-conversation-panel .ant-spin-container { height: 100%; min-height: 0; overflow: hidden; }
 .socket-conversation-list { height: 100%; min-height: 0; max-height: 100%; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 8px; }
@@ -22,7 +21,7 @@
 .socket-conversation-open { width: 100%; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 12px 6px 12px 12px; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
 .socket-conversation-delete { margin-right: 5px; }
 .socket-conversation-item:hover { background: var(--surface-hover); }
-.socket-conversation-item.is-removing { pointer-events: none; animation: socket-conversation-exit 180ms ease forwards; }
+.antd-content-view .socket-conversation-item.is-removing { pointer-events: none; animation: socket-conversation-exit 320ms ease forwards !important; }
 .socket-conversation-item.is-active { border-color: color-mix(in srgb, var(--theme-primary) 44%, var(--border-subtle)); background: color-mix(in srgb, var(--theme-primary) 10%, var(--surface-panel)); box-shadow: inset 3px 0 var(--theme-primary); }
 .socket-presence { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; background: var(--text-disabled); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-disabled) 16%, transparent); }
 .socket-presence.is-online { background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.16), 0 0 12px rgba(34,197,94,.42); }
@@ -52,5 +51,4 @@
 .socket-empty-icon { font-size: 42px; color: var(--text-disabled); }
 @keyframes socket-conversation-exit { to { opacity: 0; transform: translate3d(-8px, 0, 0) scale(.98); } }
 @media (max-width: 1000px) { .socket-console-grid { grid-template-columns: 1fr; } .socket-conversation-panel .ant-card-body { height: 360px; } }
-@media (max-width: 420px) { .socket-search-date-row { grid-template-columns: 1fr; gap: 3px; } }
 @media (max-width: 640px) { .socket-hero-content { align-items: flex-start; flex-direction: column; } .socket-stat-grid { grid-template-columns: 1fr; } .socket-chat-panel .ant-card-body { height: 620px; } .socket-message-bubble { max-width: 88%; } .socket-composer-actions { align-items: stretch; flex-direction: column; } .socket-composer-actions > .ant-btn { width: 100%; } }

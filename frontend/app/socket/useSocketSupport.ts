@@ -88,7 +88,7 @@ export function useSocketSupport() {
       }
       return true;
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : '加载 Socket 客服失败');
+      setError(loadError instanceof Error ? loadError.message : '加载在线聊天失败');
       return false;
     } finally {
       setLoading(false);
