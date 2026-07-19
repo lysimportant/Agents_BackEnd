@@ -1853,9 +1853,13 @@ html[data-theme="dark"] .file-card-actions {
   color: var(--ant-color-text-tertiary, #94a3b8);
 }
 
-.ant-menu.antd-main-menu {
+.antd-main-menu-shell {
   flex: 1;
   min-height: 0;
+}
+
+.ant-menu.antd-main-menu {
+  height: 100%;
   overflow-y: auto;
   border-inline-end: 0 !important;
   background: transparent;
@@ -1868,6 +1872,53 @@ html[data-theme="dark"] .file-card-actions {
 
 .antd-main-menu .ant-menu-item-selected {
   box-shadow: inset 3px 0 var(--accent-blue);
+}
+
+.antd-collapsed-menu-flyout {
+  position: fixed;
+  left: 76px;
+  z-index: 1200;
+  min-width: 172px;
+  max-width: 240px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.16);
+}
+
+.antd-collapsed-menu-flyout > div {
+  display: grid;
+  gap: 4px;
+}
+
+.antd-collapsed-menu-flyout button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 650;
+  text-align: left;
+}
+
+.antd-collapsed-menu-flyout button:hover,
+.antd-collapsed-menu-flyout button.is-active {
+  background: var(--surface-selected);
+  color: var(--theme-primary);
+}
+
+.antd-collapsed-menu-flyout button:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .antd-main-menu .ant-menu-item:focus-visible,
@@ -2005,7 +2056,7 @@ html[data-theme="dark"] .file-card-actions {
   align-items: center;
   justify-content: space-between;
   height: 64px;
-  padding: 0 22px;
+  padding: 0 22px !important;
   border-bottom: 1px solid var(--border-subtle);
   box-shadow: 0 4px 16px var(--shadow-color);
 }
@@ -2117,7 +2168,7 @@ html[data-theme='dark'] .ant-breadcrumb-separator {
 
 @media (max-width: 900px) {
   .antd-admin-header {
-    padding: 0 12px;
+    padding: 0 12px !important;
   }
 
   .antd-admin-content {

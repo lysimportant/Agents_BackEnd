@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import {
   ApartmentOutlined,
   AppstoreOutlined,
@@ -505,7 +505,7 @@ function AdminNavigation({
   onLogout: () => void;
   onToggleSidebar?: () => void;
 }) {
-  const { items, availableOpenKeys, activeParentKeys } = useMemo(() => {
+  const { items, collapsedItems, availableOpenKeys, activeParentKeys, collapsedGroups } = useMemo(() => {
     const enabled = menus
       .filter((menu) => menu.status === '启用')
       .sort((a, b) => a.sort - b.sort || a.id - b.id);
@@ -539,6 +539,35 @@ function AdminNavigation({
     };
 
     const navItems = roots.map((menu) => mapItem(menu)).filter(Boolean) as NonNullable<MenuProps['items']>;
+    const collapsedMenuGroups = roots
+      .map((menu) => {
+        const children = childrenOf(menu.id)
+          .map((child) => {
+            const pageKey = resolvePageKey(child);
+            if (!pageKey) return null;
+            return {
+              key: pageKey,
+              label: child.name,
+              icon: menuIconByCode[child.code.trim().toLowerCase()] || <MenuOutlined />,
+            };
+          })
+          .filter(Boolean) as Array<{ key: PageKey; label: string; icon: ReactNode }>;
+        if (children.length === 0) return null;
+        return {
+          key: String(resolvePageKey(menu) ?? `menu-${menu.id}`),
+          label: menu.name,
+          icon: menuIconByCode[menu.code.trim().toLowerCase()] || <MenuOutlined />,
+          children,
+        };
+      })
+      .filter(Boolean) as Array<{ key: string; label: string; icon: ReactNode; children: Array<{ key: PageKey; label: string; icon: ReactNode }> }>;
+    const collapsedNavItems = collapsedMenuGroups.map((group) => ({
+      key: group.key,
+      icon: group.icon,
+      label: group.label,
+      title: '',
+      className: 'antd-collapsed-root-item',
+    })) as NonNullable<MenuProps['items']>;
 
     const keys = navItems
       .filter((item) => item && typeof item === 'object' && 'children' in item && Array.isArray(item.children) && item.children.length > 0)
@@ -554,9 +583,21 @@ function AdminNavigation({
       current = parent;
     }
 
-    return { items: navItems, availableOpenKeys: keys, activeParentKeys: parentKeys };
+    return {
+      items: navItems,
+      collapsedItems: collapsedNavItems,
+      availableOpenKeys: keys,
+      activeParentKeys: parentKeys,
+      collapsedGroups: collapsedMenuGroups,
+    };
   }, [activePage, menus]);
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
+  const [collapsedFlyout, setCollapsedFlyout] = useState<null | {
+    key: string;
+    label: string;
+    top: number;
+    children: Array<{ key: PageKey; label: string; icon: ReactNode }>;
+  }>(null);
 
   useEffect(() => {
     const available = new Set(availableOpenKeys);
@@ -568,8 +609,36 @@ function AdminNavigation({
     ]);
   }, [activeParentKeys, availableOpenKeys]);
 
+  useEffect(() => {
+    if (!collapsed) setCollapsedFlyout(null);
+  }, [collapsed]);
+
+  const showCollapsedFlyout = (event: MouseEvent<HTMLDivElement>) => {
+    if (!collapsed) return;
+    const target = event.target as HTMLElement;
+    const rootItem = target.closest<HTMLElement>('.antd-main-menu > .antd-collapsed-root-item');
+    if (!rootItem) {
+      setCollapsedFlyout(null);
+      return;
+    }
+    const siblingRootItems = Array.from(rootItem.parentElement?.querySelectorAll<HTMLElement>(':scope > .antd-collapsed-root-item') ?? []);
+    const group = collapsedGroups[siblingRootItems.indexOf(rootItem)];
+    if (!group) return;
+    const rect = rootItem.getBoundingClientRect();
+    setCollapsedFlyout((current) => {
+      const top = Math.max(12, Math.min(rect.top, window.innerHeight - 180));
+      if (current?.key === group.key && current.top === top) return current;
+      return { ...group, top };
+    });
+  };
+
   return (
-    <div className="antd-sider-inner">
+    <div
+      className="antd-sider-inner"
+      onMouseLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setCollapsedFlyout(null);
+      }}
+    >
       <div className={`antd-brand ${collapsed ? 'is-collapsed' : ''}`}>
         <span className="antd-brand-logo">M</span>
         {!collapsed && (
@@ -579,21 +648,37 @@ function AdminNavigation({
           </span>
         )}
       </div>
-      <Menu
-        mode="inline"
-        inlineIndent={16}
-        items={items}
-        selectedKeys={[activePage]}
-        openKeys={collapsed ? [] : expandedKeys}
-        inlineCollapsed={collapsed}
-        onOpenChange={(keys) => setExpandedKeys(keys.map(String))}
-        onClick={({ key }) => {
-          if (pageKeys.includes(key as PageKey)) {
-            onNavigate(key as PageKey);
-          }
-        }}
-        className="antd-main-menu"
-      />
+      <div className="antd-main-menu-shell" onMouseMove={showCollapsedFlyout}>
+        <Menu
+          mode="inline"
+          inlineIndent={16}
+          items={collapsed ? collapsedItems : items}
+          selectedKeys={collapsed ? [activeParentKeys[0] ?? activePage] : [activePage]}
+          openKeys={collapsed ? undefined : expandedKeys}
+          inlineCollapsed={collapsed}
+          onOpenChange={(keys) => {
+            if (!collapsed) setExpandedKeys(keys.map(String));
+          }}
+          onClick={({ key }) => {
+            if (pageKeys.includes(key as PageKey)) {
+              onNavigate(key as PageKey);
+            }
+          }}
+          className="antd-main-menu"
+        />
+      </div>
+      {collapsed && collapsedFlyout && (
+        <div className="antd-collapsed-menu-flyout" style={{ top: collapsedFlyout.top }}>
+          <div>
+            {collapsedFlyout.children.map((item) => (
+              <button key={item.key} type="button" className={item.key === activePage ? 'is-active' : ''} onClick={() => onNavigate(item.key)}>
+                <span aria-hidden="true">{item.icon}</span>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className={`antd-sider-footer ${collapsed ? 'is-collapsed' : ''}`}>
         {onToggleSidebar && (
           <Tooltip title={collapsed ? '展开侧栏' : '折叠侧栏'} placement="right">
