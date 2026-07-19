@@ -64,18 +64,31 @@
   width: 100%;
 }
 
-.alignedInput :global(input.ant-input) {
-  height: 22px;
-  line-height: 22px;
+.fields :global(.ant-input-affix-wrapper),
+.fields :global(.ant-input-number) {
+  min-height: 40px;
 }
 
-.alignedInput :global(input.ant-input::placeholder) {
-  line-height: 22px;
+.fields > label > :global(input.ant-input) {
+  min-height: 40px;
+  line-height: 1.5715;
+}
+
+.fields :global(.ant-input-affix-wrapper > input.ant-input) {
+  min-height: 0;
+  height: auto;
+  line-height: 1.5715;
 }
 
 .dialogDescription {
   margin: 0;
   color: var(--text-secondary);
+}
+
+.passwordDialog :global(.ant-modal-body) {
+  max-height: calc(100dvh - 180px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .fields small {

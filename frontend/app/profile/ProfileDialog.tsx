@@ -226,7 +226,7 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
                 </label>
                 <label>
                   邮箱绑定
-                  <Input className={styles.alignedInput} type="email" maxLength={120} value={form.email} prefix={<MailOutlined />} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="name@example.com" />
+                  <Input type="email" maxLength={120} value={form.email} prefix={<MailOutlined />} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="name@example.com" />
                 </label>
                 <label>
                   联系电话
@@ -257,6 +257,7 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
       )}
 
       <Modal
+        className={styles.passwordDialog}
         open={passwordDialogOpen}
         title="修改密码"
         footer={null}

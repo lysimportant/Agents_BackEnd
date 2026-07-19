@@ -94,6 +94,7 @@ func (h *SocketHandler) CustomerSocket(c *gin.Context) {
 	defer client.close()
 
 	conversationID := requestedConversationID
+	createdNewConversation := false
 	visitorToken := strings.TrimSpace(c.Query("visitorToken"))
 	visitorName := strings.TrimSpace(c.Query("visitorName"))
 	conversation, found := h.store.FindSocketConversation(conversationID)
@@ -110,6 +111,7 @@ func (h *SocketHandler) CustomerSocket(c *gin.Context) {
 		conversationID = newSocketID("chat")
 		visitorToken = newSocketToken()
 		conversation, found = h.store.CreateSocketConversation(conversationID, visitorName, hashSocketToken(visitorToken))
+		createdNewConversation = found
 		if !found {
 			_ = client.write(socketEnvelope{Type: "error", Error: "创建客服会话失败"})
 			return
@@ -119,24 +121,28 @@ func (h *SocketHandler) CustomerSocket(c *gin.Context) {
 		return
 	}
 
+	wasOnline := conversation.Online
 	connectionCount := h.hub.addCustomer(conversationID, client)
 	h.store.SetSocketConversationOnline(conversationID, true)
 	conversation, _ = h.store.FindSocketConversation(conversationID)
 	h.hub.broadcastAdmins(socketEnvelope{Type: "conversation", Conversation: &conversation})
-	if connectionCount == 1 {
+	// A client-side route change/reconnect briefly leaves the old socket behind.
+	// Keep the conversation online during the grace period and avoid a second
+	// "visitor online" notification for that reconnect.
+	if connectionCount == 1 && (createdNewConversation || !wasOnline) {
 		h.hub.broadcastObservers(socketEnvelope{Type: "visitor_online", Conversation: &conversation})
 	}
 	defer func() {
 		if h.hub.removeCustomer(conversationID, client) == 0 {
-			h.store.SetSocketConversationOnline(conversationID, false)
-			updated, ok := h.store.FindSocketConversation(conversationID)
-			if ok {
-				h.hub.broadcastAdmins(socketEnvelope{Type: "conversation", Conversation: &updated})
-			}
 			go func(id string) {
 				time.Sleep(10 * time.Second)
 				if h.hub.customerCount(id) != 0 {
 					return
+				}
+				h.store.SetSocketConversationOnline(id, false)
+				updated, ok := h.store.FindSocketConversation(id)
+				if ok {
+					h.hub.broadcastAdmins(socketEnvelope{Type: "conversation", Conversation: &updated})
 				}
 				if closed, closedOK := h.store.CloseSocketConversation(id); closedOK {
 					h.hub.broadcastAdmins(socketEnvelope{Type: "conversation", Conversation: &closed})

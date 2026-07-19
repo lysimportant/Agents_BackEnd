@@ -46,6 +46,7 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
   const tokenRef = useRef('');
   const intentionalCloseRef = useRef(false);
   const seenMessageIds = useRef(new Set<number>());
+  const lastAgentNotificationRef = useRef<{ key: string; at: number } | null>(null);
 
   const tokenKey = useCallback((id: string) => `socket-chat-token:${API_BASE_URL}:${id}`, []);
   const newConsultationKey = useMemo(() => `socket-new-consultations:${API_BASE_URL}`, []);
@@ -159,6 +160,11 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
           setConversation(envelope.conversation);
           setTitleDraft(envelope.conversation.title || '新咨询');
         } else if (envelope.type === 'agent_joined') {
+          const notificationKey = `${conversationId}:${envelope.actorName || 'agent'}`;
+          const now = Date.now();
+          const lastNotification = lastAgentNotificationRef.current;
+          if (lastNotification?.key === notificationKey && now - lastNotification.at < 2500) return;
+          lastAgentNotificationRef.current = { key: notificationKey, at: now };
           notificationApi.info({
             placement: 'bottomRight',
             message: '客服已接入聊天',

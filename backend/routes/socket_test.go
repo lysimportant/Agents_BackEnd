@@ -276,3 +276,73 @@ func TestAccountLoginBroadcastsToExistingAuthenticatedUsers(t *testing.T) {
 		t.Fatalf("unexpected login broadcast: %+v", envelope)
 	}
 }
+
+func TestCustomerReconnectDoesNotBroadcastDuplicateOnlineNotification(t *testing.T) {
+	router, _, _ := setupTestRouter(t)
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	jar, _ := cookiejar.New(nil)
+	adminClient := &http.Client{Jar: jar}
+	loginResponse, err := adminClient.Post(server.URL+"/api/auth/login", "application/json", strings.NewReader(`{"username":"MH","password":"123"}`))
+	if err != nil || loginResponse.StatusCode != http.StatusOK {
+		t.Fatalf("login notification observer: response=%v err=%v", loginResponse, err)
+	}
+	_ = loginResponse.Body.Close()
+	serverURL, _ := url.Parse(server.URL)
+	headers := http.Header{}
+	for _, cookie := range jar.Cookies(serverURL) {
+		headers.Add("Cookie", cookie.String())
+	}
+	observer, response, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/api/socket/notifications", headers)
+	if err != nil {
+		if response != nil {
+			_ = response.Body.Close()
+		}
+		t.Fatalf("connect notification observer: %v", err)
+	}
+	defer observer.Close()
+
+	visitor, response, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/api/socket/customer?visitorName=reconnect-test", nil)
+	if err != nil {
+		if response != nil {
+			_ = response.Body.Close()
+		}
+		t.Fatalf("create visitor conversation: %v", err)
+	}
+	var session struct {
+		Type         string                    `json:"type"`
+		Conversation models.SocketConversation `json:"conversation"`
+		VisitorToken string                    `json:"visitorToken"`
+	}
+	if err := visitor.ReadJSON(&session); err != nil || session.Type != "session" {
+		t.Fatalf("read visitor session: session=%+v err=%v", session, err)
+	}
+	_ = observer.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var onlineEnvelope struct {
+		Type string `json:"type"`
+	}
+	if err := observer.ReadJSON(&onlineEnvelope); err != nil || onlineEnvelope.Type != "visitor_online" {
+		t.Fatalf("read first visitor online notification: envelope=%+v err=%v", onlineEnvelope, err)
+	}
+	_ = visitor.Close()
+	time.Sleep(100 * time.Millisecond)
+
+	reconnectURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/api/socket/customer?conversationId=" + url.QueryEscape(session.Conversation.ID) + "&visitorToken=" + url.QueryEscape(session.VisitorToken)
+	reconnected, response, err := websocket.DefaultDialer.Dial(reconnectURL, nil)
+	if err != nil {
+		if response != nil {
+			_ = response.Body.Close()
+		}
+		t.Fatalf("reconnect visitor conversation: %v", err)
+	}
+	defer reconnected.Close()
+	if err := reconnected.ReadJSON(&session); err != nil || session.Type != "session" {
+		t.Fatalf("read reconnected visitor session: session=%+v err=%v", session, err)
+	}
+
+	_ = observer.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	if err := observer.ReadJSON(&onlineEnvelope); err == nil {
+		t.Fatalf("reconnect unexpectedly broadcast a second notification: %+v", onlineEnvelope)
+	}
+}
