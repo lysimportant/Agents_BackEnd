@@ -28,8 +28,27 @@ export function useSocketSupport() {
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [removingConversationIds, setRemovingConversationIds] = useState<string[]>([]);
   const selectedRef = useRef('');
   const socketRef = useRef<WebSocket | null>(null);
+  const removalTimersRef = useRef(new Map<string, number>());
+
+  useEffect(() => () => {
+    removalTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    removalTimersRef.current.clear();
+  }, []);
+
+  const scheduleConversationRemoval = useCallback((conversationId: string) => {
+    setRemovingConversationIds((current) => current.includes(conversationId) ? current : [...current, conversationId]);
+    const previousTimer = removalTimersRef.current.get(conversationId);
+    if (previousTimer) window.clearTimeout(previousTimer);
+    const timer = window.setTimeout(() => {
+      setConversations((current) => current.filter((item) => item.id !== conversationId));
+      setRemovingConversationIds((current) => current.filter((id) => id !== conversationId));
+      removalTimersRef.current.delete(conversationId);
+    }, 180);
+    removalTimersRef.current.set(conversationId, timer);
+  }, []);
 
   useEffect(() => {
     selectedRef.current = selectedConversationId;
@@ -101,7 +120,7 @@ export function useSocketSupport() {
             return sortConversations([envelope.conversation!, ...current.filter((item) => item.id !== envelope.conversation!.id)]);
           });
         } else if (envelope.type === 'conversation_deleted' && envelope.conversation) {
-          setConversations((current) => current.filter((item) => item.id !== envelope.conversation!.id));
+          scheduleConversationRemoval(envelope.conversation.id);
           if (selectedRef.current === envelope.conversation.id) {
             selectedRef.current = '';
             setSelectedConversationId('');
@@ -130,7 +149,7 @@ export function useSocketSupport() {
       window.clearTimeout(reconnectTimer);
       socketRef.current?.close();
     };
-  }, [refresh]);
+  }, [refresh, scheduleConversationRemoval]);
 
   const sendMessage = useCallback(async (content: string, messageType: 'text' | 'emoji' = 'text') => {
     if (!selectedRef.current) return false;
@@ -162,7 +181,7 @@ export function useSocketSupport() {
     setError('');
     try {
       await deleteSocketConversation(conversationId);
-      setConversations((current) => current.filter((item) => item.id !== conversationId));
+      scheduleConversationRemoval(conversationId);
       if (selectedRef.current === conversationId) {
         selectedRef.current = '';
         setSelectedConversationId('');
@@ -173,11 +192,12 @@ export function useSocketSupport() {
       setError(deleteError instanceof Error ? deleteError.message : '删除客服会话失败');
       return false;
     }
-  }, []);
+  }, [scheduleConversationRemoval]);
 
   return {
     conversations,
     selectedConversationId,
+    removingConversationIds,
     selectedConversation: conversations.find((item) => item.id === selectedConversationId) ?? null,
     messages,
     connected,

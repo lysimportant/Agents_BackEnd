@@ -105,8 +105,14 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
       <div className="socket-console-grid" data-tilt-disabled="true">
         <Card className="socket-conversation-panel" title="客户会话" extra={<Tag>{filteredConversations.length} 条结果</Tag>}>
           <div className="socket-conversation-search">
-            <Input allowClear value={searchTitle} prefix={<SearchOutlined />} placeholder="搜索会话标题" onChange={(event) => setSearchTitle(event.target.value)} />
-            <DatePicker.RangePicker value={searchDates} onChange={(dates) => setSearchDates(dates)} allowEmpty={[true, true]} placeholder={['开始时间', '结束时间']} />
+            <div className="socket-search-row">
+              <Input allowClear value={searchTitle} prefix={<SearchOutlined />} placeholder="搜索标题、消息或 ID" onChange={(event) => setSearchTitle(event.target.value)} />
+              <Button className="socket-search-clear" type="text" size="small" disabled={!searchTitle && !searchDates?.some(Boolean)} onClick={() => { setSearchTitle(''); setSearchDates(null); }}>清除</Button>
+            </div>
+            <div className="socket-search-date-row">
+              <span>更新时间</span>
+              <DatePicker.RangePicker value={searchDates} onChange={(dates) => setSearchDates(dates)} allowEmpty={[true, true]} allowClear placeholder={['开始日期', '结束日期']} />
+            </div>
           </div>
           <Spin spinning={socket.loading}>
             {filteredConversations.length === 0 ? <Empty description={socket.conversations.length === 0 ? '等待客户接入' : '没有匹配的会话'} /> : (
@@ -116,6 +122,7 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
                     key={conversation.id}
                     conversation={conversation}
                     active={conversation.id === socket.selectedConversationId}
+                    removing={socket.removingConversationIds.includes(conversation.id)}
                     canDelete={canDelete}
                     onClick={() => void socket.selectConversation(conversation.id, conversation.online && conversation.status === 'open').then((ok) => {
                       if (!ok || !conversation.online || conversation.status !== 'open') return;
@@ -194,9 +201,9 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
   );
 }
 
-function ConversationItem({ conversation, active, canDelete, onClick, onDelete }: { conversation: SocketConversation; active: boolean; canDelete: boolean; onClick: () => void; onDelete: () => void }) {
+function ConversationItem({ conversation, active, removing, canDelete, onClick, onDelete }: { conversation: SocketConversation; active: boolean; removing: boolean; canDelete: boolean; onClick: () => void; onDelete: () => void }) {
   return (
-    <div className={`socket-conversation-item ${active ? 'is-active' : ''}`}>
+    <div className={`socket-conversation-item ${active ? 'is-active' : ''}${removing ? ' is-removing' : ''}`}>
       <button type="button" className="socket-conversation-open" onClick={onClick}>
         <span className={`socket-presence ${conversation.online ? 'is-online' : ''}`} />
         <span className="socket-conversation-copy">

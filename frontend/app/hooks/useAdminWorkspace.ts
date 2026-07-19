@@ -24,6 +24,7 @@ import type {
 import { API_BASE_URL, MAX_UPLOAD_SIZE, emptyArticleForm, emptyFileForm, emptyMenuForm, emptyUserForm, pageKeys } from '../lib/constants';
 import { requestWithSession } from '../lib/api';
 import { buildMenuTree } from '../lib/menu';
+import { runViewTransition } from '../lib/viewTransition';
 
 async function parseError(response: Response, fallback: string) {
   try {
@@ -169,7 +170,7 @@ export function useAdminWorkspace() {
     }
     const payload = await response.json() as unknown;
     const recycleData = Array.isArray(payload) ? payload as ManagedFile[] : [];
-    setRecycleFiles(recycleData);
+    runViewTransition(() => setRecycleFiles(recycleData));
     return recycleData;
   };
 
@@ -198,12 +199,14 @@ export function useAdminWorkspace() {
         fetchAllowed<Article>('articles', '/api/articles'),
         fetchAllowed<ManagedFile>('files', '/api/files'),
       ]);
-      setUsers(usersData);
-      setDepartments(departmentsData);
-      setRoles(rolesData);
-      setMenus(menusData);
-      setArticles(articlesData);
-      setFiles(filesData);
+      runViewTransition(() => {
+        setUsers(usersData);
+        setDepartments(departmentsData);
+        setRoles(rolesData);
+        setMenus(menusData);
+        setArticles(articlesData);
+        setFiles(filesData);
+      });
 
       const accessiblePages = getAccessiblePages(menusData);
       setActivePage((current) => {
