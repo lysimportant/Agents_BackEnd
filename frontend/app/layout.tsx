@@ -3,6 +3,7 @@ import { AntdRegistry } from '@ant-design/nextjs-registry';
 import { TiltCardEffects } from '@/src/components/shared/TiltCardEffects';
 import { GlobalFeedbackProvider } from '@/src/components/shared/GlobalFeedbackProvider';
 import { ADMIN_THEME_BOOTSTRAP_SCRIPT } from '@/src/theme/themes';
+import { LOGIN_BACKGROUND_BOOTSTRAP_SCRIPT } from '@/src/utils/loginBackground';
 import './globals.css';
 
 const siteUrl = new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000');
@@ -51,6 +52,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="zh-CN" className="font-sans" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: ADMIN_THEME_BOOTSTRAP_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: LOGIN_BACKGROUND_BOOTSTRAP_SCRIPT }} />
       </head>
       <body>
         <AntdRegistry>

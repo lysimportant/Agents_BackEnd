@@ -1,4 +1,7 @@
-import type { Dispatch, FormEvent, SetStateAction } from 'react';
+'use client';
+
+import { useEffect, type Dispatch, type FormEvent, type SetStateAction } from 'react';
+import { LOGIN_BACKGROUND_CHANGE_EVENT, applyStoredLoginBackground } from '@/src/utils/loginBackground';
 import type { LoginForm } from '@/src/types/admin';
 
 type AuthPageProps = {
@@ -11,6 +14,21 @@ type AuthPageProps = {
 };
 
 export function AuthPage({ isCheckingSession, loginForm, loginError, isLoggingIn, onLoginFormChange, onSubmit }: AuthPageProps) {
+  useEffect(() => {
+    const refreshLoginBackground = () => {
+      applyStoredLoginBackground();
+    };
+
+    refreshLoginBackground();
+    window.addEventListener('storage', refreshLoginBackground);
+    window.addEventListener(LOGIN_BACKGROUND_CHANGE_EVENT, refreshLoginBackground);
+
+    return () => {
+      window.removeEventListener('storage', refreshLoginBackground);
+      window.removeEventListener(LOGIN_BACKGROUND_CHANGE_EVENT, refreshLoginBackground);
+    };
+  }, []);
+
   if (isCheckingSession) {
     return (
       <main className="auth-shell auth-shell-with-art">

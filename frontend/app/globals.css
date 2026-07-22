@@ -1355,6 +1355,24 @@ html[data-theme="dark"] .theme-toggle {
   min-width: 240px;
 }
 
+.file-login-background-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.file-login-background-toolbar .ant-btn {
+  flex: 0 0 auto;
+}
+
 .file-type-tabs button {
   border-color: var(--border);
   background: var(--surface);
@@ -3036,6 +3054,11 @@ html[data-theme='dark'] .ant-breadcrumb-separator {
     min-width: 0;
   }
 
+  .file-login-background-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .user-search-tools input {
     min-width: 0;
   }
@@ -4029,7 +4052,7 @@ html[data-theme='dark'] .tilt-card-surface::before {
   padding: clamp(28px, 5vw, 72px) clamp(32px, 7vw, 112px);
   background:
     linear-gradient(90deg, rgba(59, 35, 92, 0.04), rgba(255, 255, 255, 0.02) 46%, rgba(255, 255, 255, 0.12)),
-    url('/images/login-anime-background-beach-v4.webp') center / cover no-repeat;
+    var(--login-background-image, url('/images/login-anime-background-beach-v4.webp')) center / cover no-repeat;
 }
 
 .auth-shell.auth-shell-with-art::before,

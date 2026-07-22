@@ -22,6 +22,16 @@ export async function readTextFileContent(fileId: number) {
   return response.text();
 }
 
+export async function readFilePreviewBlob(fileId: number) {
+  const response = await requestWithSession(`${API_BASE_URL}/api/files/${fileId}/preview`, {
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    throw new Error(await parseApiError(response, '读取文件预览失败'));
+  }
+  return response.blob();
+}
+
 export async function updateFileMetadata(
   fileId: number,
   data: Pick<ManagedFile, 'displayName' | 'category' | 'description'> & { isPrivate?: boolean },

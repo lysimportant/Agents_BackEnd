@@ -33,8 +33,9 @@ import {
   CompressOutlined,
 } from '@ant-design/icons';
 import { API_BASE_URL, MAX_UPLOAD_SIZE } from '@/src/config/constants';
-import { permanentlyDeleteFile, readTextFileContent, updateFileMetadata, updateTextFileContent } from '@/src/services/fileApi';
+import { permanentlyDeleteFile, readFilePreviewBlob, readTextFileContent, updateFileMetadata, updateTextFileContent } from '@/src/services/fileApi';
 import type { ResourceActionAccess } from '@/src/utils/actionPermissions';
+import { clearStoredLoginBackground, setStoredLoginBackground } from '@/src/utils/loginBackground';
 import { RichTextEditor } from '@/src/components/shared/RichTextEditor';
 import type { FileForm, ManagedFile } from '@/src/types/admin';
 
@@ -102,6 +103,7 @@ export function FilesPage(props: FilesPageProps) {
   const [imageScale, setImageScale] = useState(1);
   const [imageOffset, setImageOffset] = useState({ x: 0, y: 0 });
   const [isDraggingImage, setIsDraggingImage] = useState(false);
+  const [settingLoginBackgroundId, setSettingLoginBackgroundId] = useState<number | null>(null);
   const dragStartRef = useRef({ pointerX: 0, pointerY: 0, offsetX: 0, offsetY: 0 });
   const files = Array.isArray(filteredFiles) ? filteredFiles : [];
   const kindCounts = useMemo(() => {
@@ -195,6 +197,35 @@ export function FilesPage(props: FilesPageProps) {
       setIsRecycleLoading(false);
     }
   };
+  const setAsLoginBackground = async (file: ManagedFile) => {
+    if (getFileKind(file).key !== 'image') {
+      void message.warning('只有图片文件可以设置为登录背景');
+      return;
+    }
+
+    setSettingLoginBackgroundId(file.id);
+    try {
+      const blob = await readFilePreviewBlob(file.id);
+      const dataUrl = await createLoginBackgroundDataUrl(blob, file.contentType);
+      setStoredLoginBackground({
+        url: dataUrl,
+        name: file.displayName || file.originalName,
+        source: 'file-manager',
+        mimeType: blob.type || file.contentType,
+        size: blob.size || file.size,
+      });
+      void message.success('已设为登录背景，退出到登录页后会使用这张本地背景');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '设置登录背景失败';
+      void message.error(errorMessage);
+    } finally {
+      setSettingLoginBackgroundId(null);
+    }
+  };
+  const resetLoginBackground = () => {
+    clearStoredLoginBackground();
+    void message.success('已恢复默认登录背景');
+  };
   const onPreviewWheel = (event: WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
     setImageScale((current) => clampScale(current + (event.deltaY < 0 ? 0.12 : -0.12)));
@@ -245,7 +276,8 @@ export function FilesPage(props: FilesPageProps) {
     <section className="page-stack files-workspace antd-files-workspace" aria-labelledby="files-page-title">
       <Card data-tilt-disabled="true" className="file-browser-panel" title={<h1 id="files-page-title" className="file-page-heading">文件管理</h1>} extra={<div className="antd-file-tools"><Input value={fileKeyword} allowClear onChange={(event) => onFileKeywordChange(event.target.value)} placeholder="名称、分类或说明" prefix={<FileTextOutlined />} /><Button onClick={() => onFileKeywordChange('')}>重置</Button>{actions.create && <Button type="primary" icon={<InboxOutlined />} onClick={() => { onResetFileForm(); setIsUploadOpen(true); }}>上传文件</Button>}{(actions.restore || actions.permanentDelete) && <Button icon={<DeleteOutlined />} onClick={() => void openRecycleBin()}>回收站{recycleFiles.length ? ` (${recycleFiles.length})` : ''}</Button>}</div>}>
         <div className="file-type-tabs" role="tablist" aria-label="按文件类型筛选">{FILE_KIND_OPTIONS.map((item) => <button className={activeKind === item.key ? 'active' : ''} type="button" role="tab" aria-selected={activeKind === item.key} key={item.key} onClick={() => setActiveKind(item.key)}><span aria-hidden="true">{item.icon}</span>{item.label}<strong>{kindCounts[item.key]}</strong></button>)}</div>
-        {visibleFiles.length === 0 ? <Empty description="暂无匹配文件" /> : <div className="file-card-grid">{visibleFiles.map((file) => <FileCard key={file.id} file={file} actions={actions} onOpenImage={openImage} onEditFile={openEditDialog} onDownloadFile={onDownloadFile} onDeleteFile={onDeleteFile} />)}</div>}
+        <div className="file-login-background-toolbar"><span>图片可保存为当前浏览器的登录背景，不依赖外部 URL。</span><Button icon={<PictureOutlined />} onClick={resetLoginBackground}>恢复默认背景</Button></div>
+        {visibleFiles.length === 0 ? <Empty description="暂无匹配文件" /> : <div className="file-card-grid">{visibleFiles.map((file) => <FileCard key={file.id} file={file} actions={actions} onOpenImage={openImage} onEditFile={openEditDialog} onDownloadFile={onDownloadFile} onDeleteFile={onDeleteFile} onSetLoginBackground={setAsLoginBackground} settingLoginBackgroundId={settingLoginBackgroundId} />)}</div>}
       </Card>
 
       <Modal open={isUploadOpen} title="上传文件" okText="上传" cancelText="取消" confirmLoading={isSavingFile} onOk={() => document.getElementById('file-upload-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))} onCancel={closeUploadDialog} destroyOnHidden>
@@ -283,14 +315,24 @@ export function FilesPage(props: FilesPageProps) {
   );
 }
 
-type FileCardProps = { file: ManagedFile; actions: ResourceActionAccess; onOpenImage: (file: ManagedFile) => void; onEditFile: (file: ManagedFile) => void; onDownloadFile: (fileId: number) => void; onDeleteFile: (fileId: number) => void };
-function FileCard({ file, actions, onOpenImage, onEditFile, onDownloadFile, onDeleteFile }: FileCardProps) {
+type FileCardProps = {
+  file: ManagedFile;
+  actions: ResourceActionAccess;
+  onOpenImage: (file: ManagedFile) => void;
+  onEditFile: (file: ManagedFile) => void;
+  onDownloadFile: (fileId: number) => void;
+  onDeleteFile: (fileId: number) => void;
+  onSetLoginBackground: (file: ManagedFile) => void;
+  settingLoginBackgroundId: number | null;
+};
+function FileCard({ file, actions, onOpenImage, onEditFile, onDownloadFile, onDeleteFile, onSetLoginBackground, settingLoginBackgroundId }: FileCardProps) {
   const meta = getFileKind(file);
   const previewUrl = `${API_BASE_URL}/api/files/${file.id}/preview`;
   const thumbnailUrl = `${API_BASE_URL}/api/files/${file.id}/thumbnail`;
   const isImage = meta.key === 'image';
   const isPDF = meta.key === 'pdf';
   const isIndexableImage = isImage && !file.isPrivate;
+  const isSettingLoginBackground = settingLoginBackgroundId === file.id;
   const titleId = `file-title-${file.id}`;
   const imageText = getImageAccessibleText(file);
   return <article className={`file-card tone-${meta.tone}`} aria-labelledby={titleId} itemScope={isIndexableImage} itemType={isIndexableImage ? 'https://schema.org/ImageObject' : undefined}>
@@ -302,6 +344,7 @@ function FileCard({ file, actions, onOpenImage, onEditFile, onDownloadFile, onDe
     <div className="file-card-body"><div className="file-card-title"><strong id={titleId} title={file.displayName} itemProp={isIndexableImage ? 'name' : undefined}>{file.displayName}</strong><Space size={4} wrap><Tag>{file.category || '未分类'}</Tag><Tag color={file.isPrivate ? 'warning' : 'blue'}>{file.isPrivate ? '私密' : '公开'}</Tag></Space></div><p title={file.originalName}>{file.originalName}</p><small itemProp={isIndexableImage ? 'description' : undefined}>{file.description || '暂无说明'}</small><div className="file-meta-row"><span>归属：{file.ownerName || '未知'}</span><span>{formatFileSize(file.size)}</span><time itemProp={isIndexableImage ? 'dateModified' : undefined} dateTime={file.updatedAt}>{new Date(file.updatedAt).toLocaleString()}</time></div></div>
     <div className="file-card-actions">
       {isImage && <Tooltip title="点击后才加载原始图片"><Button type="link" icon={<EyeOutlined />} onClick={() => onOpenImage(file)}>预览</Button></Tooltip>}
+      {isImage && <Button type="link" icon={<PictureOutlined />} loading={isSettingLoginBackground} onClick={() => onSetLoginBackground(file)}>设为登录背景</Button>}
       {isPDF && <a href={previewUrl} target="_blank" rel="noopener"><Button type="link" icon={<EyeOutlined />}>浏览 PDF</Button></a>}
       {actions.update && <Button type="link" icon={<EditOutlined />} onClick={() => onEditFile(file)}>编辑</Button>}<Button type="link" icon={<DownloadOutlined />} onClick={() => onDownloadFile(file.id)}>下载</Button>{actions.delete && <Popconfirm title="确认将该文件移入回收站？可通过恢复接口找回。" okText="移入回收站" cancelText="取消" onConfirm={() => onDeleteFile(file.id)}><Button danger type="link" icon={<DeleteOutlined />}>移入回收站</Button></Popconfirm>}
     </div>
@@ -327,4 +370,87 @@ function getImageAccessibleText(file: ManagedFile) {
   const description = file.description.trim();
   const category = file.category.trim();
   return description || `${file.displayName}${category ? `，${category}` : ''}`;
+}
+
+const LOGIN_BACKGROUND_MAX_EDGE = 1920;
+const LOGIN_BACKGROUND_WEBP_QUALITY = 0.88;
+const LOGIN_BACKGROUND_MAX_DATA_URL_LENGTH = 4_700_000;
+
+async function createLoginBackgroundDataUrl(blob: Blob, fallbackContentType = '') {
+  const mimeType = (blob.type || fallbackContentType).toLowerCase();
+  if (mimeType && !mimeType.startsWith('image/')) {
+    throw new Error('只有图片文件可以设置为登录背景');
+  }
+
+  let dataUrl: string;
+  try {
+    dataUrl = await rasterizeImageBlob(blob);
+  } catch (error) {
+    if (mimeType.includes('svg')) {
+      throw new Error('SVG 图片无法安全转换为登录背景，请换 JPG、PNG 或 WebP 图片');
+    }
+    dataUrl = await readBlobAsDataUrl(blob);
+  }
+
+  if (dataUrl.length > LOGIN_BACKGROUND_MAX_DATA_URL_LENGTH) {
+    throw new Error('图片压缩后仍然过大，请换一张更小的图片再设置登录背景');
+  }
+
+  return dataUrl;
+}
+
+async function rasterizeImageBlob(blob: Blob) {
+  const objectUrl = URL.createObjectURL(blob);
+  const image = new Image();
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error('图片加载失败'));
+      image.src = objectUrl;
+    });
+
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    if (!width || !height) {
+      throw new Error('图片尺寸无效');
+    }
+
+    const scale = Math.min(1, LOGIN_BACKGROUND_MAX_EDGE / Math.max(width, height));
+    const targetWidth = Math.max(1, Math.round(width * scale));
+    const targetHeight = Math.max(1, Math.round(height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('浏览器不支持图片压缩');
+    }
+
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = 'high';
+    context.drawImage(image, 0, 0, targetWidth, targetHeight);
+    const dataUrl = canvas.toDataURL('image/webp', LOGIN_BACKGROUND_WEBP_QUALITY);
+    if (!dataUrl || dataUrl === 'data:,') {
+      throw new Error('图片压缩失败');
+    }
+    return dataUrl;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function readBlobAsDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error('图片读取失败'));
+    };
+    reader.onerror = () => reject(new Error('图片读取失败'));
+    reader.readAsDataURL(blob);
+  });
 }
