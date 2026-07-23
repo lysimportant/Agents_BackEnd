@@ -179,7 +179,7 @@ export function MainLayout({
             setHeaderConversations((current) => upsertHeaderConversation(current, envelope.conversation!));
             notificationApi.success({
               placement: 'bottomRight',
-              message: `${envelope.conversation.title || '新咨询'} 用户上线了`,
+              title: `${envelope.conversation.title || '新咨询'} 用户上线了`,
               description: `会话 ${envelope.conversation.id} 已连接。`,
             });
           } else if (envelope.type === 'conversation' && envelope.conversation) {
@@ -189,7 +189,7 @@ export function MainLayout({
           } else if (envelope.type === 'account_login' && envelope.user) {
             notificationApi.success({
               placement: 'bottomRight',
-              message: `${envelope.user.name || envelope.user.username} 登录了`,
+              title: `${envelope.user.name || envelope.user.username} 登录了`,
               description: `账号 ${envelope.user.username} 已进入系统。`,
             });
           }
@@ -636,7 +636,8 @@ function AdminNavigation({
     <div
       className="antd-sider-inner"
       onMouseLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setCollapsedFlyout(null);
+        const { currentTarget, relatedTarget } = event;
+        if (!(relatedTarget instanceof Node) || !currentTarget.contains(relatedTarget)) setCollapsedFlyout(null);
       }}
     >
       <div className={`antd-brand ${collapsed ? 'is-collapsed' : ''}`}>
