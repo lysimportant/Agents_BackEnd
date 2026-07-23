@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, type Dispatch, type FormEvent, type SetStateAction } from 'react';
+import { useEffect, useRef, type Dispatch, type FormEvent, type SetStateAction } from 'react';
 import { LOGIN_BACKGROUND_CHANGE_EVENT, applyStoredLoginBackground } from '@/src/utils/loginBackground';
 import type { LoginForm } from '@/src/types/admin';
 
@@ -14,6 +14,8 @@ type AuthPageProps = {
 };
 
 export function AuthPage({ isCheckingSession, loginForm, loginError, isLoggingIn, onLoginFormChange, onSubmit }: AuthPageProps) {
+  const formRef = useRef<HTMLFormElement>(null);
+
   useEffect(() => {
     const refreshLoginBackground = () => {
       applyStoredLoginBackground();
@@ -29,6 +31,34 @@ export function AuthPage({ isCheckingSession, loginForm, loginError, isLoggingIn
     };
   }, []);
 
+  // 未聚焦输入框时按 Enter 也触发与点击登录相同的 form submit
+  useEffect(() => {
+    if (isCheckingSession) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' || event.defaultPrevented || event.isComposing || isLoggingIn) return;
+
+      const target = event.target as HTMLElement | null;
+      if (target && formRef.current?.contains(target)) {
+        // 焦点已在表单内时交给原生 submit（input/button 的 Enter）
+        return;
+      }
+
+      const form = formRef.current;
+      if (!form) return;
+
+      event.preventDefault();
+      if (typeof form.requestSubmit === 'function') {
+        form.requestSubmit();
+      } else {
+        form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isCheckingSession, isLoggingIn]);
+
   if (isCheckingSession) {
     return (
       <main className="auth-shell auth-shell-with-art">
@@ -43,7 +73,7 @@ export function AuthPage({ isCheckingSession, loginForm, loginError, isLoggingIn
 
   return (
     <main className="auth-shell auth-shell-with-art">
-      <form className="login-card login-card-on-art" onSubmit={onSubmit}>
+      <form ref={formRef} className="login-card login-card-on-art" onSubmit={onSubmit}>
         <div>
           <p className="login-kicker">账号登录</p>
           <h2>欢迎回来</h2>
@@ -53,6 +83,7 @@ export function AuthPage({ isCheckingSession, loginForm, loginError, isLoggingIn
           账号
           <input
             required
+            autoFocus
             value={loginForm.username}
             onChange={(event) => onLoginFormChange((current) => ({ ...current, username: event.target.value }))}
             placeholder="MH"

@@ -167,7 +167,7 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
           lastAgentNotificationRef.current = { key: notificationKey, at: now };
           notificationApi.info({
             placement: 'bottomRight',
-            message: '客服已接入聊天',
+            title: '客服已接入聊天',
             description: `${envelope.actorName || '客服人员'} 已进入当前咨询。`,
           });
         } else if (envelope.type === 'conversation_deleted') {

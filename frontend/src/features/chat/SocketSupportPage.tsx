@@ -116,7 +116,7 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
                     canDelete={canDelete}
                     onClick={() => void socket.selectConversation(conversation.id, conversation.online && conversation.status === 'open').then((ok) => {
                       if (!ok || !conversation.online || conversation.status !== 'open') return;
-                      notificationApi.info({ placement: 'bottomRight', message: '已接入客户聊天', description: conversation.title || '新咨询' });
+                      notificationApi.info({ placement: 'bottomRight', title: '已接入客户聊天', description: conversation.title || '新咨询' });
                     })}
                     onDelete={() => void socket.deleteConversation(conversation.id).then((ok) => { void (ok ? messageApi.success('会话删除完成') : messageApi.error('会话删除失败，请查看页面提示')); })}
                   />

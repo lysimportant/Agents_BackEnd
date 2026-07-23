@@ -331,7 +331,7 @@ export function useAdminWorkspace() {
       setLoginForm({ username: 'MH', password: '123' });
       globalNotification.success({
         placement: 'bottomRight',
-        message: `${payload.user.name || payload.user.username} 登录成功`,
+        title: `${payload.user.name || payload.user.username} 登录成功`,
         description: `账号 ${payload.user.username} 已进入系统。`,
       });
     } catch (loginErrorValue) {
