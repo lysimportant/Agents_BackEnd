@@ -39,6 +39,7 @@ _task-*/
 .task-logs/
 .task-tmp/
 .runtime-services.json
+.codex/
 
 # Regenerable local build and test artifacts
 backend/*.exe~
