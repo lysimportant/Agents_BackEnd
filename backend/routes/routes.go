@@ -23,6 +23,7 @@ type Store interface {
 	handlers.ArticleStore
 	handlers.FileStore
 	handlers.SocketStore
+	handlers.InternalChatStore
 }
 
 func Setup(router *gin.Engine, appStore Store, authService *auth.Service, passwordCodes *verification.PasswordCodeService, cfg config.Config) {
@@ -48,4 +49,5 @@ func Setup(router *gin.Engine, appStore Store, authService *auth.Service, passwo
 	registerArticleRoutes(protected, appStore, handlers.NewArticleHandler(appStore))
 	registerFileRoutes(protected, appStore, handlers.NewFileHandler(appStore, cfg.UploadDir))
 	registerProtectedSocketRoutes(protected, appStore, socketHandler)
+	registerInternalChatRoutes(protected, handlers.NewInternalChatHandler(appStore))
 }

@@ -264,6 +264,15 @@ func (s *SQLiteStore) migrate() error {
 			created_at TEXT NOT NULL,
 			FOREIGN KEY (conversation_id) REFERENCES socket_conversations(id) ON DELETE CASCADE
 		)`,
+		`CREATE TABLE IF NOT EXISTS internal_chat_messages (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			sender_id INTEGER NOT NULL,
+			recipient_id INTEGER,
+			content TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+			FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE
+		)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.Exec(statement); err != nil {
@@ -319,6 +328,8 @@ func (s *SQLiteStore) migrate() error {
 		`CREATE INDEX IF NOT EXISTS idx_role_menus_menu_id ON role_menus(menu_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_socket_conversations_updated_at ON socket_conversations(updated_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_socket_messages_conversation_id ON socket_messages(conversation_id,id)`,
+		`CREATE INDEX IF NOT EXISTS idx_internal_chat_group ON internal_chat_messages(recipient_id,id)`,
+		`CREATE INDEX IF NOT EXISTS idx_internal_chat_sender ON internal_chat_messages(sender_id,recipient_id,id)`,
 	}
 	for _, statement := range indexes {
 		if _, err := s.db.Exec(statement); err != nil {

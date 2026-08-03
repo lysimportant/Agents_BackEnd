@@ -187,6 +187,15 @@ npm run dev
 - 服务端会校验存储名和最终路径，防止路径穿越。
 - 公开图片在管理界面中带描述性替代文本与 `ImageObject` 语义；私密图片不会输出该索引标记。真正面向搜索引擎公开收录时仍需部署无需登录的公开详情 URL。
 
+### 内部聊天
+
+登录用户可通过管理后台右上角的聊天按钮打开独立页面 `http://localhost:3000/chat`。该页面不加载管理后台 Header 和侧栏，采用类似微信的双栏布局；默认进入全员群聊，也可以从左侧用户列表选择在岗且允许登录的用户发起私聊。消息持久化到 SQLite，页面每 2 秒拉取一次当前会话的新状态。
+
+- `GET /api/internal-chat/users`: 获取可私聊用户，并返回最近 15 秒内活跃的 `online` 状态
+- `POST /api/internal-chat/presence`: 更新当前用户在线状态
+- `GET /api/internal-chat/messages?peerId=0`: 获取全员群聊消息；`peerId` 为用户 ID 时获取双方私聊消息
+- `POST /api/internal-chat/messages`: 发送消息；Body 示例：`{"recipientId":null,"content":"大家好"}`，`recipientId=null` 表示群聊
+
 ### Socket 在线客服
 
 管理端“工作台 → Socket 客服”会实时列出全部客服会话，显示会话标题、访客在线状态、最近消息和消息数量，并支持按标题和更新时间范围搜索；选择会话后可监视完整聊天记录，访客端会收到客服接入通知。离线或已关闭的会话仍可查看历史，但不能再接入、回复或发送文件。具有 `socket.send` 动作权限的客服可以回复在线访客，具有 `socket.delete` 权限的人员可直接在会话列表删除，无需先打开。软删除只从列表隐藏会话，聊天记录与附件继续保留。管理端连接与历史接口需要 `socket-support` 菜单及相应动作权限：

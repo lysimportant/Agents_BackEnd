@@ -288,3 +288,26 @@ type SocketMessageRequest struct {
 	MessageType    string `json:"messageType" binding:"required"`
 	Content        string `json:"content"`
 }
+
+type InternalChatUser struct {
+	ID         int    `json:"id"`
+	Username   string `json:"username"`
+	Name       string `json:"name"`
+	Department string `json:"department"`
+	Online     bool   `json:"online"`
+}
+
+type InternalChatMessage struct {
+	ID            int       `json:"id"`
+	SenderID      int       `json:"senderId"`
+	SenderName    string    `json:"senderName"`
+	RecipientID   *int      `json:"recipientId,omitempty"`
+	RecipientName string    `json:"recipientName,omitempty"`
+	Content       string    `json:"content"`
+	CreatedAt     time.Time `json:"createdAt"`
+}
+
+type InternalChatMessageRequest struct {
+	RecipientID *int   `json:"recipientId"`
+	Content     string `json:"content" binding:"required"`
+}

@@ -401,6 +401,14 @@ export function MainLayout({
               />
             </div>
             <Space size={10} wrap className="antd-header-actions">
+              <Tooltip title="内部聊天">
+                <Button
+                  type="text"
+                  aria-label="打开内部聊天"
+                  icon={<MessageOutlined />}
+                  onClick={() => window.open('/chat', '_blank', 'noopener,noreferrer')}
+                />
+              </Tooltip>
               {canQuerySocketConversations && (
                 <Popover
                   trigger={['hover', 'click']}
