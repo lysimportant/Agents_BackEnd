@@ -74,20 +74,6 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
     <div className="socket-support-page">
       {messageContext}
       {notificationContext}
-      <Card className="socket-hero-card" data-tilt-holographic="true">
-        <div className="socket-hero-content">
-          <div>
-            <Tag color="processing" icon={<CustomerServiceOutlined />}>实时客服中心</Tag>
-            <Typography.Title level={2}>在线聊天客户监控</Typography.Title>
-            <Typography.Paragraph>查看所有访客会话、实时监视聊天，并直接回复文字、图片、文件与表情。</Typography.Paragraph>
-          </div>
-          <Space wrap>
-            <Badge status={socket.connected ? 'success' : 'error'} text={socket.connected ? '实时通道已连接' : '实时通道重连中'} />
-            <Button icon={<ReloadOutlined />} onClick={() => void socket.refresh().then((ok) => { void (ok ? messageApi.success('刷新完成') : messageApi.error('刷新失败，请查看页面提示')); })} loading={socket.loading}>刷新</Button>
-          </Space>
-        </div>
-      </Card>
-
       {socket.error && <Alert type="error" showIcon message={socket.error} closable />}
       {fileError && <Alert type="warning" showIcon message={fileError} closable onClose={() => setFileError('')} />}
 
@@ -98,7 +84,15 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
       </div>
 
       <div className="socket-console-grid" data-tilt-disabled="true">
-        <Card className="socket-conversation-panel" title="客户会话" extra={<Tag>{filteredConversations.length} 条结果</Tag>}>
+        <Card
+          className="socket-conversation-panel"
+          title="客户会话"
+          extra={<Space wrap>
+            <Badge status={socket.connected ? 'success' : 'error'} text={socket.connected ? '实时通道已连接' : '实时通道重连中'} />
+            <Button icon={<ReloadOutlined />} onClick={() => void socket.refresh().then((ok) => { void (ok ? messageApi.success('刷新完成') : messageApi.error('刷新失败，请查看页面提示')); })} loading={socket.loading}>刷新</Button>
+            <Tag>{filteredConversations.length} 条结果</Tag>
+          </Space>}
+        >
           <div className="socket-conversation-search">
             <div className="socket-search-row">
               <Input allowClear value={searchTitle} prefix={<SearchOutlined />} placeholder="搜索标题、消息或 ID" onChange={(event) => setSearchTitle(event.target.value)} />
