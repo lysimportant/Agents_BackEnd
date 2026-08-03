@@ -16,7 +16,7 @@ import { API_BASE_URL, MAX_UPLOAD_SIZE } from '@/src/config/constants';
 import type { SocketConversation, SocketEnvelope, SocketMessage } from './types';
 import './customer-chat.css';
 
-const emojis = ['😀', '😁', '😂', '😊', '😍', '🤝', '👍', '🎉', '❤️', '🙏', '📦', '✅'];
+const emojis = ['😀', '😁', '😂', '😊', '😍', '🤝', '👍', '🎉', '❤️', '🙏', '📦', '✅', '😎', '😉', '😇', '😘', '😗', '😙', '😚', '🙂'];
 const NEW_CONSULTATION_LIMIT = 3;
 const NEW_CONSULTATION_WINDOW = 60_000;
 
@@ -363,7 +363,7 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
           <textarea
             value={draft}
             maxLength={4000}
-            rows={2}
+            rows={4}
             placeholder="请输入咨询内容，Ctrl + Enter 发送"
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
