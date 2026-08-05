@@ -22,8 +22,9 @@ export async function readTextFileContent(fileId: number) {
   return response.text();
 }
 
-export async function readFilePreviewBlob(fileId: number) {
-  const response = await requestWithSession(`${API_BASE_URL}/api/files/${fileId}/preview`, {
+export async function readFilePreviewBlob(file: Pick<ManagedFile, 'id' | 'previewUrl'>) {
+  const previewPath = file.previewUrl || `/api/files/${file.id}/preview`;
+  const response = await requestWithSession(`${API_BASE_URL}${previewPath}`, {
     cache: 'no-store',
   });
   if (!response.ok) {

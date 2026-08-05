@@ -10,20 +10,21 @@ import (
 )
 
 type Config struct {
-	SQLitePath        string
-	UploadDir         string
-	ServerAddress     string
-	AllowedOrigins    []string
-	CookieSameSite    http.SameSite
-	CookieSecure      bool
-	SessionCookieName string
-	SessionTTLHours   int
-	RedisAddress      string
-	RedisPassword     string
-	RedisDB           int
-	EmailConfigPath   string
-	Email             EmailConfig
-	PasswordCodeTTL   time.Duration
+	SQLitePath              string
+	UploadDir               string
+	ServerAddress           string
+	AllowedOrigins          []string
+	CookieSameSite          http.SameSite
+	CookieSecure            bool
+	SessionCookieName       string
+	SessionTTLHours         int
+	RedisAddress            string
+	RedisPassword           string
+	RedisDB                 int
+	EmailConfigPath         string
+	Email                   EmailConfig
+	PasswordCodeTTL         time.Duration
+	VisitorLogRetentionDays int
 }
 
 type EmailConfig struct {
@@ -38,20 +39,21 @@ type EmailConfig struct {
 func Load() Config {
 	emailConfigPath := envOrDefault("EMAIL_CONFIG_PATH", defaultEmailConfigPath())
 	return Config{
-		SQLitePath:        envOrDefault("SQLITE_PATH", "data/app.db"),
-		UploadDir:         envOrDefault("UPLOAD_DIR", "uploads"),
-		ServerAddress:     envOrDefault("SERVER_ADDRESS", ":8080"),
-		AllowedOrigins:    parseOrigins(envOrDefault("CORS_ALLOWED_ORIGINS", "*")),
-		CookieSameSite:    parseSameSite(envOrDefault("COOKIE_SAMESITE", "Lax")),
-		CookieSecure:      strings.EqualFold(envOrDefault("COOKIE_SECURE", "false"), "true"),
-		SessionCookieName: envOrDefault("SESSION_COOKIE_NAME", "sessionId"),
-		SessionTTLHours:   positiveIntEnv("SESSION_TTL_HOURS", 8),
-		RedisAddress:      envOrDefault("REDIS_ADDR", "localhost:6379"),
-		RedisPassword:     strings.TrimSpace(os.Getenv("REDIS_PASSWORD")),
-		RedisDB:           nonNegativeIntEnv("REDIS_DB", 0),
-		EmailConfigPath:   emailConfigPath,
-		Email:             loadEmailConfig(emailConfigPath),
-		PasswordCodeTTL:   time.Duration(positiveIntEnv("PASSWORD_CODE_TTL_SECONDS", 180)) * time.Second,
+		SQLitePath:              envOrDefault("SQLITE_PATH", "data/app.db"),
+		UploadDir:               envOrDefault("UPLOAD_DIR", "uploads"),
+		ServerAddress:           envOrDefault("SERVER_ADDRESS", ":8080"),
+		AllowedOrigins:          parseOrigins(envOrDefault("CORS_ALLOWED_ORIGINS", "*")),
+		CookieSameSite:          parseSameSite(envOrDefault("COOKIE_SAMESITE", "Lax")),
+		CookieSecure:            strings.EqualFold(envOrDefault("COOKIE_SECURE", "false"), "true"),
+		SessionCookieName:       envOrDefault("SESSION_COOKIE_NAME", "sessionId"),
+		SessionTTLHours:         positiveIntEnv("SESSION_TTL_HOURS", 8),
+		RedisAddress:            envOrDefault("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:           strings.TrimSpace(os.Getenv("REDIS_PASSWORD")),
+		RedisDB:                 nonNegativeIntEnv("REDIS_DB", 0),
+		EmailConfigPath:         emailConfigPath,
+		Email:                   loadEmailConfig(emailConfigPath),
+		PasswordCodeTTL:         time.Duration(positiveIntEnv("PASSWORD_CODE_TTL_SECONDS", 180)) * time.Second,
+		VisitorLogRetentionDays: nonNegativeIntEnv("VISITOR_LOG_RETENTION_DAYS", 90),
 	}
 }
 

@@ -14,6 +14,71 @@ type DataPoint struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+type VisitorAccessRecord struct {
+	ID             int       `json:"id"`
+	IP             string    `json:"ip"`
+	ForwardedIP    string    `json:"forwardedIp,omitempty"`
+	Country        string    `json:"country"`
+	Region         string    `json:"region"`
+	City           string    `json:"city"`
+	ISP            string    `json:"isp"`
+	Host           string    `json:"host"`
+	Method         string    `json:"method"`
+	Path           string    `json:"path"`
+	StatusCode     int       `json:"statusCode"`
+	DurationMS     int64     `json:"durationMs"`
+	Bytes          int64     `json:"bytes"`
+	UserAgent      string    `json:"userAgent"`
+	Browser        string    `json:"browser"`
+	OS             string    `json:"os"`
+	Device         string    `json:"device"`
+	Referer        string    `json:"referer"`
+	AcceptLanguage string    `json:"acceptLanguage"`
+	UserID         *int      `json:"userId,omitempty"`
+	UserName       string    `json:"userName,omitempty"`
+	Authenticated  bool      `json:"authenticated"`
+	CreatedAt      time.Time `json:"createdAt"`
+}
+
+type VisitorAnalyticsFilter struct {
+	From       time.Time
+	To         time.Time
+	Range      string
+	Page       int
+	PageSize   int
+	Keyword    string
+	StatusCode *int
+}
+
+type VisitorAnalyticsDimension struct {
+	Name  string `json:"name"`
+	Value int    `json:"value"`
+}
+
+type VisitorAnalyticsPoint struct {
+	Label string `json:"label"`
+	Value int    `json:"value"`
+}
+
+type VisitorAnalyticsSummary struct {
+	TotalRequests         int64                       `json:"totalRequests"`
+	UniqueIPs             int64                       `json:"uniqueIps"`
+	AuthenticatedRequests int64                       `json:"authenticatedRequests"`
+	ErrorRequests         int64                       `json:"errorRequests"`
+	AverageDurationMS     int64                       `json:"averageDurationMs"`
+	Countries             []VisitorAnalyticsDimension `json:"countries"`
+	Paths                 []VisitorAnalyticsDimension `json:"paths"`
+	Timeline              []VisitorAnalyticsPoint     `json:"timeline"`
+}
+
+type VisitorAnalyticsResponse struct {
+	Records  []VisitorAccessRecord   `json:"records"`
+	Total    int                     `json:"total"`
+	Page     int                     `json:"page"`
+	PageSize int                     `json:"pageSize"`
+	Summary  VisitorAnalyticsSummary `json:"summary"`
+}
+
 type CreateDataPointRequest struct {
 	Source string  `json:"source" binding:"required"`
 	Metric string  `json:"metric" binding:"required"`
@@ -226,6 +291,7 @@ type ArticleRequest struct {
 
 type ManagedFile struct {
 	ID           int        `json:"id"`
+	Source       string     `json:"source,omitempty"`
 	DisplayName  string     `json:"displayName"`
 	OriginalName string     `json:"originalName"`
 	Category     string     `json:"category"`
@@ -236,6 +302,10 @@ type ManagedFile struct {
 	OwnerID      int        `json:"ownerId"`
 	OwnerName    string     `json:"ownerName"`
 	IsPrivate    bool       `json:"isPrivate"`
+	ReadOnly     bool       `json:"readOnly"`
+	PreviewURL   string     `json:"previewUrl,omitempty"`
+	DownloadURL  string     `json:"downloadUrl,omitempty"`
+	StoragePath  string     `json:"-"`
 	CreatedAt    time.Time  `json:"createdAt"`
 	UpdatedAt    time.Time  `json:"updatedAt"`
 	DeletedAt    *time.Time `json:"deletedAt,omitempty"`
@@ -298,16 +368,32 @@ type InternalChatUser struct {
 }
 
 type InternalChatMessage struct {
-	ID            int       `json:"id"`
-	SenderID      int       `json:"senderId"`
-	SenderName    string    `json:"senderName"`
-	RecipientID   *int      `json:"recipientId,omitempty"`
-	RecipientName string    `json:"recipientName,omitempty"`
-	Content       string    `json:"content"`
-	CreatedAt     time.Time `json:"createdAt"`
+	ID            int                      `json:"id"`
+	SenderID      int                      `json:"senderId"`
+	SenderName    string                   `json:"senderName"`
+	RecipientID   *int                     `json:"recipientId,omitempty"`
+	RecipientName string                   `json:"recipientName,omitempty"`
+	Content       string                   `json:"content"`
+	Attachments   []InternalChatAttachment `json:"attachments"`
+	CreatedAt     time.Time                `json:"createdAt"`
 }
 
 type InternalChatMessageRequest struct {
-	RecipientID *int   `json:"recipientId"`
-	Content     string `json:"content" binding:"required"`
+	RecipientID   *int   `json:"recipientId"`
+	Content       string `json:"content"`
+	AttachmentIDs []int  `json:"attachmentIds"`
+}
+
+type InternalChatAttachment struct {
+	ID           int       `json:"id"`
+	MessageID    *int      `json:"-"`
+	OwnerID      int       `json:"-"`
+	OriginalName string    `json:"originalName"`
+	StoredName   string    `json:"-"`
+	MimeType     string    `json:"mimeType"`
+	Size         int64     `json:"size"`
+	IsImage      bool      `json:"isImage"`
+	PreviewURL   string    `json:"previewUrl"`
+	DownloadURL  string    `json:"downloadUrl"`
+	CreatedAt    time.Time `json:"createdAt"`
 }

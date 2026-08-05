@@ -14,6 +14,7 @@ import { ProfilePage } from '@/src/admin-pages/profile/ProfileDialog';
 import { RolesPage } from '@/src/admin-pages/roles/RolesPage';
 import { UsersPage } from '@/src/admin-pages/users/UsersPage';
 import { SocketSupportPage } from '@/src/features/chat/SocketSupportPage';
+import { VisitorAnalyticsPage } from '@/src/admin-pages/visitor-analytics/VisitorAnalyticsPage';
 
 export default function Home() {
   const workspace = useAdminWorkspace();
@@ -93,6 +94,18 @@ export default function Home() {
 
       {workspace.activePage === 'socket-support' && (
         <SocketSupportPage canSend={hasAction('socket.send')} canDelete={hasAction('socket.delete')} />
+      )}
+
+      {workspace.activePage === 'visitor-analytics' && (
+        <VisitorAnalyticsPage
+          data={workspace.visitorAnalytics}
+          isLoading={workspace.isLoadingVisitorAnalytics}
+          range={workspace.visitorAnalyticsRange}
+          keyword={workspace.visitorAnalyticsKeyword}
+          onRangeChange={workspace.handleVisitorAnalyticsRangeChange}
+          onKeywordChange={workspace.setVisitorAnalyticsKeyword}
+          onRefresh={(page, pageSize) => void workspace.loadVisitorAnalytics(page, undefined, undefined, pageSize)}
+        />
       )}
 
       {workspace.activePage === 'users' && (

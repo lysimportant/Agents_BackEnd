@@ -8,11 +8,12 @@ export const menuStatusOptions = ['启用', '停用'];
 export const departmentStatusOptions = ['启用', '停用'];
 export const roleStatusOptions = ['启用', '停用'];
 export const articleStatusOptions = ['草稿', '已发布', '归档'];
-export const pageKeys = ['dashboard', 'socket-support', 'users', 'departments', 'roles', 'menus', 'articles', 'files', 'profile'] as const;
+export const pageKeys = ['dashboard', 'socket-support', 'visitor-analytics', 'users', 'departments', 'roles', 'menus', 'articles', 'files', 'profile'] as const;
 
 export const pageTitles: Record<(typeof pageKeys)[number], string> = {
   dashboard: '预览台',
   'socket-support': '在线聊天',
+  'visitor-analytics': '访问分析',
   users: '用户管理',
   departments: '部门管理',
   roles: '角色管理',

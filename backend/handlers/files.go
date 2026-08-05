@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,6 +20,8 @@ const MaxUploadSize = 32 << 20
 
 type FileStore interface {
 	ListFiles(includeDeleted bool) []models.ManagedFile
+	ListChatDataFiles() []models.ManagedFile
+	FindChatDataFile(source string, id int) (models.ManagedFile, bool)
 	FindFileByID(id int) (models.ManagedFile, bool)
 	FindDeletedFileByID(id int) (models.ManagedFile, bool)
 	CreateFile(file models.ManagedFile) models.ManagedFile
@@ -46,6 +49,9 @@ func (h *FileHandler) List(c *gin.Context) {
 		if canAccessFile(user, file) {
 			visible = append(visible, file)
 		}
+	}
+	if utils.IsSuperAdmin(user) {
+		visible = append(visible, h.store.ListChatDataFiles()...)
 	}
 	c.JSON(http.StatusOK, visible)
 }
@@ -297,6 +303,55 @@ func (h *FileHandler) Preview(c *gin.Context) {
 
 func (h *FileHandler) Thumbnail(c *gin.Context) {
 	h.serveFile(c, false)
+}
+
+func (h *FileHandler) ChatDataDownload(c *gin.Context) {
+	h.serveChatDataFile(c, true)
+}
+
+func (h *FileHandler) ChatDataPreview(c *gin.Context) {
+	h.serveChatDataFile(c, false)
+}
+
+func (h *FileHandler) serveChatDataFile(c *gin.Context, asAttachment bool) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok || !utils.IsSuperAdmin(user) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "仅超级管理员可访问聊天数据"})
+		return
+	}
+	id, ok := utils.ParseID(c)
+	if !ok {
+		return
+	}
+	file, found := h.store.FindChatDataFile(strings.TrimSpace(c.Param("source")), id)
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"error": "聊天文件不存在"})
+		return
+	}
+	relativePath := filepath.Clean(file.StoragePath)
+	expectedRoot := "internal-chat"
+	if file.Source == "customer-chat" {
+		expectedRoot = "socket"
+	}
+	if relativePath == "." || relativePath == ".." || filepath.IsAbs(relativePath) || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) || !strings.HasPrefix(relativePath, expectedRoot+string(filepath.Separator)) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "聊天文件不存在"})
+		return
+	}
+	path := filepath.Join(h.uploadDir, relativePath)
+	if _, err := os.Stat(path); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "聊天物理文件不存在"})
+		return
+	}
+	disposition := "inline"
+	if asAttachment {
+		disposition = "attachment"
+	}
+	c.Header("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": file.OriginalName}))
+	c.Header("X-Content-Type-Options", "nosniff")
+	if file.ContentType != "" {
+		c.Header("Content-Type", file.ContentType)
+	}
+	c.File(path)
 }
 
 func (h *FileHandler) serveFile(c *gin.Context, asAttachment bool) {

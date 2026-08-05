@@ -30,6 +30,7 @@ go run .
 | `COOKIE_SECURE` | `false` | HTTPS 跨站部署时设为 `true` |
 | `SESSION_COOKIE_NAME` | `sessionId` | 会话 Cookie 名称 |
 | `SESSION_TTL_HOURS` | `8` | 会话有效小时数 |
+| `VISITOR_LOG_RETENTION_DAYS` | `90` | 访问分析日志保留天数；设为 `0` 可关闭自动清理 |
 
 跨站前后端部署通常需要同时设置 `COOKIE_SAMESITE=None`、`COOKIE_SECURE=true`。开发默认的 `CORS_ALLOWED_ORIGINS=*` 会回显请求的实际 Origin，以兼容携带凭证的请求和任意本地前端端口；公网生产环境应将其覆盖为明确 Origin 白名单。允许来源响应会包含 `Access-Control-Allow-Credentials: true` 和 `Vary: Origin`。
 
@@ -68,7 +69,7 @@ npm run dev
 
 动作权限使用稳定的 `resource.action` 编码，前端应按 `actionPermissions` 控制 CRUD 按钮，后端仍会对每个接口独立校验，不能只依赖按钮隐藏：
 
-- 查询/查看：`dashboard.query|view`、`users.query|view`、`departments.query|view`、`roles.query|view`、`menus.query|view`、`articles.query|view`、`files.query|view`、`socket.query|view`。
+- 查询/查看：`dashboard.query|view`、`users.query|view`、`departments.query|view`、`roles.query|view`、`menus.query|view`、`articles.query|view`、`files.query|view`、`socket.query|view`、`visitor-analytics.query|view`。
 - 写动作：`dashboard.create`；各管理资源的 `create`、`update`、`delete`；以及 `users.permissions.update`、`departments.permissions.update`、`roles.permissions.update`、`files.restore`、`files.permanent-delete`、`socket.send`、`socket.delete`。
 - `roleCode=super-admin`（超级管理员）与 `roleCode=system-admin`（系统管理员）固定拥有全部当前动作；其他角色默认只有查询/查看动作，管理员可再为普通用户追加个人动作权限。
 - 超级管理员是最高保护角色；只有超级管理员可以创建或分配超级管理员，系统管理员和其他角色不能创建、修改、删除或降级超级管理员。除本人维护 `/api/profile` 外，受控 CRUD、权限配置、文件恢复及彻底删除由动作权限决定。
@@ -112,7 +113,7 @@ npm run dev
 
 菜单 JSON 字段：`name`、`code`、`path`、`icon`、`parentId`、`sort`、`status`。
 
-“工作台”是一级分组，默认包含“预览台”（`dashboard`）和“Socket 客服”（`socket-support`）两个二级菜单。已有 `dashboard` 菜单 ID 和授权关系会保留，迁移只补充其工作台父级。
+“工作台”是一级分组，默认包含“预览台”（`dashboard`）、“Socket 客服”（`socket-support`）和“访问分析”（`visitor-analytics`）三个二级菜单。已有 `dashboard` 菜单 ID 和授权关系会保留，迁移只补充其工作台父级。
 
 ### 用户菜单权限
 
@@ -168,11 +169,13 @@ npm run dev
 
 ### 文件管理
 
-- `GET /api/files`: 获取文件元数据列表
+- `GET /api/files`: 获取文件元数据列表；超级管理员还会看到内部聊天和客服聊天附件，统一归类为“聊天数据”且只读
 - `GET /api/files/:id`: 获取文件元数据详情
 - `POST /api/files`: 上传文件，`multipart/form-data` 字段为 `file`、`displayName`、`category`、`description`
 - `PUT /api/files/:id`: 更新文件元数据，JSON 字段为 `displayName`、`category`、`description`
 - `GET /api/files/:id/download`: 下载文件内容
+- `GET /api/files/chat-data/:source/:id/preview`: 超级管理员预览聊天附件，`source` 为 `internal-chat` 或 `customer-chat`
+- `GET /api/files/chat-data/:source/:id/download`: 超级管理员下载聊天附件
 - `DELETE /api/files/:id`: 将文件移入回收站（软删除，保留物理文件）
 - `POST /api/files/:id/restore`: 从回收站恢复文件
 
@@ -194,7 +197,18 @@ npm run dev
 - `GET /api/internal-chat/users`: 获取可私聊用户，并返回最近 15 秒内活跃的 `online` 状态
 - `POST /api/internal-chat/presence`: 更新当前用户在线状态
 - `GET /api/internal-chat/messages?peerId=0`: 获取全员群聊消息；`peerId` 为用户 ID 时获取双方私聊消息
-- `POST /api/internal-chat/messages`: 发送消息；Body 示例：`{"recipientId":null,"content":"大家好"}`，`recipientId=null` 表示群聊
+- `POST /api/internal-chat/attachments`: 以 `multipart/form-data` 的 `file` 字段上传不超过 10 MiB 的图片或常用文档，返回仅归当前用户所有的临时附件 ID
+- `POST /api/internal-chat/messages`: 发送消息；Body 示例：`{"recipientId":null,"content":"大家好","attachmentIds":[1]}`，`recipientId=null` 表示群聊；附件 ID 会在同一事务内校验归属并绑定消息
+- `GET /api/internal-chat/attachments/:id/preview`: 预览图片附件；仅消息发送者、私聊接收者、群聊成员或管理员可访问
+- `GET /api/internal-chat/attachments/:id/download`: 下载附件；鉴权范围与预览接口相同
+
+### 访问分析
+
+管理端“工作台 → 访问分析”仅对具备 `visitor-analytics` 菜单和查询动作的用户开放，默认超级管理员和系统管理员可查看。服务端会记录进入网站/API 的请求摘要，用于全球访问趋势和来源分析：连接 IP、可信代理提供的国家/地区/城市/ISP、Host、方法、路径、状态码、耗时、响应大小、User-Agent、浏览器、系统、设备、Referer、语言，以及已登录用户标识。系统不会记录 Cookie、密码、请求正文或查询参数；地区信息在反向代理未提供可信 Header 时显示“未知”。
+
+- `GET /api/visitor-analytics?range=24h|7d|30d&page=1&pageSize=10`: 返回分页访问明细、请求量、独立 IP、登录访问、异常量、平均耗时、国家/地区排行、热门路径和趋势数据；`pageSize` 支持 `10`、`20`、`30`、`50`、`100`，默认 `10`；可用 `keyword` 搜索 IP、地区、路径或 User-Agent，可用 `statusCode` 过滤状态码。
+
+访问 IP 属于敏感访问元数据，仅管理员可查阅，默认保留 90 天，可通过 `VISITOR_LOG_RETENTION_DAYS` 调整。日志中间件跳过 `OPTIONS` 与 `/health`，并按小时自动清理过期记录。
 
 ### Socket 在线客服
 

@@ -347,7 +347,7 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
           </Space>
         </header>
 
-        {error && <Alert type="error" showIcon message={error} />}
+        {error && <Alert type="error" showIcon title={error} />}
 
         <section ref={messageListRef} className="customer-chat-messages" aria-label="客服聊天消息">
           {deleted ? <Empty description="当前会话已删除"><Button type="primary" disabled={newConsultationRetrySeconds > 0} onClick={startNewConsultation}>开始新咨询</Button></Empty> : connecting && messages.length === 0 ? <Spin size="large" /> : messages.length === 0 ? (
@@ -405,9 +405,9 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
         )}
         onCancel={() => setDisconnectDialogOpen(false)}
         closable={false}
-        maskClosable={false}
+        mask={{ closable: false }}
       >
-        <Alert type="warning" showIcon message="检测到连接意外中断，系统正在自动重连。是否确认关闭当前咨询？" />
+        <Alert type="warning" showIcon title="检测到连接意外中断，系统正在自动重连。是否确认关闭当前咨询？" />
       </Modal>
     </main>
   );

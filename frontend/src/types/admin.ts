@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 
-export type PageKey = 'dashboard' | 'socket-support' | 'users' | 'departments' | 'roles' | 'menus' | 'articles' | 'files' | 'profile';
+export type PageKey = 'dashboard' | 'socket-support' | 'visitor-analytics' | 'users' | 'departments' | 'roles' | 'menus' | 'articles' | 'files' | 'profile';
 
 export type AuthUser = {
   id: number;
@@ -141,6 +141,7 @@ export type Article = {
 
 export type ManagedFile = {
   id: number;
+  source?: 'internal-chat' | 'customer-chat';
   displayName: string;
   originalName: string;
   category: string;
@@ -151,6 +152,9 @@ export type ManagedFile = {
   ownerId?: number;
   ownerName?: string;
   isPrivate?: boolean;
+  readOnly?: boolean;
+  previewUrl?: string;
+  downloadUrl?: string;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
@@ -205,4 +209,59 @@ export type FileForm = {
 
 export type DepthStyle = CSSProperties & {
   '--depth'?: number;
+};
+
+export type VisitorAnalyticsRange = '24h' | '7d' | '30d';
+
+export type VisitorAccessRecord = {
+  id: number;
+  ip: string;
+  forwardedIp?: string;
+  country: string;
+  region: string;
+  city: string;
+  isp: string;
+  host: string;
+  method: string;
+  path: string;
+  statusCode: number;
+  durationMs: number;
+  bytes: number;
+  userAgent: string;
+  browser: string;
+  os: string;
+  device: string;
+  referer: string;
+  acceptLanguage: string;
+  userId?: number;
+  userName?: string;
+  authenticated: boolean;
+  createdAt: string;
+};
+
+export type VisitorAnalyticsDimension = {
+  name: string;
+  value: number;
+};
+
+export type VisitorAnalyticsPoint = {
+  label: string;
+  value: number;
+};
+
+export type VisitorAnalyticsResponse = {
+  records: VisitorAccessRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+  summary: {
+    totalRequests: number;
+    uniqueIps: number;
+    authenticatedRequests: number;
+    errorRequests: number;
+    averageDurationMs: number;
+    countries: VisitorAnalyticsDimension[];
+    paths: VisitorAnalyticsDimension[];
+    timeline: VisitorAnalyticsPoint[];
+  };
 };

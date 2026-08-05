@@ -24,11 +24,13 @@ type Store interface {
 	handlers.FileStore
 	handlers.SocketStore
 	handlers.InternalChatStore
+	handlers.VisitorAnalyticsStore
+	middleware.VisitorAccessStore
 }
 
 func Setup(router *gin.Engine, appStore Store, authService *auth.Service, passwordCodes *verification.PasswordCodeService, cfg config.Config) {
 	router.MaxMultipartMemory = handlers.MaxUploadSize
-	router.Use(middleware.CORS(cfg.AllowedOrigins))
+	router.Use(middleware.CORS(cfg.AllowedOrigins), middleware.VisitorAccessLogger(appStore, cfg.VisitorLogRetentionDays))
 
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -49,5 +51,6 @@ func Setup(router *gin.Engine, appStore Store, authService *auth.Service, passwo
 	registerArticleRoutes(protected, appStore, handlers.NewArticleHandler(appStore))
 	registerFileRoutes(protected, appStore, handlers.NewFileHandler(appStore, cfg.UploadDir))
 	registerProtectedSocketRoutes(protected, appStore, socketHandler)
-	registerInternalChatRoutes(protected, handlers.NewInternalChatHandler(appStore))
+	registerInternalChatRoutes(protected, handlers.NewInternalChatHandler(appStore, cfg.UploadDir))
+	registerVisitorAnalyticsRoutes(protected, appStore, handlers.NewVisitorAnalyticsHandler(appStore))
 }

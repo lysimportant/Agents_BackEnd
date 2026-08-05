@@ -20,11 +20,14 @@ import type {
   User,
   UserForm,
   UserPermissionDetails,
+  VisitorAnalyticsRange,
+  VisitorAnalyticsResponse,
 } from '@/src/types/admin';
 import { API_BASE_URL, MAX_UPLOAD_SIZE, emptyArticleForm, emptyFileForm, emptyMenuForm, emptyUserForm, pageKeys } from '@/src/config/constants';
 import { requestWithSession } from '@/src/services/api';
 import { buildMenuTree } from '@/src/utils/menu';
 import { runViewTransition } from '@/src/utils/viewTransition';
+import { fetchVisitorAnalytics } from '@/src/services/visitorAnalyticsApi';
 
 async function parseError(response: Response, fallback: string) {
   try {
@@ -129,6 +132,11 @@ export function useAdminWorkspace() {
   const [articleKeyword, setArticleKeyword] = useState('');
   const [articleStatus, setArticleStatus] = useState('全部');
   const [fileKeyword, setFileKeyword] = useState('');
+  const [visitorAnalytics, setVisitorAnalytics] = useState<VisitorAnalyticsResponse | null>(null);
+  const [isLoadingVisitorAnalytics, setIsLoadingVisitorAnalytics] = useState(false);
+  const [visitorAnalyticsRange, setVisitorAnalyticsRange] = useState<VisitorAnalyticsRange>('7d');
+  const [visitorAnalyticsKeyword, setVisitorAnalyticsKeyword] = useState('');
+  const [visitorAnalyticsPageSize, setVisitorAnalyticsPageSize] = useState(10);
 
   const menuTree = useMemo(() => buildMenuTree(menus), [menus]);
   const selectedUser = users.find((user) => user.id === selectedUserId);
@@ -254,6 +262,25 @@ export function useAdminWorkspace() {
     if (await loadData()) void globalMessage.success('刷新完成');
   };
 
+  const loadVisitorAnalytics = async (page = 1, range = visitorAnalyticsRange, keyword = visitorAnalyticsKeyword, pageSize = visitorAnalyticsPageSize) => {
+    setIsLoadingVisitorAnalytics(true);
+    try {
+      const next = await fetchVisitorAnalytics({ range, page, pageSize, keyword });
+      setVisitorAnalytics(next);
+      setVisitorAnalyticsPageSize(next.pageSize);
+      setError('');
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : '加载访问分析失败');
+    } finally {
+      setIsLoadingVisitorAnalytics(false);
+    }
+  };
+
+  const handleVisitorAnalyticsRangeChange = (range: VisitorAnalyticsRange) => {
+    setVisitorAnalyticsRange(range);
+    void loadVisitorAnalytics(1, range, visitorAnalyticsKeyword, visitorAnalyticsPageSize);
+  };
+
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
@@ -302,6 +329,12 @@ export function useAdminWorkspace() {
       loadData();
     }
   }, [authUser]);
+
+  useEffect(() => {
+    if (authUser && activePage === 'visitor-analytics' && !visitorAnalytics) {
+      void loadVisitorAnalytics();
+    }
+  }, [activePage, authUser]);
 
   useEffect(() => {
     if (authUser) {
@@ -355,6 +388,8 @@ export function useAdminWorkspace() {
     setArticles([]);
     setFiles([]);
     setRecycleFiles([]);
+    setVisitorAnalytics(null);
+    setVisitorAnalyticsPageSize(10);
     setSelectedUserId(null);
     setSelectedMenuIds([]);
     setDepartmentMenuIds([]);
@@ -901,8 +936,9 @@ export function useAdminWorkspace() {
     setSelectedUploadFile(null);
   };
 
-  const handleDownloadFile = (fileId: number) => {
-    window.open(`${API_BASE_URL}/api/files/${fileId}/download`, '_blank', 'noopener,noreferrer');
+  const handleDownloadFile = (file: ManagedFile) => {
+    const downloadPath = file.downloadUrl || `/api/files/${file.id}/download`;
+	window.open(`${API_BASE_URL}${downloadPath}`, '_blank', 'noopener,noreferrer');
     void globalMessage.success('已开始下载文件');
   };
 
@@ -998,6 +1034,10 @@ export function useAdminWorkspace() {
     fileKeyword,
     filteredArticles,
     filteredFiles,
+    visitorAnalytics,
+    isLoadingVisitorAnalytics,
+    visitorAnalyticsRange,
+    visitorAnalyticsKeyword,
     menuTree,
     setLoginForm,
     setUserForm,
@@ -1007,8 +1047,11 @@ export function useAdminWorkspace() {
     setArticleKeyword,
     setArticleStatus,
     setFileKeyword,
+    setVisitorAnalyticsKeyword,
     loadData,
     refreshData,
+    loadVisitorAnalytics,
+    handleVisitorAnalyticsRangeChange,
     handleLogin,
     handleLogout,
     resetUserForm,

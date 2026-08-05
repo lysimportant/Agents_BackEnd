@@ -26,6 +26,7 @@ import {
   FileTextOutlined,
   InboxOutlined,
   LoadingOutlined,
+  ReloadOutlined,
   PictureOutlined,
   HistoryOutlined,
   ZoomInOutlined,
@@ -54,7 +55,7 @@ type FilesPageProps = {
   onResetFileForm: () => void;
   onFileKeywordChange: (keyword: string) => void;
   onEditFile: (file: ManagedFile) => void;
-  onDownloadFile: (fileId: number) => void;
+  onDownloadFile: (file: ManagedFile) => void;
   onDeleteFile: (fileId: number) => void;
   onRestoreFile: (fileId: number) => void;
   onLoadRecycleFiles: () => Promise<ManagedFile[]>;
@@ -103,7 +104,8 @@ export function FilesPage(props: FilesPageProps) {
   const [imageScale, setImageScale] = useState(1);
   const [imageOffset, setImageOffset] = useState({ x: 0, y: 0 });
   const [isDraggingImage, setIsDraggingImage] = useState(false);
-  const [settingLoginBackgroundId, setSettingLoginBackgroundId] = useState<number | null>(null);
+  const [settingLoginBackgroundKey, setSettingLoginBackgroundKey] = useState<string | null>(null);
+  const [isRefreshingFiles, setIsRefreshingFiles] = useState(false);
   const dragStartRef = useRef({ pointerX: 0, pointerY: 0, offsetX: 0, offsetY: 0 });
   const files = Array.isArray(filteredFiles) ? filteredFiles : [];
   const kindCounts = useMemo(() => {
@@ -120,7 +122,7 @@ export function FilesPage(props: FilesPageProps) {
   const closeUploadDialog = () => { setIsUploadOpen(false); onResetFileForm(); };
   const closeEditDialog = () => { setIsEditOpen(false); onResetFileForm(); };
   const openTextEditor = async (file: ManagedFile) => {
-    if (!actions.update) return;
+    if (!actions.update || file.readOnly) return;
     onEditFile(file);
     setTextEditorFile(file);
     setTextEditorContent('');
@@ -179,7 +181,7 @@ export function FilesPage(props: FilesPageProps) {
     }
   };
   const openEditDialog = (file: ManagedFile) => {
-    if (!actions.update) return;
+    if (!actions.update || file.readOnly) return;
     if (getFileKind(file).key === 'text') {
       void openTextEditor(file);
       return;
@@ -203,9 +205,9 @@ export function FilesPage(props: FilesPageProps) {
       return;
     }
 
-    setSettingLoginBackgroundId(file.id);
+    setSettingLoginBackgroundKey(getFileIdentity(file));
     try {
-      const blob = await readFilePreviewBlob(file.id);
+      const blob = await readFilePreviewBlob(file);
       const dataUrl = await createLoginBackgroundDataUrl(blob, file.contentType);
       setStoredLoginBackground({
         url: dataUrl,
@@ -219,7 +221,18 @@ export function FilesPage(props: FilesPageProps) {
       const errorMessage = error instanceof Error ? error.message : '设置登录背景失败';
       void message.error(errorMessage);
     } finally {
-      setSettingLoginBackgroundId(null);
+      setSettingLoginBackgroundKey(null);
+    }
+  };
+  const refreshFiles = async () => {
+    setIsRefreshingFiles(true);
+    try {
+      await onRefreshFiles();
+      void message.success('文件列表已刷新');
+    } catch (error) {
+      void message.error(error instanceof Error ? error.message : '刷新文件列表失败');
+    } finally {
+      setIsRefreshingFiles(false);
     }
   };
   const resetLoginBackground = () => {
@@ -274,10 +287,10 @@ export function FilesPage(props: FilesPageProps) {
 
   return (
     <section className="page-stack files-workspace antd-files-workspace" aria-labelledby="files-page-title">
-      <Card data-tilt-disabled="true" className="file-browser-panel" title={<h1 id="files-page-title" className="file-page-heading">文件管理</h1>} extra={<div className="antd-file-tools"><Input value={fileKeyword} allowClear onChange={(event) => onFileKeywordChange(event.target.value)} placeholder="名称、分类或说明" prefix={<FileTextOutlined />} /><Button onClick={() => onFileKeywordChange('')}>重置</Button>{actions.create && <Button type="primary" icon={<InboxOutlined />} onClick={() => { onResetFileForm(); setIsUploadOpen(true); }}>上传文件</Button>}{(actions.restore || actions.permanentDelete) && <Button icon={<DeleteOutlined />} onClick={() => void openRecycleBin()}>回收站{recycleFiles.length ? ` (${recycleFiles.length})` : ''}</Button>}</div>}>
+      <Card data-tilt-disabled="true" className="file-browser-panel" title={<h1 id="files-page-title" className="file-page-heading">文件管理</h1>} extra={<div className="antd-file-tools"><Input value={fileKeyword} allowClear onChange={(event) => onFileKeywordChange(event.target.value)} placeholder="名称、分类或说明" prefix={<FileTextOutlined />} /><Button onClick={() => onFileKeywordChange('')}>重置</Button><Button icon={<ReloadOutlined />} loading={isRefreshingFiles} onClick={() => void refreshFiles()}>刷新</Button>{actions.create && <Button type="primary" icon={<InboxOutlined />} onClick={() => { onResetFileForm(); setIsUploadOpen(true); }}>上传文件</Button>}{(actions.restore || actions.permanentDelete) && <Button icon={<DeleteOutlined />} onClick={() => void openRecycleBin()}>回收站{recycleFiles.length ? ` (${recycleFiles.length})` : ''}</Button>}</div>}>
         <div className="file-type-tabs" role="tablist" aria-label="按文件类型筛选">{FILE_KIND_OPTIONS.map((item) => <button className={activeKind === item.key ? 'active' : ''} type="button" role="tab" aria-selected={activeKind === item.key} key={item.key} onClick={() => setActiveKind(item.key)}><span aria-hidden="true">{item.icon}</span>{item.label}<strong>{kindCounts[item.key]}</strong></button>)}</div>
         <div className="file-login-background-toolbar"><span>图片可保存为当前浏览器的登录背景，不依赖外部 URL。</span><Button icon={<PictureOutlined />} onClick={resetLoginBackground}>恢复默认背景</Button></div>
-        {visibleFiles.length === 0 ? <Empty description="暂无匹配文件" /> : <div className="file-card-grid">{visibleFiles.map((file) => <FileCard key={file.id} file={file} actions={actions} onOpenImage={openImage} onEditFile={openEditDialog} onDownloadFile={onDownloadFile} onDeleteFile={onDeleteFile} onSetLoginBackground={setAsLoginBackground} settingLoginBackgroundId={settingLoginBackgroundId} />)}</div>}
+        {visibleFiles.length === 0 ? <Empty description="暂无匹配文件" /> : <div className="file-card-grid">{visibleFiles.map((file) => <FileCard key={getFileIdentity(file)} file={file} actions={actions} onOpenImage={openImage} onEditFile={openEditDialog} onDownloadFile={onDownloadFile} onDeleteFile={onDeleteFile} onSetLoginBackground={setAsLoginBackground} settingLoginBackgroundKey={settingLoginBackgroundKey} />)}</div>}
       </Card>
 
       <Modal open={isUploadOpen} title="上传文件" okText="上传" cancelText="取消" confirmLoading={isSavingFile} onOk={() => document.getElementById('file-upload-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))} onCancel={closeUploadDialog} destroyOnHidden>
@@ -309,7 +322,7 @@ export function FilesPage(props: FilesPageProps) {
       </Modal>
 
       <Modal className="file-image-zoom-modal" open={Boolean(previewFile)} title={previewFile?.displayName} footer={null} width="min(1500px, 98vw)" centered styles={{ body: { padding: 0 } }} onCancel={() => setPreviewFile(null)} destroyOnHidden>
-        {previewFile && <figure className="file-image-zoom-wrap" itemScope={!previewFile.isPrivate} itemType={!previewFile.isPrivate ? 'https://schema.org/ImageObject' : undefined}><div className="file-image-zoom-toolbar"><span>{getImageAccessibleText(previewFile)}；滚轮缩放，放大后可拖拽移动</span><Space><Button icon={<ZoomOutOutlined />} onClick={() => setImageScale((current) => clampScale(current - 0.25))}>缩小</Button><strong>{Math.round(imageScale * 100)}%</strong><Button icon={<ZoomInOutlined />} onClick={() => setImageScale((current) => clampScale(current + 0.25))}>放大</Button><Button icon={<CompressOutlined />} onClick={resetImageTransform}>适配</Button></Space></div><div className={`file-image-zoom-stage ${isDraggingImage ? 'dragging' : ''}`} onWheel={onPreviewWheel} onMouseDown={startImageDrag} onMouseMove={moveImageDrag} onMouseUp={stopImageDrag} onMouseLeave={stopImageDrag}>{originalLoading && <div className="original-image-loading"><LoadingOutlined spin /> 正在加载原图…</div>}<img draggable={false} src={`${API_BASE_URL}/api/files/${previewFile.id}/preview`} alt={getImageAccessibleText(previewFile)} title={previewFile.description || previewFile.displayName} itemProp={!previewFile.isPrivate ? 'contentUrl' : undefined} style={{ transform: `translate(${imageOffset.x}px, ${imageOffset.y}px) scale(${imageScale})` }} onLoad={() => setOriginalLoading(false)} onError={() => setOriginalLoading(false)} /></div><figcaption className="file-seo-caption" itemProp={!previewFile.isPrivate ? 'caption' : undefined}>{getImageAccessibleText(previewFile)}</figcaption></figure>}
+        {previewFile && <figure className="file-image-zoom-wrap" itemScope={!previewFile.isPrivate} itemType={!previewFile.isPrivate ? 'https://schema.org/ImageObject' : undefined}><div className="file-image-zoom-toolbar"><span>{getImageAccessibleText(previewFile)}；滚轮缩放，放大后可拖拽移动</span><Space><Button icon={<ZoomOutOutlined />} onClick={() => setImageScale((current) => clampScale(current - 0.25))}>缩小</Button><strong>{Math.round(imageScale * 100)}%</strong><Button icon={<ZoomInOutlined />} onClick={() => setImageScale((current) => clampScale(current + 0.25))}>放大</Button><Button icon={<CompressOutlined />} onClick={resetImageTransform}>适配</Button></Space></div><div className={`file-image-zoom-stage ${isDraggingImage ? 'dragging' : ''}`} onWheel={onPreviewWheel} onMouseDown={startImageDrag} onMouseMove={moveImageDrag} onMouseUp={stopImageDrag} onMouseLeave={stopImageDrag}>{originalLoading && <div className="original-image-loading"><LoadingOutlined spin /> 正在加载原图…</div>}<img draggable={false} src={resolveFilePreviewUrl(previewFile)} alt={getImageAccessibleText(previewFile)} title={previewFile.description || previewFile.displayName} itemProp={!previewFile.isPrivate ? 'contentUrl' : undefined} style={{ transform: `translate(${imageOffset.x}px, ${imageOffset.y}px) scale(${imageScale})` }} onLoad={() => setOriginalLoading(false)} onError={() => setOriginalLoading(false)} /></div><figcaption className="file-seo-caption" itemProp={!previewFile.isPrivate ? 'caption' : undefined}>{getImageAccessibleText(previewFile)}</figcaption></figure>}
       </Modal>
     </section>
   );
@@ -320,20 +333,20 @@ type FileCardProps = {
   actions: ResourceActionAccess;
   onOpenImage: (file: ManagedFile) => void;
   onEditFile: (file: ManagedFile) => void;
-  onDownloadFile: (fileId: number) => void;
+  onDownloadFile: (file: ManagedFile) => void;
   onDeleteFile: (fileId: number) => void;
   onSetLoginBackground: (file: ManagedFile) => void;
-  settingLoginBackgroundId: number | null;
+  settingLoginBackgroundKey: string | null;
 };
-function FileCard({ file, actions, onOpenImage, onEditFile, onDownloadFile, onDeleteFile, onSetLoginBackground, settingLoginBackgroundId }: FileCardProps) {
+function FileCard({ file, actions, onOpenImage, onEditFile, onDownloadFile, onDeleteFile, onSetLoginBackground, settingLoginBackgroundKey }: FileCardProps) {
   const meta = getFileKind(file);
-  const previewUrl = `${API_BASE_URL}/api/files/${file.id}/preview`;
-  const thumbnailUrl = `${API_BASE_URL}/api/files/${file.id}/thumbnail`;
+  const previewUrl = resolveFilePreviewUrl(file);
+  const thumbnailUrl = file.previewUrl ? previewUrl : `${API_BASE_URL}/api/files/${file.id}/thumbnail`;
   const isImage = meta.key === 'image';
   const isPDF = meta.key === 'pdf';
-  const isIndexableImage = isImage && !file.isPrivate;
-  const isSettingLoginBackground = settingLoginBackgroundId === file.id;
-  const titleId = `file-title-${file.id}`;
+  const isIndexableImage = isImage && !file.isPrivate && !file.readOnly;
+  const isSettingLoginBackground = settingLoginBackgroundKey === getFileIdentity(file);
+  const titleId = `file-title-${file.source || 'managed'}-${file.id}`;
   const imageText = getImageAccessibleText(file);
   return <article className={`file-card tone-${meta.tone}`} aria-labelledby={titleId} itemScope={isIndexableImage} itemType={isIndexableImage ? 'https://schema.org/ImageObject' : undefined}>
     {isIndexableImage && <meta itemProp="contentUrl" content={previewUrl} />}
@@ -341,17 +354,19 @@ function FileCard({ file, actions, onOpenImage, onEditFile, onDownloadFile, onDe
       {isImage ? <button className="thumbnail-button" type="button" onClick={() => onOpenImage(file)} aria-label={`预览原图：${imageText}`}><img src={thumbnailUrl} alt={imageText} title={file.description || file.displayName} itemProp={isIndexableImage ? 'thumbnailUrl' : undefined} loading="lazy" decoding="async" /><span><EyeOutlined /> 查看原图</span></button> : isPDF ? <a className="file-preview-icon pdf-preview" href={previewUrl} target="_blank" rel="noopener"><FilePdfOutlined /><strong>PDF</strong><small>点击浏览</small></a> : <div className="file-preview-icon">{isImage ? <PictureOutlined /> : <FileImageOutlined />}<span aria-hidden="true">{meta.icon}</span><strong>{meta.label}</strong><small>{getFileExtension(file.originalName).toUpperCase() || meta.description}</small></div>}
       <figcaption className="file-seo-caption" itemProp={isIndexableImage ? 'caption' : undefined}>{isImage ? imageText : `${file.displayName}，${meta.label} 文件`}</figcaption>
     </figure>
-    <div className="file-card-body"><div className="file-card-title"><strong id={titleId} title={file.displayName} itemProp={isIndexableImage ? 'name' : undefined}>{file.displayName}</strong><Space size={4} wrap><Tag>{file.category || '未分类'}</Tag><Tag color={file.isPrivate ? 'warning' : 'blue'}>{file.isPrivate ? '私密' : '公开'}</Tag></Space></div><p title={file.originalName}>{file.originalName}</p><small itemProp={isIndexableImage ? 'description' : undefined}>{file.description || '暂无说明'}</small><div className="file-meta-row"><span>归属：{file.ownerName || '未知'}</span><span>{formatFileSize(file.size)}</span><time itemProp={isIndexableImage ? 'dateModified' : undefined} dateTime={file.updatedAt}>{new Date(file.updatedAt).toLocaleString()}</time></div></div>
+    <div className="file-card-body"><div className="file-card-title"><strong id={titleId} title={file.displayName} itemProp={isIndexableImage ? 'name' : undefined}>{file.displayName}</strong><Space size={4} wrap><Tag>{file.category || '未分类'}</Tag>{file.readOnly ? <><Tag color="gold">只读</Tag><Tag color="purple">{file.source === 'internal-chat' ? '内部聊天' : '客服聊天'}</Tag></> : <Tag color={file.isPrivate ? 'warning' : 'blue'}>{file.isPrivate ? '私密' : '公开'}</Tag>}</Space></div><p title={file.originalName}>{file.originalName}</p><small itemProp={isIndexableImage ? 'description' : undefined}>{file.description || '暂无说明'}</small><div className="file-meta-row"><span>归属：{file.ownerName || '未知'}</span><span>{formatFileSize(file.size)}</span><time itemProp={isIndexableImage ? 'dateModified' : undefined} dateTime={file.updatedAt}>{new Date(file.updatedAt).toLocaleString()}</time></div></div>
     <div className="file-card-actions">
       {isImage && <Tooltip title="点击后才加载原始图片"><Button type="link" icon={<EyeOutlined />} onClick={() => onOpenImage(file)}>预览</Button></Tooltip>}
       {isImage && <Button type="link" icon={<PictureOutlined />} loading={isSettingLoginBackground} onClick={() => onSetLoginBackground(file)}>设为登录背景</Button>}
       {isPDF && <a href={previewUrl} target="_blank" rel="noopener"><Button type="link" icon={<EyeOutlined />}>浏览 PDF</Button></a>}
-      {actions.update && <Button type="link" icon={<EditOutlined />} onClick={() => onEditFile(file)}>编辑</Button>}<Button type="link" icon={<DownloadOutlined />} onClick={() => onDownloadFile(file.id)}>下载</Button>{actions.delete && <Popconfirm title="确认将该文件移入回收站？可通过恢复接口找回。" okText="移入回收站" cancelText="取消" onConfirm={() => onDeleteFile(file.id)}><Button danger type="link" icon={<DeleteOutlined />}>移入回收站</Button></Popconfirm>}
+      {actions.update && !file.readOnly && <Button type="link" icon={<EditOutlined />} onClick={() => onEditFile(file)}>编辑</Button>}<Button type="link" icon={<DownloadOutlined />} onClick={() => onDownloadFile(file)}>下载</Button>{actions.delete && !file.readOnly && <Popconfirm title="确认将该文件移入回收站？可通过恢复接口找回。" okText="移入回收站" cancelText="取消" onConfirm={() => onDeleteFile(file.id)}><Button danger type="link" icon={<DeleteOutlined />}>移入回收站</Button></Popconfirm>}
     </div>
   </article>;
 }
 
 function getFileKind(file: ManagedFile) { return getFileKindFromName(file.originalName || file.displayName, file.contentType); }
+function getFileIdentity(file: ManagedFile) { return `${file.source || 'managed'}:${file.id}`; }
+function resolveFilePreviewUrl(file: ManagedFile) { return `${API_BASE_URL}${file.previewUrl || `/api/files/${file.id}/preview`}`; }
 function getFileKindFromName(filename: string, contentType = ''): FileKindMeta {
   const ext = getFileExtension(filename); const mime = contentType.toLowerCase();
   if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) return FILE_KIND_OPTIONS.find((item) => item.key === 'image')!;

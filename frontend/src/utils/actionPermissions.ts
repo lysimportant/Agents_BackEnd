@@ -110,6 +110,14 @@ export const actionPermissionGroups: ActionPermissionGroup[] = [
       { code: 'socket.delete', label: '删除', description: '软删除客服会话并从列表隐藏' },
     ],
   },
+  {
+    resource: 'visitor-analytics',
+    label: '访问分析',
+    actions: [
+      { code: 'visitor-analytics.query', label: '查询', description: '查询访问统计与明细' },
+      { code: 'visitor-analytics.view', label: '查看', description: '查看访问者技术信息' },
+    ],
+  },
 ];
 
 export const allActionPermissionCodes = actionPermissionGroups.flatMap((group) => group.actions.map((action) => action.code));

@@ -13,6 +13,7 @@ import {
   FullscreenOutlined,
   HomeOutlined,
   LogoutOutlined,
+  LineChartOutlined,
   MenuFoldOutlined,
   MenuOutlined,
   MenuUnfoldOutlined,
@@ -75,6 +76,7 @@ const menuIconByCode: Record<string, ReactNode> = {
   dashboard: <DashboardOutlined />,
   workspace: <DashboardOutlined />,
   'socket-support': <MessageOutlined />,
+  'visitor-analytics': <LineChartOutlined />,
   system: <SettingOutlined />,
   users: <UserOutlined />,
   departments: <ApartmentOutlined />,
@@ -91,6 +93,7 @@ function resolvePageKey(menu: AdminMenu): PageKey | null {
   const pageByCode: Partial<Record<string, PageKey>> = {
     dashboard: 'dashboard',
     'socket-support': 'socket-support',
+    'visitor-analytics': 'visitor-analytics',
     users: 'users',
     departments: 'departments',
     roles: 'roles',

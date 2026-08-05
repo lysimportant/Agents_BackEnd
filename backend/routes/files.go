@@ -13,6 +13,8 @@ func registerFileRoutes(routes *gin.RouterGroup, store middleware.UserStore, han
 	routes.POST("/files", requireMenu, middleware.RequireAction(store, permissions.FilesCreate), handler.Upload)
 	// Static segments must be registered before /files/:id.
 	routes.GET("/files/recycle-bin", requireMenu, middleware.RequireAction(store, permissions.FilesQuery), handler.ListRecycleBin)
+	routes.GET("/files/chat-data/:source/:id/preview", requireMenu, middleware.RequireAction(store, permissions.FilesView), handler.ChatDataPreview)
+	routes.GET("/files/chat-data/:source/:id/download", requireMenu, middleware.RequireAction(store, permissions.FilesView), handler.ChatDataDownload)
 	routes.GET("/files/:id", requireMenu, middleware.RequireAction(store, permissions.FilesView), handler.Get)
 	routes.PUT("/files/:id", requireMenu, middleware.RequireAction(store, permissions.FilesUpdate), handler.UpdateMetadata)
 	routes.PUT("/files/:id/content", requireMenu, middleware.RequireAction(store, permissions.FilesUpdate), handler.UpdateContent)

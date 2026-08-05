@@ -61,6 +61,7 @@ func (s *SQLiteStore) reconcileApplicationMenus() error {
 		{Name: "工作台", Code: "workspace", Icon: "dashboard", Sort: 10},
 		{Name: "预览台", Code: "dashboard", Path: "dashboard", Icon: "dashboard", ParentCode: "workspace", Sort: 11},
 		{Name: "在线聊天", Code: "socket-support", Path: "socket-support", Icon: "message", ParentCode: "workspace", Sort: 12},
+		{Name: "访问分析", Code: "visitor-analytics", Path: "visitor-analytics", Icon: "line-chart", ParentCode: "workspace", Sort: 13},
 		{Name: "系统管理", Code: "system", Icon: "setting", Sort: 20},
 		{Name: "用户管理", Code: "users", Path: "users", Icon: "team", ParentCode: "system", Sort: 21},
 		{Name: "部门管理", Code: "departments", Path: "departments", Icon: "apartment", ParentCode: "system", Sort: 22},
@@ -273,6 +274,44 @@ func (s *SQLiteStore) migrate() error {
 			FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
 			FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE
 		)`,
+		`CREATE TABLE IF NOT EXISTS internal_chat_attachments (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			message_id INTEGER,
+			owner_id INTEGER NOT NULL,
+			original_name TEXT NOT NULL,
+			stored_name TEXT NOT NULL UNIQUE,
+			mime_type TEXT NOT NULL,
+			size INTEGER NOT NULL,
+			is_image INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY (message_id) REFERENCES internal_chat_messages(id) ON DELETE CASCADE,
+			FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS visitor_access_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			ip TEXT NOT NULL,
+			forwarded_ip TEXT NOT NULL DEFAULT '',
+			country TEXT NOT NULL DEFAULT '',
+			region TEXT NOT NULL DEFAULT '',
+			city TEXT NOT NULL DEFAULT '',
+			isp TEXT NOT NULL DEFAULT '',
+			host TEXT NOT NULL DEFAULT '',
+			method TEXT NOT NULL,
+			path TEXT NOT NULL,
+			status_code INTEGER NOT NULL DEFAULT 200,
+			duration_ms INTEGER NOT NULL DEFAULT 0,
+			bytes INTEGER NOT NULL DEFAULT 0,
+			user_agent TEXT NOT NULL DEFAULT '',
+			browser TEXT NOT NULL DEFAULT '',
+			os TEXT NOT NULL DEFAULT '',
+			device TEXT NOT NULL DEFAULT '',
+			referer TEXT NOT NULL DEFAULT '',
+			accept_language TEXT NOT NULL DEFAULT '',
+			user_id INTEGER,
+			user_name TEXT NOT NULL DEFAULT '',
+			authenticated INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL
+		)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.Exec(statement); err != nil {
@@ -330,6 +369,11 @@ func (s *SQLiteStore) migrate() error {
 		`CREATE INDEX IF NOT EXISTS idx_socket_messages_conversation_id ON socket_messages(conversation_id,id)`,
 		`CREATE INDEX IF NOT EXISTS idx_internal_chat_group ON internal_chat_messages(recipient_id,id)`,
 		`CREATE INDEX IF NOT EXISTS idx_internal_chat_sender ON internal_chat_messages(sender_id,recipient_id,id)`,
+		`CREATE INDEX IF NOT EXISTS idx_internal_chat_attachments_message ON internal_chat_attachments(message_id,id)`,
+		`CREATE INDEX IF NOT EXISTS idx_internal_chat_attachments_owner ON internal_chat_attachments(owner_id,message_id,id)`,
+		`CREATE INDEX IF NOT EXISTS idx_visitor_access_logs_created_at ON visitor_access_logs(created_at,id)`,
+		`CREATE INDEX IF NOT EXISTS idx_visitor_access_logs_ip ON visitor_access_logs(ip,created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_visitor_access_logs_path ON visitor_access_logs(path,created_at)`,
 	}
 	for _, statement := range indexes {
 		if _, err := s.db.Exec(statement); err != nil {
@@ -1090,6 +1134,97 @@ func (s *SQLiteStore) ListFiles(includeDeleted bool) []models.ManagedFile {
 		}
 	}
 	return files
+}
+
+func (s *SQLiteStore) ListChatDataFiles() []models.ManagedFile {
+	files := []models.ManagedFile{}
+	rows, err := s.db.Query(`
+		SELECT a.id,a.original_name,a.mime_type,a.size,a.stored_name,a.owner_id,COALESCE(u.name,''),a.created_at
+		FROM internal_chat_attachments a
+		LEFT JOIN users u ON u.id=a.owner_id
+		WHERE a.message_id IS NOT NULL
+		ORDER BY a.id DESC
+	`)
+	if err == nil {
+		for rows.Next() {
+			var file models.ManagedFile
+			var created string
+			if rows.Scan(&file.ID, &file.OriginalName, &file.ContentType, &file.Size, &file.StorageName, &file.OwnerID, &file.OwnerName, &created) == nil {
+				file = buildChatDataFile(file, "internal-chat", "内部聊天附件", filepath.Join("internal-chat", file.StorageName), parseTime(created))
+				files = append(files, file)
+			}
+		}
+		_ = rows.Close()
+	}
+
+	rows, err = s.db.Query(`
+		SELECT id,conversation_id,sender_name,attachment_name,attachment_type,attachment_size,attachment_storage,created_at
+		FROM socket_messages
+		WHERE attachment_storage<>''
+		ORDER BY id DESC
+	`)
+	if err == nil {
+		for rows.Next() {
+			var file models.ManagedFile
+			var conversationID, senderName, created string
+			if rows.Scan(&file.ID, &conversationID, &senderName, &file.OriginalName, &file.ContentType, &file.Size, &file.StorageName, &created) == nil {
+				file.OwnerName = senderName
+				file = buildChatDataFile(file, "customer-chat", "客服聊天附件 · 会话 "+conversationID, filepath.Join("socket", conversationID, file.StorageName), parseTime(created))
+				files = append(files, file)
+			}
+		}
+		_ = rows.Close()
+	}
+	return files
+}
+
+func (s *SQLiteStore) FindChatDataFile(source string, id int) (models.ManagedFile, bool) {
+	switch strings.TrimSpace(source) {
+	case "internal-chat":
+		var file models.ManagedFile
+		var created string
+		err := s.db.QueryRow(`
+			SELECT a.id,a.original_name,a.mime_type,a.size,a.stored_name,a.owner_id,COALESCE(u.name,''),a.created_at
+			FROM internal_chat_attachments a
+			LEFT JOIN users u ON u.id=a.owner_id
+			WHERE a.id=? AND a.message_id IS NOT NULL
+		`, id).Scan(&file.ID, &file.OriginalName, &file.ContentType, &file.Size, &file.StorageName, &file.OwnerID, &file.OwnerName, &created)
+		if err != nil {
+			return models.ManagedFile{}, false
+		}
+		return buildChatDataFile(file, source, "内部聊天附件", filepath.Join("internal-chat", file.StorageName), parseTime(created)), true
+	case "customer-chat":
+		var file models.ManagedFile
+		var conversationID, senderName, created string
+		err := s.db.QueryRow(`
+			SELECT id,conversation_id,sender_name,attachment_name,attachment_type,attachment_size,attachment_storage,created_at
+			FROM socket_messages
+			WHERE id=? AND attachment_storage<>''
+		`, id).Scan(&file.ID, &conversationID, &senderName, &file.OriginalName, &file.ContentType, &file.Size, &file.StorageName, &created)
+		if err != nil {
+			return models.ManagedFile{}, false
+		}
+		file.OwnerName = senderName
+		return buildChatDataFile(file, source, "客服聊天附件 · 会话 "+conversationID, filepath.Join("socket", conversationID, file.StorageName), parseTime(created)), true
+	default:
+		return models.ManagedFile{}, false
+	}
+}
+
+func buildChatDataFile(file models.ManagedFile, source, description, storagePath string, createdAt time.Time) models.ManagedFile {
+	file.Source = source
+	file.DisplayName = file.OriginalName
+	file.Category = "聊天数据"
+	file.Description = description
+	file.IsPrivate = true
+	file.ReadOnly = true
+	file.PreviewURL = fmt.Sprintf("/api/files/chat-data/%s/%d/preview", source, file.ID)
+	file.DownloadURL = fmt.Sprintf("/api/files/chat-data/%s/%d/download", source, file.ID)
+	file.StoragePath = storagePath
+	file.StorageName = ""
+	file.CreatedAt = createdAt
+	file.UpdatedAt = createdAt
+	return file
 }
 
 func (s *SQLiteStore) FindFileByID(id int) (models.ManagedFile, bool) {

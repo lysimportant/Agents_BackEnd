@@ -1,7 +1,14 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"mime"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -9,23 +16,34 @@ import (
 
 	"collector-backend/middleware"
 	"collector-backend/models"
+	"collector-backend/utils"
 	"github.com/gin-gonic/gin"
 )
+
+const internalChatAttachmentMaxBytes = 10 * 1024 * 1024
 
 type InternalChatStore interface {
 	ListInternalChatUsers(currentUserID int) ([]models.InternalChatUser, error)
 	ListInternalChatMessages(currentUserID, peerID, afterID int) ([]models.InternalChatMessage, error)
-	CreateInternalChatMessage(senderID int, recipientID *int, content string, now time.Time) (models.InternalChatMessage, error)
+	CreateInternalChatAttachment(ownerID int, originalName, storedName, mimeType string, size int64, isImage bool, now time.Time) (models.InternalChatAttachment, error)
+	FindInternalChatAttachment(id int) (models.InternalChatAttachment, bool, error)
+	CanAccessInternalChatAttachment(id, userID int, administrator bool) (bool, error)
+	CreateInternalChatMessage(senderID int, recipientID *int, content string, attachmentIDs []int, now time.Time) (models.InternalChatMessage, error)
 }
 
 type InternalChatHandler struct {
 	store      InternalChatStore
+	uploadDir  string
 	presence   map[int]time.Time
 	presenceMu sync.RWMutex
 }
 
-func NewInternalChatHandler(store InternalChatStore) *InternalChatHandler {
-	return &InternalChatHandler{store: store, presence: make(map[int]time.Time)}
+func NewInternalChatHandler(store InternalChatStore, uploadDir string) *InternalChatHandler {
+	return &InternalChatHandler{
+		store:     store,
+		uploadDir: filepath.Join(uploadDir, "internal-chat"),
+		presence:  make(map[int]time.Time),
+	}
 }
 
 func (h *InternalChatHandler) touch(userID int) {
@@ -101,16 +119,191 @@ func (h *InternalChatHandler) Send(c *gin.Context) {
 	}
 	var request models.InternalChatMessageRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "消息内容不能为空"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "消息请求格式无效"})
 		return
 	}
-	request.Content = strings.TrimSpace(request.Content)
-	message, err := h.store.CreateInternalChatMessage(user.ID, request.RecipientID, request.Content, time.Now())
+	message, err := h.store.CreateInternalChatMessage(user.ID, request.RecipientID, request.Content, request.AttachmentIDs, time.Now())
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"message": message})
+}
+
+func (h *InternalChatHandler) UploadAttachment(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
+		return
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, internalChatAttachmentMaxBytes+1024*1024)
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择不超过 10MB 的文件"})
+		return
+	}
+	defer file.Close()
+	if header.Size <= 0 || header.Size > internalChatAttachmentMaxBytes {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "文件不能为空且不能超过 10MB"})
+		return
+	}
+
+	originalName := filepath.Base(strings.TrimSpace(header.Filename))
+	if originalName == "." || originalName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "文件名无效"})
+		return
+	}
+	content, err := io.ReadAll(io.LimitReader(file, internalChatAttachmentMaxBytes+1))
+	if err != nil || len(content) == 0 || len(content) > internalChatAttachmentMaxBytes {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "文件读取失败、为空或超过 10MB 限制"})
+		return
+	}
+	mimeType, isImage, ok := internalChatAttachmentType(originalName, content)
+	if !ok {
+		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "不支持该文件类型"})
+		return
+	}
+
+	nameBytes := make([]byte, 16)
+	if _, err := rand.Read(nameBytes); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "文件上传初始化失败"})
+		return
+	}
+	storedName := hex.EncodeToString(nameBytes) + strings.ToLower(filepath.Ext(originalName))
+	if err := os.MkdirAll(h.uploadDir, 0o750); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建内部聊天附件目录失败"})
+		return
+	}
+	path := filepath.Join(h.uploadDir, storedName)
+	if err := writeExclusiveFile(path, content); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存内部聊天附件失败"})
+		return
+	}
+	attachment, err := h.store.CreateInternalChatAttachment(user.ID, originalName, storedName, mimeType, int64(len(content)), isImage, time.Now())
+	if err != nil {
+		_ = os.Remove(path)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存内部聊天附件记录失败"})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"attachment": attachment})
+}
+
+func (h *InternalChatHandler) DownloadAttachment(c *gin.Context) {
+	h.serveAttachment(c, false)
+}
+
+func (h *InternalChatHandler) PreviewAttachment(c *gin.Context) {
+	h.serveAttachment(c, true)
+}
+
+func (h *InternalChatHandler) serveAttachment(c *gin.Context, preview bool) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
+		return
+	}
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "附件 ID 无效"})
+		return
+	}
+	attachment, found, err := h.store.FindInternalChatAttachment(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "内部聊天附件读取失败"})
+		return
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"error": "内部聊天附件不存在"})
+		return
+	}
+	allowed, err := h.store.CanAccessInternalChatAttachment(id, user.ID, utils.IsAdmin(user))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "内部聊天附件鉴权失败"})
+		return
+	}
+	if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该内部聊天附件"})
+		return
+	}
+	if preview && !attachment.IsImage {
+		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "该附件不支持图片预览"})
+		return
+	}
+	if filepath.Base(attachment.StoredName) != attachment.StoredName {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "内部聊天附件存储信息无效"})
+		return
+	}
+	path := filepath.Join(h.uploadDir, attachment.StoredName)
+	if _, err := os.Stat(path); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "内部聊天附件文件不存在"})
+		return
+	}
+	disposition := "attachment"
+	if preview {
+		disposition = "inline"
+	}
+	contentDisposition := mime.FormatMediaType(disposition, map[string]string{"filename": attachment.OriginalName})
+	c.Header("Content-Type", attachment.MimeType)
+	c.Header("Content-Disposition", contentDisposition)
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.File(path)
+}
+
+func writeExclusiveFile(path string, content []byte) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(content); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return err
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		return err
+	}
+	return nil
+}
+
+type internalChatFileType struct {
+	mimeType string
+	isImage  bool
+	detected []string
+}
+
+var internalChatFileTypes = map[string]internalChatFileType{
+	".png":  {"image/png", true, []string{"image/png"}},
+	".jpg":  {"image/jpeg", true, []string{"image/jpeg"}},
+	".jpeg": {"image/jpeg", true, []string{"image/jpeg"}},
+	".gif":  {"image/gif", true, []string{"image/gif"}},
+	".webp": {"image/webp", true, []string{"image/webp"}},
+	".bmp":  {"image/bmp", true, []string{"image/bmp"}},
+	".pdf":  {"application/pdf", false, []string{"application/pdf"}},
+	".txt":  {"text/plain; charset=utf-8", false, []string{"text/plain; charset=utf-8", "text/plain; charset=us-ascii"}},
+	".csv":  {"text/csv; charset=utf-8", false, []string{"text/plain; charset=utf-8", "text/plain; charset=us-ascii"}},
+	".zip":  {"application/zip", false, []string{"application/zip", "application/octet-stream"}},
+	".rar":  {"application/vnd.rar", false, []string{"application/vnd.rar", "application/x-rar-compressed", "application/octet-stream"}},
+	".doc":  {"application/msword", false, []string{"application/octet-stream", "application/x-ole-storage"}},
+	".xls":  {"application/vnd.ms-excel", false, []string{"application/octet-stream", "application/x-ole-storage"}},
+	".ppt":  {"application/vnd.ms-powerpoint", false, []string{"application/octet-stream", "application/x-ole-storage"}},
+	".docx": {"application/vnd.openxmlformats-officedocument.wordprocessingml.document", false, []string{"application/zip", "application/octet-stream"}},
+	".xlsx": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", false, []string{"application/zip", "application/octet-stream"}},
+	".pptx": {"application/vnd.openxmlformats-officedocument.presentationml.presentation", false, []string{"application/zip", "application/octet-stream"}},
+}
+
+func internalChatAttachmentType(name string, content []byte) (string, bool, bool) {
+	fileType, ok := internalChatFileTypes[strings.ToLower(filepath.Ext(name))]
+	if !ok {
+		return "", false, false
+	}
+	detected := http.DetectContentType(content)
+	for _, allowed := range fileType.detected {
+		if detected == allowed {
+			return fileType.mimeType, fileType.isImage, true
+		}
+	}
+	return "", false, false
 }
 
 func nonNegativeQueryInt(c *gin.Context, key string) (int, error) {
@@ -120,7 +313,7 @@ func nonNegativeQueryInt(c *gin.Context, key string) (int, error) {
 	}
 	parsed, err := strconv.Atoi(value)
 	if err != nil || parsed < 0 {
-		return 0, strconv.ErrSyntax
+		return 0, fmt.Errorf("invalid non-negative integer")
 	}
 	return parsed, nil
 }

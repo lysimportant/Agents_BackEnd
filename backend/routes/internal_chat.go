@@ -11,4 +11,7 @@ func registerInternalChatRoutes(protected *gin.RouterGroup, handler *handlers.In
 	group.POST("/presence", handler.Presence)
 	group.GET("/messages", handler.Messages)
 	group.POST("/messages", handler.Send)
+	group.POST("/attachments", handler.UploadAttachment)
+	group.GET("/attachments/:id/download", handler.DownloadAttachment)
+	group.GET("/attachments/:id/preview", handler.PreviewAttachment)
 }

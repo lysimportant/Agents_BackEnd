@@ -55,6 +55,9 @@ const (
 	SocketView   = "socket.view"
 	SocketSend   = "socket.send"
 	SocketDelete = "socket.delete"
+
+	VisitorAnalyticsQuery = "visitor-analytics.query"
+	VisitorAnalyticsView  = "visitor-analytics.view"
 )
 
 func IsSuperAdminRoleCode(code string) bool {
@@ -117,6 +120,8 @@ var definitions = []Definition{
 	{SocketView, "socket", "view", "查看客服聊天", true},
 	{SocketSend, "socket", "send", "回复客服消息", false},
 	{SocketDelete, "socket", "delete", "删除客服会话", false},
+	{VisitorAnalyticsQuery, "visitor-analytics", "query", "查询访问分析", true},
+	{VisitorAnalyticsView, "visitor-analytics", "view", "查看访问明细", true},
 }
 
 func Definitions() []Definition {
