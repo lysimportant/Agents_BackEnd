@@ -9,11 +9,76 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"collector-backend/auth"
 	"collector-backend/models"
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 )
+
+func TestInternalChatSocketBroadcastsMessages(t *testing.T) {
+	router, store, _ := setupTestRouter(t)
+	sender := createInternalChatTestUser(t, store, "socket-sender", "Socket 发送者")
+	recipient := createInternalChatTestUser(t, store, "socket-recipient", "Socket 接收者")
+	senderCookie := loginCookie(t, router, sender.Username, "pass1234")
+	recipientCookie := loginCookie(t, router, recipient.Username, "pass1234")
+
+	server := httptest.NewServer(router)
+	defer server.Close()
+	senderSocket := dialInternalChatSocket(t, server, senderCookie)
+	defer senderSocket.Close()
+	recipientSocket := dialInternalChatSocket(t, server, recipientCookie)
+	defer recipientSocket.Close()
+
+	messageBody, _ := json.Marshal(models.InternalChatMessageRequest{RecipientID: &recipient.ID, Content: "实时消息"})
+	request, err := http.NewRequest(http.MethodPost, server.URL+"/api/internal-chat/messages", bytes.NewReader(messageBody))
+	if err != nil {
+		t.Fatalf("create message request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(&http.Cookie{Name: "sessionId", Value: senderCookie})
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("send message request: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("send message status=%d", response.StatusCode)
+	}
+
+	var envelope struct {
+		Type    string                      `json:"type"`
+		Message *models.InternalChatMessage `json:"message"`
+	}
+	recipientSocket.SetReadDeadline(time.Now().Add(3 * time.Second))
+	for attempts := 0; attempts < 4; attempts++ {
+		if err := recipientSocket.ReadJSON(&envelope); err != nil {
+			t.Fatalf("read internal chat event: %v", err)
+		}
+		if envelope.Type == "message" {
+			if envelope.Message == nil || envelope.Message.Content != "实时消息" {
+				t.Fatalf("unexpected internal chat message: %+v", envelope.Message)
+			}
+			return
+		}
+	}
+	t.Fatal("internal chat socket did not broadcast message")
+}
+
+func dialInternalChatSocket(t *testing.T, server *httptest.Server, cookie string) *websocket.Conn {
+	t.Helper()
+	requestHeader := http.Header{}
+	requestHeader.Add("Cookie", "sessionId="+cookie)
+	connection, response, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/api/internal-chat/socket", requestHeader)
+	if err != nil {
+		if response != nil {
+			response.Body.Close()
+		}
+		t.Fatalf("dial internal chat socket: %v", err)
+	}
+	return connection
+}
 
 func TestInternalChatAttachmentUploadSendAndParticipantAuthorization(t *testing.T) {
 	router, store, _ := setupTestRouter(t)

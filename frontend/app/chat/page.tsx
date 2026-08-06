@@ -11,6 +11,8 @@ import {
   useState,
 } from 'react';
 import styles from './page.module.css';
+import { internalChatWebSocketURL } from '@/src/features/chat/socketApi';
+import { clearInternalChatUnread, readInternalChatUnreadCounts } from '@/src/features/chat/unreadStore';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
 const IMAGE_URL_PATTERN = /\.(?:bmp|gif|jpe?g|png|webp)(?:[?#][^\s]*)?$/i;
@@ -46,6 +48,12 @@ type ChatMessage = {
   createdAt: string;
 };
 type Conversation = { key: string; title: string; subtitle: string; peerId: number; avatar: string };
+type InternalChatSocketEnvelope = {
+  type: 'message' | 'presence' | 'ready' | 'history' | 'error';
+  message?: ChatMessage;
+  userId?: number;
+  online?: boolean;
+};
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
@@ -71,6 +79,27 @@ function formatFileSize(bytes: number) {
 
 function authenticatedURL(path: string) {
   return `${API_BASE_URL}${path}`;
+}
+
+function playMessageNotification() {
+  try {
+    const AudioContextConstructor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextConstructor) return;
+    const context = new AudioContextConstructor();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.frequency.value = 740;
+    gain.gain.setValueAtTime(0.0001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.18);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.2);
+    window.setTimeout(() => void context.close(), 400);
+  } catch {
+    return;
+  }
 }
 
 function ExternalImagePreview({ url }: { url: string }) {
@@ -133,12 +162,23 @@ export default function ChatPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [unreadByPeer, setUnreadByPeer] = useState<Record<number, number>>({});
+  const [newMessageIds, setNewMessageIds] = useState<Set<number>>(new Set());
+  const [showNewMessageNotice, setShowNewMessageNotice] = useState(false);
   const messageListRef = useRef<HTMLDivElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const draftSelectionRef = useRef({ start: 0, end: 0 });
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const emojiPanelRef = useRef<HTMLDivElement>(null);
+  const activePeerRef = useRef(activePeerId);
+  const currentUserRef = useRef<CurrentUser | null>(null);
+  const titleTimerRef = useRef<number | null>(null);
+  const lastUpdateIdRef = useRef(0);
+  const handledMessageIdsRef = useRef(new Set<number>());
+  const updatesInitializedRef = useRef(false);
+  activePeerRef.current = activePeerId;
+  currentUserRef.current = currentUser;
 
   const conversations = useMemo<Conversation[]>(() => [
     { key: 'group', title: '全员群聊', subtitle: '所有可用用户', peerId: 0, avatar: '群聊' },
@@ -158,8 +198,15 @@ export default function ChatPage() {
 
   const loadMessages = useCallback(async (peerId: number, silent = false) => {
     try {
+      const list = messageListRef.current;
+      const distanceFromBottom = list ? list.scrollHeight - list.scrollTop - list.clientHeight : 0;
+      const shouldStickToBottom = !list || distanceFromBottom < 96;
       const result = await apiRequest<{ messages: ChatMessage[] }>(`/api/internal-chat/messages?peerId=${peerId}`);
+      result.messages.forEach((message) => handledMessageIdsRef.current.add(message.id));
       setMessages(result.messages);
+      window.requestAnimationFrame(() => {
+        if (shouldStickToBottom && messageListRef.current) messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+      });
       if (!silent) setError('');
     } catch (requestError) {
       if (!silent) setError(requestError instanceof Error ? requestError.message : '消息加载失败');
@@ -175,6 +222,7 @@ export default function ChatPage() {
         ]);
         setCurrentUser(session.user);
         setUsers(userResult.users);
+        setUnreadByPeer(readInternalChatUnreadCounts(session.user.id));
         await apiRequest('/api/internal-chat/presence', { method: 'POST' });
         await loadMessages(0);
       } catch (requestError) {
@@ -187,6 +235,99 @@ export default function ChatPage() {
     })();
   }, [loadMessages]);
 
+  const messageBelongsToConversation = useCallback((message: ChatMessage, peerId: number, userId: number) => {
+    if (peerId === 0) return !message.recipientId;
+    return (message.senderId === userId && message.recipientId === peerId)
+      || (message.senderId === peerId && message.recipientId === userId);
+  }, []);
+
+  const notifyNewMessage = useCallback((message: ChatMessage) => {
+    setNewMessageIds((current) => new Set([...current, message.id]));
+    window.setTimeout(() => setNewMessageIds((current) => {
+      const next = new Set(current);
+      next.delete(message.id);
+      return next;
+    }), 1800);
+    playMessageNotification();
+    if (titleTimerRef.current) window.clearInterval(titleTimerRef.current);
+    const originalTitle = document.title;
+    let visible = false;
+    titleTimerRef.current = window.setInterval(() => {
+      visible = !visible;
+      document.title = visible ? '新消息 · 内部聊天' : originalTitle;
+    }, 700);
+    window.setTimeout(() => {
+      if (titleTimerRef.current) window.clearInterval(titleTimerRef.current);
+      titleTimerRef.current = null;
+      document.title = originalTitle;
+    }, 4200);
+  }, []);
+
+  const handleIncomingMessage = useCallback((message: ChatMessage) => {
+    if (handledMessageIdsRef.current.has(message.id)) return;
+    handledMessageIdsRef.current.add(message.id);
+    lastUpdateIdRef.current = Math.max(lastUpdateIdRef.current, message.id);
+    const userId = currentUserRef.current?.id;
+    if (!userId || message.senderId === userId) return;
+    const peerId = activePeerRef.current;
+    const belongsToActiveConversation = messageBelongsToConversation(message, peerId, userId);
+    if (!belongsToActiveConversation) {
+      const unreadPeer = message.recipientId == null ? 0 : message.senderId;
+      setUnreadByPeer((current) => ({ ...current, [unreadPeer]: (current[unreadPeer] || 0) + 1 }));
+    }
+    if (belongsToActiveConversation) {
+      setMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
+    }
+    const list = messageListRef.current;
+    const nearBottom = !list || list.scrollHeight - list.scrollTop - list.clientHeight < 96;
+    if (!nearBottom) setShowNewMessageNotice(true);
+    window.requestAnimationFrame(() => {
+      if (nearBottom && messageListRef.current) messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+    });
+    notifyNewMessage(message);
+  }, [messageBelongsToConversation, notifyNewMessage]);
+
+  useEffect(() => () => {
+    if (titleTimerRef.current) window.clearInterval(titleTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (loading || !currentUser) return;
+    let active = true;
+    let reconnectTimer = 0;
+    let socket: WebSocket | null = null;
+    const connect = () => {
+      if (!active) return;
+      const nextSocket = new WebSocket(internalChatWebSocketURL());
+      socket = nextSocket;
+      nextSocket.onopen = () => nextSocket.send(JSON.stringify({ type: 'ping' }));
+      nextSocket.onmessage = (event) => {
+        try {
+          const envelope = JSON.parse(String(event.data)) as InternalChatSocketEnvelope;
+          if (envelope.type === 'presence' && envelope.userId) {
+            setUsers((current) => current.map((user) => user.id === envelope.userId ? { ...user, online: Boolean(envelope.online) } : user));
+            return;
+          }
+          const message = envelope.message;
+          if (envelope.type !== 'message' || !message) return;
+          handleIncomingMessage(message);
+        } catch {
+          return;
+        }
+      };
+      nextSocket.onclose = () => {
+        if (active) reconnectTimer = window.setTimeout(connect, 1800);
+      };
+      nextSocket.onerror = () => nextSocket.close();
+    };
+    connect();
+    return () => {
+      active = false;
+      window.clearTimeout(reconnectTimer);
+      socket?.close();
+    };
+  }, [currentUser, handleIncomingMessage, loading]);
+
   useEffect(() => {
     if (loading) return;
     const presenceTimer = window.setInterval(() => {
@@ -194,17 +335,46 @@ export default function ChatPage() {
       void apiRequest<{ users: ChatUser[] }>('/api/internal-chat/users').then((result) => setUsers(result.users));
     }, 5000);
     void loadMessages(activePeerId);
-    const messageTimer = window.setInterval(() => void loadMessages(activePeerId, true), 2000);
+    let pollInitialized = false;
+    const pollUpdates = async () => {
+      try {
+        const result = await apiRequest<{ messages: ChatMessage[] }>(`/api/internal-chat/messages?peerId=-1&afterId=${lastUpdateIdRef.current}`);
+        if (!pollInitialized && !updatesInitializedRef.current) {
+          result.messages.forEach((message) => handledMessageIdsRef.current.add(message.id));
+          updatesInitializedRef.current = true;
+          pollInitialized = true;
+          lastUpdateIdRef.current = result.messages.reduce((max, message) => Math.max(max, message.id), lastUpdateIdRef.current);
+          return;
+        }
+        pollInitialized = true;
+        result.messages.forEach(handleIncomingMessage);
+      } catch {
+        return;
+      }
+    };
+    void pollUpdates();
+    const messageTimer = window.setInterval(() => {
+      void loadMessages(activePeerId, true);
+      void pollUpdates();
+    }, 2000);
     return () => {
       window.clearInterval(messageTimer);
       window.clearInterval(presenceTimer);
     };
-  }, [activePeerId, loadMessages, loading]);
+  }, [activePeerId, handleIncomingMessage, loadMessages, loading]);
 
   useEffect(() => {
     const list = messageListRef.current;
     if (list) list.scrollTop = list.scrollHeight;
-  }, [messages]);
+    setShowNewMessageNotice(false);
+  }, [activePeerId]);
+
+  useEffect(() => {
+    if (loading) return;
+    window.requestAnimationFrame(() => {
+      if (messageListRef.current) messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+    });
+  }, [loading]);
 
   useEffect(() => {
     if (!emojiOpen) return;
@@ -220,7 +390,14 @@ export default function ChatPage() {
     setEmojiOpen(false);
     setActivePeerId(peerId);
     setMessages([]);
+    if (currentUser) setUnreadByPeer(clearInternalChatUnread(peerId, currentUser.id));
+    setShowNewMessageNotice(false);
     setError('');
+  };
+
+  const scrollToLatest = () => {
+    if (messageListRef.current) messageListRef.current.scrollTo({ top: messageListRef.current.scrollHeight, behavior: 'smooth' });
+    setShowNewMessageNotice(false);
   };
 
   const addEmoji = (emoji: string) => {
@@ -320,6 +497,7 @@ export default function ChatPage() {
             <button key={conversation.key} className={conversation.peerId === activePeerId ? styles.activeConversation : styles.conversation} onClick={() => selectConversation(conversation.peerId)}>
               <span className={conversation.peerId === 0 ? styles.groupAvatar : styles.userAvatar}>{conversation.avatar}{conversation.peerId !== 0 && users.find((user) => user.id === conversation.peerId)?.online && <i className={styles.onlineBadge} />}</span>
               <span className={styles.conversationMeta}><strong>{conversation.title}</strong><small>{conversation.subtitle}</small></span>
+              {(unreadByPeer[conversation.peerId] || 0) > 0 && <span className={styles.unreadBadge} aria-label={`${unreadByPeer[conversation.peerId]} 条未读消息`}>{Math.min(unreadByPeer[conversation.peerId], 99)}</span>}
             </button>
           ))}</div>
         </aside>
@@ -330,7 +508,16 @@ export default function ChatPage() {
             <span className={styles.onlineDot}>● 在线</span>
           </div>
           {error && <div className={styles.error}>{error}</div>}
-          <div ref={messageListRef} className={styles.messageList}>
+          {showNewMessageNotice && <button type="button" className={styles.newMessageNotice} onClick={scrollToLatest}>有新消息，查看最新</button>}
+          <div
+            ref={messageListRef}
+            className={styles.messageList}
+            onScroll={(event) => {
+              const list = event.currentTarget;
+              const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 96;
+              if (nearBottom) setShowNewMessageNotice(false);
+            }}
+          >
             {messages.length === 0 && <div className={styles.empty}>还没有消息，开始聊天吧</div>}
             {messages.map((message, index) => {
               const own = message.senderId === currentUser?.id;
@@ -339,7 +526,7 @@ export default function ChatPage() {
               return (
                 <div key={message.id}>
                   {showTime && <div className={styles.time}>{new Date(message.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>}
-                  <div className={own ? styles.ownMessage : styles.otherMessage}>
+                  <div className={`${own ? styles.ownMessage : styles.otherMessage} ${newMessageIds.has(message.id) ? styles.newMessage : ''}`}>
                     {!own && <span className={styles.messageAvatar}>{avatarText(message.senderName)}</span>}
                     <div className={styles.bubbleWrap}>
                       {!own && activePeerId === 0 && <small>{message.senderName}</small>}

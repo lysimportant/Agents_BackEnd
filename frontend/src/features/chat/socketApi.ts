@@ -23,6 +23,12 @@ export function socketNotificationWebSocketURL() {
   return url.toString();
 }
 
+export function internalChatWebSocketURL() {
+  const url = new URL('/api/internal-chat/socket', API_BASE_URL);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  return url.toString();
+}
+
 export async function listSocketConversations() {
   const response = await requestWithSession(`${API_BASE_URL}/api/socket/conversations`);
   if (!response.ok) throw new Error(await responseError(response, '加载在线聊天会话失败'));

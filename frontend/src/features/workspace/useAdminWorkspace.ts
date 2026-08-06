@@ -361,6 +361,7 @@ export function useAdminWorkspace() {
       }
       const payload = (await response.json()) as { user: AuthUser };
       setAuthUser(payload.user);
+      void requestWithSession(`${API_BASE_URL}/api/internal-chat/presence`, { method: 'POST' });
       setLoginForm({ username: 'MH', password: '123' });
       globalNotification.success({
         placement: 'bottomRight',

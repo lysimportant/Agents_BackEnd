@@ -18,6 +18,7 @@ import (
 	"collector-backend/models"
 	"collector-backend/utils"
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 )
 
 const internalChatAttachmentMaxBytes = 10 * 1024 * 1024
@@ -36,6 +37,8 @@ type InternalChatHandler struct {
 	uploadDir  string
 	presence   map[int]time.Time
 	presenceMu sync.RWMutex
+	upgrader   websocket.Upgrader
+	hub        *internalChatHub
 }
 
 func NewInternalChatHandler(store InternalChatStore, uploadDir string) *InternalChatHandler {
@@ -43,6 +46,12 @@ func NewInternalChatHandler(store InternalChatStore, uploadDir string) *Internal
 		store:     store,
 		uploadDir: filepath.Join(uploadDir, "internal-chat"),
 		presence:  make(map[int]time.Time),
+		upgrader: websocket.Upgrader{
+			ReadBufferSize:  4096,
+			WriteBufferSize: 4096,
+			CheckOrigin:     func(*http.Request) bool { return true },
+		},
+		hub: newInternalChatHub(),
 	}
 }
 
@@ -59,13 +68,87 @@ func (h *InternalChatHandler) isOnline(userID int) bool {
 	return ok && time.Since(seen) < 15*time.Second
 }
 
+func (h *InternalChatHandler) untouch(userID int) {
+	h.presenceMu.Lock()
+	defer h.presenceMu.Unlock()
+	delete(h.presence, userID)
+}
+
+type internalChatEnvelope struct {
+	Type     string                       `json:"type"`
+	Message  *models.InternalChatMessage  `json:"message,omitempty"`
+	Messages []models.InternalChatMessage `json:"messages,omitempty"`
+	Users    []models.InternalChatUser    `json:"users,omitempty"`
+	UserID   int                          `json:"userId,omitempty"`
+	Online   bool                         `json:"online,omitempty"`
+	Error    string                       `json:"error,omitempty"`
+}
+
+type internalChatClientMessage struct {
+	Type   string `json:"type"`
+	PeerID int    `json:"peerId"`
+}
+
+// InternalChatSocket keeps the internal chat real-time channel separate from
+// the public/customer support socket and only broadcasts to authenticated users.
+func (h *InternalChatHandler) InternalChatSocket(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
+		return
+	}
+	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		return
+	}
+	client := &internalChatClient{conn: conn}
+	h.hub.add(user.ID, client)
+	h.touch(user.ID)
+	defer func() {
+		remaining := h.hub.remove(user.ID, client)
+		if remaining == 0 {
+			h.untouch(user.ID)
+			h.hub.broadcast(internalChatEnvelope{Type: "presence", UserID: user.ID, Online: false}, nil)
+		}
+		client.close()
+	}()
+
+	users, err := h.store.ListInternalChatUsers(user.ID)
+	if err != nil {
+		_ = client.write(internalChatEnvelope{Type: "error", Error: "聊天用户加载失败"})
+		return
+	}
+	for index := range users {
+		users[index].Online = h.isOnline(users[index].ID)
+	}
+	if !client.write(internalChatEnvelope{Type: "ready", Users: users}) {
+		return
+	}
+	h.hub.broadcast(internalChatEnvelope{Type: "presence", UserID: user.ID, Online: true}, map[int]struct{}{user.ID: {}})
+
+	conn.SetReadLimit(4 << 10)
+	for {
+		var incoming internalChatClientMessage
+		if err := conn.ReadJSON(&incoming); err != nil {
+			return
+		}
+		h.touch(user.ID)
+		if incoming.Type == "subscribe" {
+			messages, listErr := h.store.ListInternalChatMessages(user.ID, incoming.PeerID, 0)
+			if listErr != nil || !client.write(internalChatEnvelope{Type: "history", Messages: messages}) {
+				return
+			}
+		}
+	}
+}
+
 func (h *InternalChatHandler) Users(c *gin.Context) {
 	user, ok := middleware.CurrentUser(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
 		return
 	}
-	h.touch(user.ID)
+	h.announceOnline(user.ID)
 	users, err := h.store.ListInternalChatUsers(user.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "聊天用户加载失败"})
@@ -83,8 +166,16 @@ func (h *InternalChatHandler) Presence(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
 		return
 	}
-	h.touch(user.ID)
+	h.announceOnline(user.ID)
 	c.Status(http.StatusNoContent)
+}
+
+func (h *InternalChatHandler) announceOnline(userID int) {
+	wasOnline := h.isOnline(userID)
+	h.touch(userID)
+	if !wasOnline {
+		h.hub.broadcast(internalChatEnvelope{Type: "presence", UserID: userID, Online: true}, map[int]struct{}{userID: {}})
+	}
 }
 
 func (h *InternalChatHandler) Messages(c *gin.Context) {
@@ -93,7 +184,7 @@ func (h *InternalChatHandler) Messages(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
 		return
 	}
-	peerID, err := nonNegativeQueryInt(c, "peerId")
+	peerID, err := internalChatPeerID(c)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "peerId 参数无效"})
 		return
@@ -127,7 +218,18 @@ func (h *InternalChatHandler) Send(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	h.broadcastMessage(message)
 	c.JSON(http.StatusCreated, gin.H{"message": message})
+}
+
+func (h *InternalChatHandler) broadcastMessage(message models.InternalChatMessage) {
+	targets := map[int]struct{}{message.SenderID: {}}
+	if message.RecipientID != nil {
+		targets[*message.RecipientID] = struct{}{}
+		h.hub.broadcast(internalChatEnvelope{Type: "message", Message: &message}, targets)
+		return
+	}
+	h.hub.broadcast(internalChatEnvelope{Type: "message", Message: &message}, nil)
 }
 
 func (h *InternalChatHandler) UploadAttachment(c *gin.Context) {
@@ -316,4 +418,85 @@ func nonNegativeQueryInt(c *gin.Context, key string) (int, error) {
 		return 0, fmt.Errorf("invalid non-negative integer")
 	}
 	return parsed, nil
+}
+
+func internalChatPeerID(c *gin.Context) (int, error) {
+	value := strings.TrimSpace(c.Query("peerId"))
+	if value == "" {
+		return 0, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < -1 {
+		return 0, fmt.Errorf("invalid internal chat peer id")
+	}
+	return parsed, nil
+}
+
+type internalChatClient struct {
+	conn *websocket.Conn
+	mu   sync.Mutex
+}
+
+func (c *internalChatClient) write(value internalChatEnvelope) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_ = c.conn.SetWriteDeadline(time.Now().Add(8 * time.Second))
+	return c.conn.WriteJSON(value) == nil
+}
+
+func (c *internalChatClient) close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_ = c.conn.Close()
+}
+
+type internalChatHub struct {
+	mu      sync.RWMutex
+	clients map[int]map[*internalChatClient]struct{}
+}
+
+func newInternalChatHub() *internalChatHub {
+	return &internalChatHub{clients: map[int]map[*internalChatClient]struct{}{}}
+}
+
+func (h *internalChatHub) add(userID int, client *internalChatClient) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.clients[userID] == nil {
+		h.clients[userID] = map[*internalChatClient]struct{}{}
+	}
+	h.clients[userID][client] = struct{}{}
+}
+
+func (h *internalChatHub) remove(userID int, client *internalChatClient) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.clients[userID], client)
+	remaining := len(h.clients[userID])
+	if remaining == 0 {
+		delete(h.clients, userID)
+	}
+	return remaining
+}
+
+func (h *internalChatHub) broadcast(envelope internalChatEnvelope, targets map[int]struct{}) {
+	h.mu.RLock()
+	clients := make([]*internalChatClient, 0)
+	if targets == nil {
+		for _, userClients := range h.clients {
+			for client := range userClients {
+				clients = append(clients, client)
+			}
+		}
+	} else {
+		for userID := range targets {
+			for client := range h.clients[userID] {
+				clients = append(clients, client)
+			}
+		}
+	}
+	h.mu.RUnlock()
+	for _, client := range clients {
+		client.write(envelope)
+	}
 }

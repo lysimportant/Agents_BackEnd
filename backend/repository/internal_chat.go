@@ -47,6 +47,9 @@ func (s *SQLiteStore) ListInternalChatMessages(currentUserID, peerID, afterID in
 	args := []any{afterID}
 	if peerID == 0 {
 		query += ` AND message.recipient_id IS NULL`
+	} else if peerID == -1 {
+		query += ` AND (message.recipient_id IS NULL OR message.sender_id=? OR message.recipient_id=?)`
+		args = append(args, currentUserID, currentUserID)
 	} else {
 		query += ` AND ((message.sender_id=? AND message.recipient_id=?) OR (message.sender_id=? AND message.recipient_id=?))`
 		args = append(args, currentUserID, peerID, peerID, currentUserID)

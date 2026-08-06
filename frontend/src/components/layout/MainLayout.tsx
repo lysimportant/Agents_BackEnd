@@ -42,7 +42,8 @@ import {
 } from 'antd';
 import type { AuthUser, Menu as AdminMenu, PageKey } from '@/src/types/admin';
 import { pageKeys, pageTitles } from '@/src/config/constants';
-import { listSocketConversations, socketNotificationWebSocketURL } from '@/src/features/chat/socketApi';
+import { internalChatWebSocketURL, listSocketConversations, socketNotificationWebSocketURL } from '@/src/features/chat/socketApi';
+import { getInternalChatUnreadTotal, internalChatUnreadStorageKey, markInternalChatUnread } from '@/src/features/chat/unreadStore';
 import type { SocketConversation, SocketEnvelope } from '@/src/features/chat/types';
 import { isAdministratorRoleCode } from '@/src/utils/roleAccess';
 import {
@@ -70,6 +71,11 @@ type MainLayoutProps = {
   onNavigate: (page: PageKey) => void;
   onLogout: () => void;
   children: ReactNode;
+};
+
+type InternalChatEnvelope = {
+  type: 'message' | 'presence' | 'ready' | 'history' | 'error';
+  message?: { id: number; senderId: number; recipientId?: number | null; content: string };
 };
 
 const menuIconByCode: Record<string, ReactNode> = {
@@ -146,6 +152,7 @@ export function MainLayout({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [headerConversations, setHeaderConversations] = useState<SocketConversation[]>([]);
+  const [internalUnreadCount, setInternalUnreadCount] = useState(() => getInternalChatUnreadTotal(authUser.id));
   const [notificationApi, notificationContextHolder] = notification.useNotification();
 
   useEffect(() => {
@@ -212,6 +219,57 @@ export function MainLayout({
       socket?.close();
     };
   }, [notificationApi]);
+
+  useEffect(() => {
+    let active = true;
+    let reconnectTimer = 0;
+    let socket: WebSocket | null = null;
+    const unreadKey = internalChatUnreadStorageKey(authUser.id);
+    const syncUnread = () => setInternalUnreadCount(getInternalChatUnreadTotal(authUser.id));
+    const handleUnreadStorage = (event: StorageEvent) => {
+      if (event.key === unreadKey) syncUnread();
+    };
+    syncUnread();
+    window.addEventListener('storage', handleUnreadStorage);
+    const connect = () => {
+      if (!active) return;
+      const nextSocket = new WebSocket(internalChatWebSocketURL());
+      socket = nextSocket;
+      nextSocket.onopen = () => nextSocket.send(JSON.stringify({ type: 'ping' }));
+      nextSocket.onmessage = (event) => {
+        try {
+          const envelope = JSON.parse(String(event.data)) as InternalChatEnvelope;
+          const message = envelope.message;
+          if (envelope.type !== 'message' || !message || message.senderId === authUser.id) return;
+          if (message.recipientId !== authUser.id && message.recipientId != null) return;
+          const unreadCounts = markInternalChatUnread(message, authUser.id);
+          setInternalUnreadCount(Math.min(Object.values(unreadCounts).reduce((total, count) => total + count, 0), 99));
+          notificationApi.info({
+            placement: 'bottomRight',
+            title: '收到内部聊天新消息',
+            description: message.content || '收到新的附件消息，点击内部聊天查看。',
+          });
+        } catch {
+          return;
+        }
+      };
+      nextSocket.onclose = () => {
+        if (active) reconnectTimer = window.setTimeout(connect, 1800);
+      };
+      nextSocket.onerror = () => nextSocket.close();
+    };
+    connect();
+    return () => {
+      active = false;
+      window.clearTimeout(reconnectTimer);
+      socket?.close();
+      window.removeEventListener('storage', handleUnreadStorage);
+    };
+  }, [authUser.id, notificationApi]);
+
+  const openInternalChat = () => {
+    window.open('/chat', '_blank', 'noopener,noreferrer');
+  };
 
   const changeTheme = (nextTheme: AdminThemeId) => {
     setThemeId(nextTheme);
@@ -405,12 +463,14 @@ export function MainLayout({
             </div>
             <Space size={10} wrap className="antd-header-actions">
               <Tooltip title="内部聊天">
-                <Button
-                  type="text"
-                  aria-label="打开内部聊天"
-                  icon={<MessageOutlined />}
-                  onClick={() => window.open('/chat', '_blank', 'noopener,noreferrer')}
-                />
+                <Badge count={internalUnreadCount} overflowCount={99} size="small">
+                  <Button
+                    type="text"
+                    aria-label={`打开内部聊天${internalUnreadCount ? `，${internalUnreadCount} 条未读` : ''}`}
+                    icon={<MessageOutlined />}
+                    onClick={openInternalChat}
+                  />
+                </Badge>
               </Tooltip>
               {canQuerySocketConversations && (
                 <Popover

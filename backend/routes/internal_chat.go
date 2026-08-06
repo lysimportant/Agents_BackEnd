@@ -9,6 +9,7 @@ func registerInternalChatRoutes(protected *gin.RouterGroup, handler *handlers.In
 	group := protected.Group("/internal-chat")
 	group.GET("/users", handler.Users)
 	group.POST("/presence", handler.Presence)
+	group.GET("/socket", handler.InternalChatSocket)
 	group.GET("/messages", handler.Messages)
 	group.POST("/messages", handler.Send)
 	group.POST("/attachments", handler.UploadAttachment)
