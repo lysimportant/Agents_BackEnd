@@ -1,5 +1,9 @@
 # 生成式文档说明
 
+第一次启动和使用平台，请先阅读[平台操作说明](./operations-guide.md)。
+
+新增业务页面和后端创建接口，请阅读[前后端页面/API 开发说明](./frontend-backend-page-api-guide.md)。
+
 本仓库按技术栈使用各自原生的文档格式：
 
 - 后端代码：使用中文 GoDoc 注释；在 `backend/` 执行 `Get-ChildItem -Directory | Where-Object { Test-Path "$($_.FullName)\doc.go" } | ForEach-Object { go doc ".\$($_.Name)" }` 检查。

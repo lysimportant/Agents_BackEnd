@@ -1,5 +1,7 @@
 # 采集数据平台
 
+第一次运行或需要了解后台操作流程，请阅读[平台操作说明](./docs/operations-guide.md)。
+
 最小可运行版本：
 
 - `backend`: Go + Gin + SQLite API 服务
