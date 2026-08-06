@@ -22,27 +22,42 @@ import {
   type AdminTheme,
 } from '@/src/theme/themes';
 
+/** ReactECharts 保存模块使用的固定配置或共享状态。 */
 const ReactECharts = dynamic(() => import('echarts-for-react'), { ssr: false });
 
 type DashboardPageProps = {
+  /** usersCount 表示数量。 */
   usersCount: number;
+  /** activeUsers 表示当前激活。 */
   activeUsers: number;
+  /** menusCount 表示数量。 */
   menusCount: number;
+  /** enabledMenus 表示已启用菜单。 */
   enabledMenus: number;
+  /** articlesCount 表示数量。 */
   articlesCount: number;
+  /** publishedArticles 表示文章。 */
   publishedArticles: number;
+  /** isLoading 表示加载状态。 */
   isLoading: boolean;
+  /** onRefresh 表示刷新回调。 */
   onRefresh: () => void;
 };
 
 type StatCardProps = {
+  /** label 表示显示标签。 */
   label: string;
+  /** value 表示值。 */
   value: number;
+  /** note 表示备注。 */
   note: string;
+  /** icon 表示图标。 */
   icon: ReactNode;
+  /** tone 表示提示色调。 */
   tone: 'primary' | 'success' | 'warning' | 'accent';
 };
 
+/** DashboardPage 实现对应业务逻辑。 */
 export function DashboardPage({
   usersCount,
   activeUsers,
@@ -53,12 +68,18 @@ export function DashboardPage({
   isLoading,
   onRefresh,
 }: DashboardPageProps) {
+  /** theme 保存主题。 */
   const theme = useDashboardTheme();
+  /** totalResources 保存总数。 */
   const totalResources = usersCount + menusCount + articlesCount;
+  /** enabledRatio 保存已启用。 */
   const enabledRatio = getRatio(enabledMenus, menusCount);
+  /** publishedRatio 保存已发布比例。 */
   const publishedRatio = getRatio(publishedArticles, articlesCount);
+  /** accountRatio 保存变量 accountRatio。 */
   const accountRatio = getRatio(activeUsers, usersCount);
 
+  /** overviewOption 保存选项。 */
   const overviewOption = useMemo<EChartsOption>(
     () => createOverviewOption(theme, {
       total: [usersCount, menusCount, articlesCount],
@@ -67,6 +88,7 @@ export function DashboardPage({
     [activeUsers, articlesCount, enabledMenus, menusCount, publishedArticles, theme, usersCount],
   );
 
+  /** compositionOption 保存选项。 */
   const compositionOption = useMemo<EChartsOption>(
     () => createCompositionOption(theme, [
       { name: '用户账号', value: usersCount },
@@ -169,6 +191,7 @@ export function DashboardPage({
   );
 }
 
+/** DashboardStatCard 实现对应业务逻辑。 */
 function DashboardStatCard({ label, value, note, icon, tone }: StatCardProps) {
   return (
     <article className={`dashboard-stat-card is-${tone}`}>
@@ -182,6 +205,7 @@ function DashboardStatCard({ label, value, note, icon, tone }: StatCardProps) {
   );
 }
 
+/** DashboardProgress 实现对应业务逻辑。 */
 function DashboardProgress({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <div className="dashboard-progress-row">
@@ -191,10 +215,13 @@ function DashboardProgress({ label, value, color }: { label: string; value: numb
   );
 }
 
+/** useDashboardTheme 实现对应业务逻辑。 */
 function useDashboardTheme() {
+  /** themeId、setThemeId 分别保存主题标识状态及其更新函数。 */
   const [themeId, setThemeId] = useState(DEFAULT_THEME_ID);
 
   useEffect(() => {
+    /** syncTheme 负责更新并保存对应业务状态。 */
     const syncTheme = () => setThemeId(resolveThemeId(document.documentElement.dataset.theme));
     syncTheme();
     window.addEventListener(ADMIN_THEME_EVENT, syncTheme);
@@ -204,15 +231,18 @@ function useDashboardTheme() {
   return useMemo(() => getAdminTheme(themeId), [themeId]);
 }
 
+/** getRatio 获取对应业务记录。 */
 function getRatio(value: number, total: number) {
   if (total <= 0) return 0;
   return Math.min(100, Math.max(0, Math.round((value / total) * 100)));
 }
 
+/** createOverviewOption 创建或追加对应业务记录。 */
 function createOverviewOption(
   theme: AdminTheme,
   values: { total: number[]; available: number[] },
 ): EChartsOption {
+  /** axisStyle 保存变量 axisStyle。 */
   const axisStyle = { color: theme.palette.textSecondary };
   return {
     animationDuration: 700,
@@ -228,10 +258,11 @@ function createOverviewOption(
       axisPointer: { type: 'line', lineStyle: { color: theme.palette.primary, width: 1, type: 'dashed' } },
       formatter: '{b}<br/>{a0}：{c0}<br/>{a1}：{c1}',
       position: (point, _params, _dom, _rect, size) => {
+        /** tooltipWidth 保存宽度。 */
         const tooltipWidth = size.contentSize[0];
+        /** viewWidth 保存宽度。 */
         const viewWidth = size.viewSize[0];
-        // Keep the detail panel in the chart's header band so it never covers
-        // the bars that the pointer is inspecting.
+        // 将详情面板限制在图表标题区域，避免遮挡指针正在查看的柱形。
         return [Math.max(8, Math.min(viewWidth - tooltipWidth - 8, point[0] - tooltipWidth / 2)), 8];
       },
     },
@@ -263,10 +294,12 @@ function createOverviewOption(
   };
 }
 
+/** createCompositionOption 创建或追加对应业务记录。 */
 function createCompositionOption(
   theme: AdminTheme,
   data: Array<{ name: string; value: number }>,
 ): EChartsOption {
+  /** hasData 负责校验对应业务条件。 */
   const hasData = data.some((item) => item.value > 0);
   return {
     animationDuration: 750,

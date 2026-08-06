@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "docs": "typedoc --options typedoc.json",
     "start": "next start",
     "lint": "next lint"
   },
@@ -38,6 +39,7 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@types/turndown": "^5.0.6",
+    "typedoc": "^0.28.20",
     "typescript": "^5.9.3"
   }
 }

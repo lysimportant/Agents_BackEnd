@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Button, Checkbox, Col, Descriptions, Modal, Popconfirm, Row, Switch, Tag, Tooltip, Tree } from 'antd';
@@ -10,40 +10,73 @@ import { shiftOptions, statusOptions } from '@/src/config/constants';
 import { isAdministratorRoleCode, isSuperAdminRoleCode } from '@/src/utils/roleAccess';
 
 type UsersPageProps = {
+  /** canCreate 表示变量 canCreate。 */
   canCreate: boolean;
+  /** canUpdate 表示变量 canUpdate。 */
   canUpdate: boolean;
+  /** canDelete 表示变量 canDelete。 */
   canDelete: boolean;
+  /** canConfigurePermissions 表示权限。 */
   canConfigurePermissions: boolean;
+  /** actorRoleCode 表示角色编码。 */
   actorRoleCode: string;
+  /** users 表示用户。 */
   users: User[];
+  /** departments 表示部门。 */
   departments: Department[];
+  /** roles 表示角色。 */
   roles: Role[];
+  /** menus 表示菜单。 */
   menus: Menu[];
+  /** userForm 表示用户表单。 */
   userForm: UserForm;
+  /** editingUserId 表示用户标识。 */
   editingUserId: number | null;
+  /** selectedUserId 表示已选择用户标识。 */
   selectedUserId: number | null;
+  /** selectedMenuIds 表示已选择菜单标识列表。 */
   selectedMenuIds: number[];
+  /** departmentMenuIds 表示部门菜单标识列表。 */
   departmentMenuIds: number[];
+  /** roleMenuIds 表示角色菜单标识列表。 */
   roleMenuIds: number[];
+  /** effectiveMenuIds 表示最终生效菜单标识列表。 */
   effectiveMenuIds: number[];
+  /** roleActionCodes 表示角色。 */
   roleActionCodes: string[];
+  /** userActionCodes 表示用户。 */
   userActionCodes: string[];
+  /** effectiveActionCodes 表示最终生效。 */
   effectiveActionCodes: string[];
+  /** isLoading 表示加载状态。 */
   isLoading: boolean;
+  /** isSavingUser 表示用户。 */
   isSavingUser: boolean;
+  /** isSavingPermission 表示权限。 */
   isSavingPermission: boolean;
+  /** isSavingActionPermission 表示权限。 */
   isSavingActionPermission: boolean;
+  /** onRefresh 表示刷新回调。 */
   onRefresh: () => void;
+  /** onUserFormChange 表示用户表单。 */
   onUserFormChange: (form: UserForm) => void;
+  /** onSubmitUser 表示用户。 */
   onSubmitUser: (event: FormEvent<HTMLFormElement>) => void;
+  /** onResetUserForm 表示用户表单。 */
   onResetUserForm: () => void;
+  /** onEditUser 表示用户。 */
   onEditUser: (user: User) => void;
+  /** onDeleteUser 表示用户。 */
   onDeleteUser: (userId: number) => void;
+  /** onSelectUser 表示用户。 */
   onSelectUser: (userId: number) => Promise<boolean>;
+  /** onSavePermissions 表示保存状态。 */
   onSavePermissions: (menuIds: number[]) => Promise<boolean>;
+  /** onSaveActionPermissions 表示保存状态。 */
   onSaveActionPermissions: (actionCodes: string[]) => Promise<boolean>;
 };
 
+/** UsersPage 实现对应业务逻辑。 */
 export function UsersPage({
   canCreate,
   canUpdate,
@@ -78,43 +111,67 @@ export function UsersPage({
   onSavePermissions,
   onSaveActionPermissions,
 }: UsersPageProps) {
+  /** selectedUser 缓存计算得到的已选择用户。 */
   const selectedUser = useMemo(() => users.find((user) => user.id === selectedUserId) ?? null, [users, selectedUserId]);
+  /** dialogOpen、setDialogOpen 分别保存对话框状态及其更新函数。 */
   const [dialogOpen, setDialogOpen] = useState(false);
+  /** permissionDialogOpen、setPermissionDialogOpen 分别保存权限对话框状态及其更新函数。 */
   const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
+  /** viewUser、setViewUser 保存用户、用户。 */
   const [viewUser, setViewUser] = useState<User | null>(null);
+  /** draftMenuIds、setDraftMenuIds 保存输入草稿菜单标识列表、输入草稿菜单标识列表。 */
   const [draftMenuIds, setDraftMenuIds] = useState<number[]>([]);
+  /** draftActionCodes、setDraftActionCodes 保存输入草稿、输入草稿。 */
   const [draftActionCodes, setDraftActionCodes] = useState<string[]>([]);
+  /** actionPermissionOpen、setActionPermissionOpen 分别保存权限状态及其更新函数。 */
   const [actionPermissionOpen, setActionPermissionOpen] = useState(false);
+  /** keyword、setKeyword 分别保存搜索关键词状态及其更新函数。 */
   const [keyword, setKeyword] = useState('');
+  /** selectedRole 缓存计算得到的已选择角色。 */
   const selectedRole = useMemo(() => roles.find((role) => role.id === selectedUser?.roleId) ?? null, [roles, selectedUser]);
+  /** departmentPermissionSource 保存部门权限来源。 */
   const departmentPermissionSource = selectedUser?.department || '未分配部门';
+  /** rolePermissionSource 保存角色权限来源。 */
   const rolePermissionSource = selectedRole?.name || selectedUser?.role || '未分配角色';
+  /** isAdministratorTarget 保存目标。 */
   const isAdministratorTarget = isAdministratorRoleCode(selectedUser?.roleCode);
+  /** actorIsSuperAdmin 保存管理员。 */
   const actorIsSuperAdmin = isSuperAdminRoleCode(actorRoleCode);
+  /** canEditSelectedPermissions 保存已选择。 */
   const canEditSelectedPermissions = canConfigurePermissions && !isAdministratorTarget;
+  /** inheritedMenuIds 缓存计算得到的菜单标识列表。 */
   const inheritedMenuIds = useMemo(() => [...new Set([...departmentMenuIds, ...roleMenuIds])], [departmentMenuIds, roleMenuIds]);
+  /** inheritedActionCodes 缓存计算得到的继承结果操作权限编码。 */
   const inheritedActionCodes = useMemo(
     () => isAdministratorTarget ? allActionPermissionCodes : [...new Set(roleActionCodes)],
     [isAdministratorTarget, roleActionCodes],
   );
+  /** draftEffectiveActionCodes 缓存计算得到的输入草稿最终生效。 */
   const draftEffectiveActionCodes = useMemo(
     () => isAdministratorTarget ? allActionPermissionCodes : [...new Set([...roleActionCodes, ...draftActionCodes])],
     [draftActionCodes, isAdministratorTarget, roleActionCodes],
   );
+  /** filteredUsers 缓存计算得到的筛选后。 */
   const filteredUsers = useMemo(() => {
+    /** query 保存查询条件。 */
     const query = keyword.trim().toLowerCase();
     if (!query) return users;
     return users.filter((user) => [user.username, user.name, user.role, user.department, user.email, user.phone]
       .some((value) => String(value ?? '').toLowerCase().includes(query)));
   }, [keyword, users]);
 
+  /** treeData 负责计算或维护树形数据业务数据。 */
   const treeData = useMemo<DataNode[]>(() => {
+    /** sorted 负责计算或维护排序结果。 */
     const sorted = [...menus].filter((menu) => menu.status === '启用').sort((a, b) => a.sort - b.sort || a.id - b.id);
+    /** childrenByParent 保存父级。 */
     const childrenByParent = new Map<number | null, Menu[]>();
     sorted.forEach((menu) => {
+      /** parentId 负责计算或维护标识。 */
       const parentId = menu.parentId && sorted.some((candidate) => candidate.id === menu.parentId) ? menu.parentId : null;
       childrenByParent.set(parentId, [...(childrenByParent.get(parentId) ?? []), menu]);
     });
+    /** mapNodes 负责计算或维护节点。 */
     const mapNodes = (parentId: number | null): DataNode[] => (childrenByParent.get(parentId) ?? []).map((menu) => ({
       key: menu.id,
       title: menu.name,
@@ -124,6 +181,7 @@ export function UsersPage({
     return mapNodes(null);
   }, [inheritedMenuIds, menus]);
 
+  /** roleOptions 缓存计算得到的角色。 */
   const roleOptions = useMemo(
     () => [...roles]
       .filter((role) => {
@@ -135,14 +193,18 @@ export function UsersPage({
     [actorIsSuperAdmin, roles, userForm.roleId],
   );
 
+  /** departmentOptions 缓存计算得到的部门。 */
   const departmentOptions = useMemo(() => {
+    /** sorted 负责计算或维护排序结果。 */
     const sorted = [...departments].filter((department) => department.status === '启用').sort((a, b) => a.sort - b.sort || a.id - b.id);
+    /** flatten 负责计算或维护扁平化菜单列表。 */
     const flatten = (parentId: number | null, depth: number): Array<Department & { depth: number }> => sorted
       .filter((department) => (department.parentId ?? null) === parentId)
       .flatMap((department) => [{ ...department, depth }, ...flatten(department.id, depth + 1)]);
     return flatten(null, 0);
   }, [departments]);
 
+  /** openPermissionDialog 负责计算或维护权限对话框。 */
   const openPermissionDialog = async (userId: number) => {
     if (await onSelectUser(userId)) setPermissionDialogOpen(true);
   };
@@ -150,12 +212,14 @@ export function UsersPage({
   useEffect(() => {
     if (permissionDialogOpen) {
       setDraftMenuIds(selectedMenuIds);
+      /** inherited 保存继承结果。 */
       const inherited = new Set(roleActionCodes);
       setDraftActionCodes(userActionCodes.filter((code) => !inherited.has(code)));
       setActionPermissionOpen(false);
     }
   }, [permissionDialogOpen, roleActionCodes, selectedMenuIds, userActionCodes]);
 
+  /** confirmPermissions 负责计算或维护权限。 */
   const confirmPermissions = async () => {
     if (!canEditSelectedPermissions) return;
     if (!await onSavePermissions(draftMenuIds)) return;
@@ -174,7 +238,9 @@ export function UsersPage({
     }
   }, [isSavingUser, editingUserId, userForm.username, userForm.name, userForm.password]);
 
+  /** openCreateDialog 负责计算或维护对话框。 */
   const openCreateDialog = () => {
+    /** defaultRole 负责计算或维护角色。 */
     const defaultRole = roleOptions.find((role) => role.code === 'viewer' && role.status === '启用') ?? null;
     onResetUserForm();
     onUserFormChange({
@@ -194,6 +260,7 @@ export function UsersPage({
     setDialogOpen(true);
   };
 
+  /** closeDialog 负责删除或清理对应业务状态。 */
   const closeDialog = () => {
     setDialogOpen(false);
     onResetUserForm();
@@ -262,9 +329,13 @@ export function UsersPage({
                       <div className="action-group">
                         <button type="button" onClick={() => setViewUser(user)}>查看</button>
                         {(() => {
+                          /** targetIsAdministrator 保存目标。 */
                           const targetIsAdministrator = isAdministratorRoleCode(user.roleCode);
+                          /** canAuthorizeTarget 保存目标。 */
                           const canAuthorizeTarget = canConfigurePermissions && !targetIsAdministrator;
+                          /** canEditTarget 保存目标。 */
                           const canEditTarget = canUpdate && (!targetIsAdministrator || actorIsSuperAdmin);
+                          /** canDeleteTarget 保存目标。 */
                           const canDeleteTarget = canDelete && user.username.toLowerCase() !== 'mh' && (!targetIsAdministrator || actorIsSuperAdmin);
                           if (!canAuthorizeTarget && !canEditTarget && !canDeleteTarget) return null;
                           return (
@@ -402,6 +473,7 @@ export function UsersPage({
               checkedKeys={isAdministratorTarget ? menus.filter((menu) => menu.status === '启用').map((menu) => menu.id) : [...new Set([...inheritedMenuIds, ...draftMenuIds])]}
               onCheck={(checked) => {
                 if (!canEditSelectedPermissions) return;
+                /** inherited 保存继承结果。 */
                 const inherited = new Set(inheritedMenuIds);
                 setDraftMenuIds((Array.isArray(checked) ? checked : checked.checked).map(Number).filter((id) => !inherited.has(id)));
               }}
@@ -474,8 +546,11 @@ export function UsersPage({
                       </summary>
                       <div className="action-permission-options">
                         {group.actions.map((action) => {
+                          /** inherited 保存继承结果。 */
                           const inherited = inheritedActionCodes.includes(action.code);
+                          /** personal 保存个人权限。 */
                           const personal = !isAdministratorTarget && draftActionCodes.includes(action.code);
+                          /** effective 保存最终生效。 */
                           const effective = isAdministratorTarget || inherited || personal;
                           return (
                             <label className={`action-permission-option${effective ? ' is-checked' : ''}${inherited ? ' is-inherited' : ''}`} key={action.code}>
@@ -527,7 +602,9 @@ export function UsersPage({
                 required
                 value={userForm.roleId ?? ''}
                 onChange={(event) => {
+                  /** roleId 保存角色标识。 */
                   const roleId = event.target.value ? Number(event.target.value) : null;
+                  /** role 负责计算或维护角色。 */
                   const role = roles.find((item) => item.id === roleId);
                   onUserFormChange({ ...userForm, roleId, role: role?.name ?? '' });
                 }}
@@ -546,7 +623,9 @@ export function UsersPage({
                 required
                 value={userForm.departmentId ?? ''}
                 onChange={(event) => {
+                  /** departmentId 保存部门标识。 */
                   const departmentId = event.target.value ? Number(event.target.value) : null;
+                  /** department 负责计算或维护部门。 */
                   const department = departments.find((item) => item.id === departmentId);
                   onUserFormChange({ ...userForm, departmentId, department: department?.name ?? '' });
                 }}
@@ -566,6 +645,7 @@ export function UsersPage({
               <select
                 value={userForm.status}
                 onChange={(event) => {
+                  /** status 保存状态。 */
                   const status = event.target.value;
                   onUserFormChange({ ...userForm, status, canLogin: status === '停用' ? false : userForm.canLogin });
                 }}

@@ -7,11 +7,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// registerFileRoutes 执行对应业务操作。
 func registerFileRoutes(routes *gin.RouterGroup, store middleware.UserStore, handler *handlers.FileHandler) {
+	// requireMenu 保存菜单。
 	requireMenu := middleware.RequireMenu(store, "files")
 	routes.GET("/files", requireMenu, middleware.RequireAction(store, permissions.FilesQuery), handler.List)
 	routes.POST("/files", requireMenu, middleware.RequireAction(store, permissions.FilesCreate), handler.Upload)
-	// Static segments must be registered before /files/:id.
+	// 静态路径必须在 /files/:id 动态路径之前注册。
 	routes.GET("/files/recycle-bin", requireMenu, middleware.RequireAction(store, permissions.FilesQuery), handler.ListRecycleBin)
 	routes.GET("/files/chat-data/:source/:id/preview", requireMenu, middleware.RequireAction(store, permissions.FilesView), handler.ChatDataPreview)
 	routes.GET("/files/chat-data/:source/:id/download", requireMenu, middleware.RequireAction(store, permissions.FilesView), handler.ChatDataDownload)

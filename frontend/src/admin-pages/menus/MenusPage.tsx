@@ -6,31 +6,52 @@ import type { Menu, MenuForm, MenuNode } from '@/src/types/admin';
 import { menuStatusOptions } from '@/src/config/constants';
 
 type MenusPageProps = {
+  /** menus 表示菜单。 */
   menus: Menu[];
+  /** menuTree 表示菜单树形数据。 */
   menuTree: MenuNode[];
+  /** menuForm 表示菜单表单。 */
   menuForm: MenuForm;
+  /** editingMenuId 表示菜单标识。 */
   editingMenuId: number | null;
+  /** isLoading 表示加载状态。 */
   isLoading: boolean;
+  /** isSavingMenu 表示菜单。 */
   isSavingMenu: boolean;
+  /** actions 表示操作权限。 */
   actions: ResourceActionAccess;
+  /** onRefresh 表示刷新回调。 */
   onRefresh: () => void;
+  /** onMenuFormChange 表示菜单表单。 */
   onMenuFormChange: (form: MenuForm) => void;
+  /** onSubmitMenu 表示菜单。 */
   onSubmitMenu: (event: FormEvent<HTMLFormElement>) => Promise<boolean>;
+  /** onResetMenuForm 表示菜单表单。 */
   onResetMenuForm: () => void;
+  /** onEditMenu 表示菜单。 */
   onEditMenu: (menu: Menu) => void;
+  /** onDeleteMenu 表示菜单。 */
   onDeleteMenu: (menuId: number) => void;
 };
 
+/** MenusPage 保存模块使用的固定配置或共享状态。 */
 export function MenusPage({ menus, menuTree, menuForm, editingMenuId, isLoading, isSavingMenu, actions, onRefresh, onMenuFormChange, onSubmitMenu, onResetMenuForm, onEditMenu, onDeleteMenu }: MenusPageProps) {
+  /** dialogOpen、setDialogOpen 分别保存对话框状态及其更新函数。 */
   const [dialogOpen, setDialogOpen] = useState(false);
+  /** viewingMenu、setViewingMenu 保存菜单、菜单。 */
   const [viewingMenu, setViewingMenu] = useState<Menu | null>(null);
+  /** enabledMenus 负责计算或维护已启用菜单。 */
   const enabledMenus = menus.filter((menu) => menu.status === '启用');
+  /** tableRows 保存数据行。 */
   const tableRows = menuTree.flatMap(function flatten(node): MenuNode[] {
     return [node, ...node.children.flatMap(flatten)];
   });
+  /** parentOptions 缓存计算得到的父级选项。 */
   const parentOptions = useMemo(() => {
     if (!editingMenuId) return menus;
+    /** blocked 保存阻止状态。 */
     const blocked = new Set<number>([editingMenuId]);
+    /** collectDescendants 负责计算或维护收集结果后代节点。 */
     const collectDescendants = (parentId: number) => {
       menus.filter((menu) => menu.parentId === parentId).forEach((menu) => {
         if (blocked.has(menu.id)) return;
@@ -42,20 +63,24 @@ export function MenusPage({ menus, menuTree, menuForm, editingMenuId, isLoading,
     return menus.filter((menu) => !blocked.has(menu.id));
   }, [editingMenuId, menus]);
 
+  /** openCreate 负责计算或维护打开状态。 */
   const openCreate = () => {
     if (!actions.create) return;
     onResetMenuForm();
     setDialogOpen(true);
   };
+  /** openEdit 负责计算或维护打开状态。 */
   const openEdit = (menu: Menu) => {
     if (!actions.update) return;
     onEditMenu(menu);
     setDialogOpen(true);
   };
+  /** closeDialog 负责删除或清理对应业务状态。 */
   const closeDialog = () => {
     setDialogOpen(false);
     onResetMenuForm();
   };
+  /** submit 负责执行对应业务操作。 */
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     if (editingMenuId ? !actions.update : !actions.create) return;
     if (await onSubmitMenu(event)) setDialogOpen(false);

@@ -3,25 +3,42 @@
 
   function mount(options) {
     options = options || {};
+    /** script 保存变量 script。 */
     var script = options.script || document.currentScript;
+    /** globalConfig 保存配置。 */
     var globalConfig = window.SOCKET_CUSTOMER_CONFIG || {};
+    /** apiBase 保存变量 apiBase。 */
     var apiBase = String(options.apiBase || (script && script.dataset.apiBase) || globalConfig.apiBase || window.location.origin).replace(/\/$/, '');
+    /** title 保存标题。 */
     var title = String(options.title || (script && script.dataset.title) || globalConfig.title || '在线客服');
+    /** color 保存变量 color。 */
     var color = String(options.color || (script && script.dataset.color) || globalConfig.color || '#1677ff');
+    /** position 保存变量 position。 */
     var position = String(options.position || (script && script.dataset.position) || globalConfig.position || 'right') === 'left' ? 'left' : 'right';
+    /** sessionKey 保存登录会话存储键。 */
     var sessionKey = String(options.sessionKey || (script && script.dataset.sessionKey) || globalConfig.sessionKey || 'default');
+    /** storageKey 保存存储存储键。 */
     var storageKey = 'socket-customer:' + apiBase + ':' + sessionKey;
+    /** session 保存登录会话。 */
     var session = readSession(storageKey);
+    /** socket 保存实时连接。 */
     var socket = null;
+    /** opened 保存变量 opened。 */
     var opened = false;
+    /** started 保存启动状态。 */
     var started = false;
+    /** messages 保存消息。 */
     var messages = [];
+    /** messageIds 保存消息标识列表。 */
     var messageIds = {};
+    /** reconnectTimer 保存定时器。 */
     var reconnectTimer = 0;
 
+    /** host 保存主机地址。 */
     var host = document.createElement('div');
     host.setAttribute('data-socket-customer-widget', '');
     document.body.appendChild(host);
+    /** root 保存根节点。 */
     var root = host.attachShadow({ mode: 'open' });
     root.innerHTML = '<style>' + styles(position) + '</style>' +
       '<button class="launcher" type="button" aria-label="打开在线客服"><span class="pulse"></span><span class="chat-icon">◌</span></button>' +
@@ -34,20 +51,34 @@
       '</section>';
     root.host.style.setProperty('--socket-color', color);
 
+    /** launcher 保存变量 launcher。 */
     var launcher = root.querySelector('.launcher');
+    /** panel 保存变量 panel。 */
     var panel = root.querySelector('.panel');
+    /** closeButton 保存按钮。 */
     var closeButton = root.querySelector('.close');
+    /** status 保存状态。 */
     var status = root.querySelector('.status');
+    /** messageList 保存消息列表。 */
     var messageList = root.querySelector('.messages');
+    /** form 保存表单。 */
     var form = root.querySelector('form');
+    /** textarea 保存文本输入框。 */
     var textarea = root.querySelector('textarea');
+    /** fileButton 保存文件按钮。 */
     var fileButton = root.querySelector('.file');
+    /** fileInput 保存文件输入值。 */
     var fileInput = root.querySelector('.file-input');
+    /** emojiButton 保存表情按钮。 */
     var emojiButton = root.querySelector('.emoji');
+    /** emojiPanel 保存表情。 */
     var emojiPanel = root.querySelector('.emoji-panel');
+    /** sessionLabel 保存登录会话。 */
     var sessionLabel = root.querySelector('.session-id');
+    /** emojiList 保存表情列表。 */
     var emojiList = ['😀', '😁', '😂', '😊', '😍', '🤝', '👍', '🎉', '❤️', '🙏', '📦', '✅'];
     emojiList.forEach(function (emoji) {
+      /** button 保存按钮。 */
       var button = document.createElement('button');
       button.type = 'button';
       button.textContent = emoji;
@@ -79,12 +110,14 @@
     });
     fileButton.addEventListener('click', function () { fileInput.click(); });
     fileInput.addEventListener('change', function () {
+      /** file 保存文件。 */
       var file = fileInput.files && fileInput.files[0];
       if (file) uploadFile(file);
       fileInput.value = '';
     });
     form.addEventListener('submit', function (event) {
       event.preventDefault();
+      /** content 保存内容。 */
       var content = textarea.value.trim();
       if (!content) return;
       if (!socket || socket.readyState !== WebSocket.OPEN) {
@@ -101,6 +134,7 @@
     function connect() {
       window.clearTimeout(reconnectTimer);
       status.textContent = '正在连接…';
+      /** url 保存地址。 */
       var url = new URL('/api/socket/customer', apiBase);
       url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
       if (session.id && session.token) {
@@ -143,16 +177,20 @@
       if (!message || messageIds[message.id]) return;
       messageIds[message.id] = true;
       messages.push(message);
+      /** row 保存数据行。 */
       var row = document.createElement('div');
       row.className = 'message-row ' + (message.senderType === 'visitor' ? 'visitor' : 'agent');
+      /** bubble 保存变量 bubble。 */
       var bubble = document.createElement('div');
       bubble.className = 'bubble';
+      /** meta 保存元数据。 */
       var meta = document.createElement('small');
       meta.textContent = (message.senderName || (message.senderType === 'visitor' ? '我' : '客服')) + ' · ' + formatTime(message.createdAt);
       bubble.appendChild(meta);
       if (message.messageType === 'image' || message.messageType === 'file') {
         renderAttachment(bubble, message);
       } else {
+        /** copy 保存变量 copy。 */
         var copy = document.createElement('p');
         copy.textContent = message.content || '';
         bubble.appendChild(copy);
@@ -163,14 +201,17 @@
     }
 
     function renderAttachment(container, message) {
+      /** button 保存按钮。 */
       var button = document.createElement('button');
       button.type = 'button';
       button.className = 'attachment';
       button.textContent = (message.messageType === 'image' ? '🖼 ' : '📄 ') + (message.attachmentName || '聊天文件');
       container.appendChild(button);
       fetchAttachment(message).then(function (blob) {
+        /** objectUrl 保存地址。 */
         var objectUrl = URL.createObjectURL(blob);
         if (message.messageType === 'image') {
+          /** image 保存图片。 */
           var image = document.createElement('img');
           image.alt = message.attachmentName || '聊天图片';
           image.src = objectUrl;
@@ -178,6 +219,7 @@
           container.replaceChild(image, button);
         } else {
           button.addEventListener('click', function () {
+            /** link 保存链接。 */
             var link = document.createElement('a');
             link.href = objectUrl;
             link.download = message.attachmentName || 'chat-file';
@@ -203,6 +245,7 @@
         return;
       }
       status.textContent = '正在发送文件…';
+      /** formData 保存表单业务数据。 */
       var formData = new FormData();
       formData.append('file', file);
       fetch(apiBase + '/api/socket/customer/' + encodeURIComponent(session.id) + '/files', {
@@ -228,12 +271,14 @@
     try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {}
   }
   function formatTime(value) {
+    /** date 保存日期。 */
     var date = new Date(value);
     return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
   }
   function escapeText(value) { return String(value).replace(/[&<>]/g, function (char) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[char]; }); }
   function escapeAttribute(value) { return escapeText(value).replace(/"/g, '&quot;'); }
   function styles(position) {
+    /** side 保存变量 side。 */
     var side = position === 'left' ? 'left:24px' : 'right:24px';
     return ':host{--socket-color:#1677ff;position:fixed;z-index:2147483000;bottom:24px;' + side + ';font-family:Arial,"Microsoft YaHei",sans-serif;color:#172033}' +
       '*{box-sizing:border-box}.launcher{width:58px;height:58px;border:0;border-radius:50%;color:white;background:linear-gradient(135deg,var(--socket-color),color-mix(in srgb,var(--socket-color) 60%,#8b5cf6));box-shadow:0 12px 32px color-mix(in srgb,var(--socket-color) 42%,transparent);cursor:pointer;font-size:30px;position:relative}.pulse{position:absolute;inset:-6px;border:2px solid color-mix(in srgb,var(--socket-color) 48%,transparent);border-radius:50%;animation:pulse 2s infinite}.chat-icon:before{content:"💬";font-size:27px}' +
@@ -245,6 +290,7 @@
   }
 
   window.SocketCustomerWidget = { mount: mount };
+  /** autoScript 保存变量 autoScript。 */
   var autoScript = document.currentScript;
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () { mount({ script: autoScript }); }, { once: true });

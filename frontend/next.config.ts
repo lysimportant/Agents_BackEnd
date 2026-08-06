@@ -1,5 +1,6 @@
 import type { NextConfig } from 'next';
 
+/** nextConfig 保存模块使用的固定配置或共享状态。 */
 const nextConfig: NextConfig = {
   turbopack: {
     root: __dirname,

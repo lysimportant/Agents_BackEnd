@@ -7,7 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// registerRoleRoutes 执行对应业务操作。
 func registerRoleRoutes(routes *gin.RouterGroup, store middleware.UserStore, handler *handlers.RoleHandler) {
+	// requireMenu 保存菜单。
 	requireMenu := middleware.RequireMenu(store, "roles")
 	routes.GET("/roles", requireMenu, middleware.RequireAction(store, permissions.RolesQuery), handler.List)
 	routes.GET("/roles/:id", requireMenu, middleware.RequireAction(store, permissions.RolesView), handler.Get)

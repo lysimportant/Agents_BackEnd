@@ -6,29 +6,32 @@ import {
   type HTMLAttributes,
 } from 'react';
 
+/** TiltCardOptions 定义对应业务的数据结构与调用契约。 */
 export type TiltCardOptions = {
-  /** Maximum rotation around each axis, in degrees. */
+  /** 每个轴允许的最大旋转角度。 */
   maxTilt?: number;
-  /** Scale applied while the pointer is over the card. */
+  /** 指针悬停卡片时使用的缩放比例。 */
   scale?: number;
-  /** Upward movement while active, in pixels. */
+  /** 卡片激活时向上移动的像素数。 */
   lift?: number;
-  /** Lerp strength used by the requestAnimationFrame loop (0-1). */
+  /** requestAnimationFrame 循环使用的线性插值强度，范围为 0 到 1。 */
   smoothing?: number;
-  /** Peak opacity of the pointer-following radial glare (0-1). */
+  /** 跟随指针的径向高光最大不透明度，范围为 0 到 1。 */
   glareStrength?: number;
-  /** Maximum movement of the strongest parallax layer, in pixels. */
+  /** 最强视差图层允许移动的最大像素数。 */
   parallax?: number;
-  /** Perspective depth, in pixels. */
+  /** 透视深度，单位为像素。 */
   perspective?: number;
-  /** Adds a subtle rainbow holographic overlay. */
+  /** 是否添加轻微的彩虹全息叠层。 */
   holographic?: boolean;
-  /** Keeps the card static while preserving its normal appearance. */
+  /** 是否在保持正常外观的同时禁用卡片动态效果。 */
   disabled?: boolean;
 };
 
+/** TiltCardProps 定义对应业务的数据结构与调用契约。 */
 export type TiltCardProps = HTMLAttributes<HTMLDivElement> & TiltCardOptions;
 
+/** DEFAULT_TILT_CARD_OPTIONS 保存模块使用的固定配置或共享状态。 */
 export const DEFAULT_TILT_CARD_OPTIONS = {
   maxTilt: 1.2,
   scale: 1.01,
@@ -40,8 +43,8 @@ export const DEFAULT_TILT_CARD_OPTIONS = {
 } as const;
 
 /**
- * Reusable 3D card surface. TiltCardEffects is mounted once in the root layout,
- * so this component only declares per-card options and stays inexpensive.
+ * 可复用的 3D 卡片表面。TiltCardEffects 仅在根布局挂载一次，
+ * 因此本组件只声明单卡选项并保持较低运行开销。
  */
 export const TiltCard = forwardRef<HTMLDivElement, TiltCardProps>(function TiltCard(
   {
@@ -89,11 +92,12 @@ export const TiltCard = forwardRef<HTMLDivElement, TiltCardProps>(function TiltC
   );
 });
 
+/** TiltCardLayerProps 定义对应业务的数据结构与调用契约。 */
 export type TiltCardLayerProps = HTMLAttributes<HTMLDivElement> & {
   depth?: 'subtle' | 'medium' | 'strong';
 };
 
-/** A content layer that moves independently inside a TiltCard. */
+/** 在 TiltCard 内独立移动的内容图层。 */
 export const TiltCardLayer = forwardRef<HTMLDivElement, TiltCardLayerProps>(function TiltCardLayer(
   { depth = 'medium', className, children, ...props },
   ref,
@@ -110,6 +114,7 @@ export const TiltCardLayer = forwardRef<HTMLDivElement, TiltCardLayerProps>(func
   );
 });
 
+/** joinClassNames 定义对应业务的数据结构与调用契约。 */
 function joinClassNames(...classNames: Array<string | false | null | undefined>) {
   return classNames.filter(Boolean).join(' ');
 }

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import {
@@ -59,25 +59,40 @@ import {
 const { Header, Sider, Content } = Layout;
 
 type MainLayoutProps = {
+  /** authUser 表示认证用户。 */
   authUser: AuthUser;
+  /** menus 表示菜单。 */
   menus: AdminMenu[];
+  /** activePage 表示当前激活页码。 */
   activePage: PageKey;
+  /** sidebarCollapsed 表示侧栏。 */
   sidebarCollapsed: boolean;
+  /** mobileSidebarOpen 表示移动端侧栏。 */
   mobileSidebarOpen: boolean;
+  /** error 表示错误状态。 */
   error: string;
+  /** onToggleSidebar 表示侧栏。 */
   onToggleSidebar: () => void;
+  /** onOpenMobileSidebar 表示移动端侧栏。 */
   onOpenMobileSidebar: () => void;
+  /** onCloseMobileSidebar 表示移动端侧栏。 */
   onCloseMobileSidebar: () => void;
+  /** onNavigate 表示变量 onNavigate。 */
   onNavigate: (page: PageKey) => void;
+  /** onLogout 表示变量 onLogout。 */
   onLogout: () => void;
+  /** children 表示子节点。 */
   children: ReactNode;
 };
 
 type InternalChatEnvelope = {
+  /** type 表示类型。 */
   type: 'message' | 'presence' | 'ready' | 'history' | 'error';
+  /** message 表示消息。 */
   message?: { id: number; senderId: number; recipientId?: number | null; content: string };
 };
 
+/** menuIconByCode 保存模块使用的固定配置或共享状态。 */
 const menuIconByCode: Record<string, ReactNode> = {
   dashboard: <DashboardOutlined />,
   workspace: <DashboardOutlined />,
@@ -93,9 +108,13 @@ const menuIconByCode: Record<string, ReactNode> = {
   files: <FolderOpenOutlined />,
 };
 
+/** resolvePageKey 转换并生成对应业务结果。 */
 function resolvePageKey(menu: AdminMenu): PageKey | null {
+  /** code 保存编码。 */
   const code = (menu.code || '').trim().toLowerCase();
+  /** path 保存路径。 */
   const path = (menu.path || '').trim().toLowerCase().replace(/^\/+|\/+$/g, '');
+  /** pageByCode、Partial、Record、string、PageKey 保存页码编码、变量 Partial、记录等关联值。 */
   const pageByCode: Partial<Record<string, PageKey>> = {
     dashboard: 'dashboard',
     'socket-support': 'socket-support',
@@ -107,26 +126,32 @@ function resolvePageKey(menu: AdminMenu): PageKey | null {
     articles: 'articles',
     files: 'files',
   };
+  /** page 保存页码。 */
   const page = pageByCode[code];
   return page && path === page ? page : null;
 }
 
+/** getAvatarFallback 获取对应业务记录。 */
 function getAvatarFallback(user: Pick<AuthUser, 'name' | 'username'>) {
   return Array.from(user.name.trim() || user.username || '?')[0]?.toUpperCase();
 }
 
+/** sortHeaderConversations 实现对应业务逻辑。 */
 function sortHeaderConversations(items: SocketConversation[]) {
   return [...items].sort((a, b) => Number(b.online) - Number(a.online) || Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
 }
 
+/** isHeaderConversationActive 校验对应业务条件。 */
 function isHeaderConversationActive(conversation: SocketConversation) {
   return conversation.online && conversation.status === 'open';
 }
 
+/** filterHeaderConversations 实现对应业务逻辑。 */
 function filterHeaderConversations(items: SocketConversation[]) {
   return sortHeaderConversations(items.filter(isHeaderConversationActive));
 }
 
+/** upsertHeaderConversation 实现对应业务逻辑。 */
 function upsertHeaderConversation(items: SocketConversation[], conversation: SocketConversation) {
   if (!isHeaderConversationActive(conversation)) {
     return items.filter((item) => item.id !== conversation.id);
@@ -134,6 +159,7 @@ function upsertHeaderConversation(items: SocketConversation[], conversation: Soc
   return filterHeaderConversations([conversation, ...items.filter((item) => item.id !== conversation.id)]);
 }
 
+/** MainLayout 实现对应业务逻辑。 */
 export function MainLayout({
   authUser,
   menus,
@@ -148,22 +174,32 @@ export function MainLayout({
   onLogout,
   children,
 }: MainLayoutProps) {
+  /** themeId、setThemeId 保存主题标识、主题标识。 */
   const [themeId, setThemeId] = useState<AdminThemeId>(DEFAULT_THEME_ID);
+  /** isFullscreen、setIsFullscreen 分别保存变量 isFullscreen状态及其更新函数。 */
   const [isFullscreen, setIsFullscreen] = useState(false);
+  /** isMobile、setIsMobile 分别保存移动端状态及其更新函数。 */
   const [isMobile, setIsMobile] = useState(false);
+  /** headerConversations、setHeaderConversations 保存请求头、请求头。 */
   const [headerConversations, setHeaderConversations] = useState<SocketConversation[]>([]);
+  /** internalUnreadCount、setInternalUnreadCount 分别保存数量状态及其更新函数。 */
   const [internalUnreadCount, setInternalUnreadCount] = useState(() => getInternalChatUnreadTotal(authUser.id));
+  /** notificationApi、notificationContextHolder 保存通知、通知上下文。 */
   const [notificationApi, notificationContextHolder] = notification.useNotification();
 
   useEffect(() => {
+    /** nextTheme 保存主题。 */
     const nextTheme = resolveThemeId(
       window.localStorage.getItem(THEME_STORAGE_KEY) ?? document.documentElement.dataset.theme,
     );
     setThemeId(nextTheme);
     applyAdminTheme(nextTheme, false);
 
+    /** media 保存变量 media。 */
     const media = window.matchMedia('(max-width: 900px)');
+    /** syncMobile 负责更新并保存对应业务状态。 */
     const syncMobile = () => setIsMobile(media.matches);
+    /** syncFullscreen 负责更新并保存对应业务状态。 */
     const syncFullscreen = () => setIsFullscreen(Boolean(document.fullscreenElement));
     syncMobile();
     media.addEventListener('change', syncMobile);
@@ -175,15 +211,21 @@ export function MainLayout({
   }, []);
 
   useEffect(() => {
+    /** active 保存当前激活。 */
     let active = true;
+    /** reconnectTimer 保存定时器。 */
     let reconnectTimer = 0;
+    /** socket、WebSocket、null 保存实时连接、实时连接、空值标记。 */
     let socket: WebSocket | null = null;
+    /** connect 负责执行对应业务操作。 */
     const connect = () => {
       if (!active) return;
+      /** nextSocket 保存实时连接。 */
       const nextSocket = new WebSocket(socketNotificationWebSocketURL());
       socket = nextSocket;
       nextSocket.onmessage = (event) => {
         try {
+          /** envelope 保存实时消息信封。 */
           const envelope = JSON.parse(String(event.data)) as SocketEnvelope;
           if (envelope.type === 'visitor_online' && envelope.conversation) {
             setHeaderConversations((current) => upsertHeaderConversation(current, envelope.conversation!));
@@ -221,27 +263,38 @@ export function MainLayout({
   }, [notificationApi]);
 
   useEffect(() => {
+    /** active 保存当前激活。 */
     let active = true;
+    /** reconnectTimer 保存定时器。 */
     let reconnectTimer = 0;
+    /** socket、WebSocket、null 保存实时连接、实时连接、空值标记。 */
     let socket: WebSocket | null = null;
+    /** unreadKey 保存存储键。 */
     const unreadKey = internalChatUnreadStorageKey(authUser.id);
+    /** syncUnread 负责更新并保存对应业务状态。 */
     const syncUnread = () => setInternalUnreadCount(getInternalChatUnreadTotal(authUser.id));
+    /** handleUnreadStorage 负责处理对应的界面事件和状态变化。 */
     const handleUnreadStorage = (event: StorageEvent) => {
       if (event.key === unreadKey) syncUnread();
     };
     syncUnread();
     window.addEventListener('storage', handleUnreadStorage);
+    /** connect 负责执行对应业务操作。 */
     const connect = () => {
       if (!active) return;
+      /** nextSocket 保存实时连接。 */
       const nextSocket = new WebSocket(internalChatWebSocketURL());
       socket = nextSocket;
       nextSocket.onopen = () => nextSocket.send(JSON.stringify({ type: 'ping' }));
       nextSocket.onmessage = (event) => {
         try {
+          /** envelope 保存实时消息信封。 */
           const envelope = JSON.parse(String(event.data)) as InternalChatEnvelope;
+          /** message 保存消息。 */
           const message = envelope.message;
           if (envelope.type !== 'message' || !message || message.senderId === authUser.id) return;
           if (message.recipientId !== authUser.id && message.recipientId != null) return;
+          /** unreadCounts 保存数量。 */
           const unreadCounts = markInternalChatUnread(message, authUser.id);
           setInternalUnreadCount(Math.min(Object.values(unreadCounts).reduce((total, count) => total + count, 0), 99));
           notificationApi.info({
@@ -267,15 +320,18 @@ export function MainLayout({
     };
   }, [authUser.id, notificationApi]);
 
+  /** openInternalChat 负责计算或维护聊天。 */
   const openInternalChat = () => {
     window.open('/chat', '_blank', 'noopener,noreferrer');
   };
 
+  /** changeTheme 负责计算或维护主题。 */
   const changeTheme = (nextTheme: AdminThemeId) => {
     setThemeId(nextTheme);
     applyAdminTheme(nextTheme);
   };
 
+  /** toggleFullscreen 负责执行对应业务操作。 */
   const toggleFullscreen = async () => {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
@@ -285,26 +341,33 @@ export function MainLayout({
     }
   };
 
+  /** navigate 负责计算或维护变量 navigate。 */
   const navigate = (page: PageKey) => {
     onNavigate(page);
     onCloseMobileSidebar();
   };
 
+  /** currentTheme 缓存计算得到的当前主题。 */
   const currentTheme = useMemo(() => getAdminTheme(themeId), [themeId]);
+  /** palette 保存配色。 */
   const palette = currentTheme.palette;
 
+  /** pageButtons 缓存计算得到的页码。 */
   const pageButtons = useMemo(() => {
+    /** keys、PageKey 保存存储键、页码存储键。 */
     const keys: PageKey[] = [];
     menus
       .filter((menu) => menu.status === '启用')
       .sort((a, b) => a.sort - b.sort || a.id - b.id)
       .forEach((menu) => {
+        /** key 保存存储键。 */
         const key = resolvePageKey(menu);
         if (key && !keys.includes(key)) keys.push(key);
       });
     return keys;
   }, [menus]);
 
+  /** canQuerySocketConversations 保存查询条件实时连接。 */
   const canQuerySocketConversations = pageButtons.includes('socket-support') && (
     isAdministratorRoleCode(authUser.roleCode)
     || authUser.actionPermissions?.includes('socket.query') === true
@@ -316,17 +379,21 @@ export function MainLayout({
       return;
     }
 
+    /** active 保存当前激活。 */
     let active = true;
+    /** refreshHeaderConversations 负责计算或维护请求头。 */
     const refreshHeaderConversations = async () => {
       try {
+        /** conversations 保存会话。 */
         const conversations = await listSocketConversations();
         if (active) setHeaderConversations(filterHeaderConversations(conversations));
       } catch {
-        // Keep the last known list during a transient refresh failure.
+        // 短暂刷新失败时保留最近一次成功获取的列表。
       }
     };
 
     void refreshHeaderConversations();
+    /** refreshTimer 负责计算或维护定时器。 */
     const refreshTimer = window.setInterval(() => void refreshHeaderConversations(), 20_000);
     return () => {
       active = false;
@@ -340,6 +407,7 @@ export function MainLayout({
     }
   }, [activePage, menus.length, onNavigate, pageButtons]);
 
+  /** siderContent 保存内容。 */
   const siderContent = (
     <AdminNavigation
       authUser={authUser}
@@ -557,6 +625,7 @@ export function MainLayout({
   );
 }
 
+/** AdminNavigation 实现对应业务逻辑。 */
 function AdminNavigation({
   authUser,
   menus,
@@ -576,20 +645,29 @@ function AdminNavigation({
   onLogout: () => void;
   onToggleSidebar?: () => void;
 }) {
+  /** items、collapsedItems、availableOpenKeys、activeParentKeys、collapsedGroups 缓存计算得到的当前条目。 */
   const { items, collapsedItems, availableOpenKeys, activeParentKeys, collapsedGroups } = useMemo(() => {
+    /** enabled 保存已启用。 */
     const enabled = menus
       .filter((menu) => menu.status === '启用')
       .sort((a, b) => a.sort - b.sort || a.id - b.id);
 
+    /** roots 负责计算或维护根节点。 */
     const roots = enabled.filter((menu) => menu.parentId == null);
+    /** menuById 负责计算或维护菜单标识。 */
     const menuById = new Map(enabled.map((menu) => [menu.id, menu]));
+    /** childrenOf 负责计算或维护子节点。 */
     const childrenOf = (parentId: number) => enabled.filter((menu) => menu.parentId === parentId);
 
+    /** mapItem 负责计算或维护当前条目。 */
     const mapItem = (menu: AdminMenu): NonNullable<MenuProps['items']>[number] | null => {
+      /** pageKey 保存页码存储键。 */
       const pageKey = resolvePageKey(menu);
+      /** children 保存子节点。 */
       const children = childrenOf(menu.id)
         .map((child) => mapItem(child))
         .filter(Boolean) as NonNullable<MenuProps['items']>;
+      /** icon 保存图标。 */
       const icon = menuIconByCode[menu.code.trim().toLowerCase()] || <MenuOutlined />;
 
       if (children.length > 0) {
@@ -609,11 +687,15 @@ function AdminNavigation({
       };
     };
 
+    /** navItems 负责计算或维护当前条目。 */
     const navItems = roots.map((menu) => mapItem(menu)).filter(Boolean) as NonNullable<MenuProps['items']>;
+    /** collapsedMenuGroups 保存菜单。 */
     const collapsedMenuGroups = roots
       .map((menu) => {
+        /** children 保存子节点。 */
         const children = childrenOf(menu.id)
           .map((child) => {
+            /** pageKey 保存页码存储键。 */
             const pageKey = resolvePageKey(child);
             if (!pageKey) return null;
             return {
@@ -632,6 +714,7 @@ function AdminNavigation({
         };
       })
       .filter(Boolean) as Array<{ key: string; label: string; icon: ReactNode; children: Array<{ key: PageKey; label: string; icon: ReactNode }> }>;
+    /** collapsedNavItems 负责计算或维护当前条目。 */
     const collapsedNavItems = collapsedMenuGroups.map((group) => ({
       key: group.key,
       icon: group.icon,
@@ -640,14 +723,18 @@ function AdminNavigation({
       className: 'antd-collapsed-root-item',
     })) as NonNullable<MenuProps['items']>;
 
+    /** keys 保存存储键。 */
     const keys = navItems
       .filter((item) => item && typeof item === 'object' && 'children' in item && Array.isArray(item.children) && item.children.length > 0)
       .map((item) => (item && typeof item === 'object' && 'key' in item ? String(item.key) : ''))
       .filter(Boolean);
 
+    /** parentKeys、string 保存父级存储键、变量 string。 */
     const parentKeys: string[] = [];
+    /** current 负责计算或维护当前。 */
     let current = enabled.find((menu) => resolvePageKey(menu) === activePage);
     while (current?.parentId != null) {
+      /** parent 保存父级。 */
       const parent = menuById.get(current.parentId);
       if (!parent) break;
       parentKeys.unshift(String(resolvePageKey(parent) ?? `menu-${parent.id}`));
@@ -662,7 +749,9 @@ function AdminNavigation({
       collapsedGroups: collapsedMenuGroups,
     };
   }, [activePage, menus]);
+  /** expandedKeys、setExpandedKeys 保存存储键、存储键。 */
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
+  /** collapsedFlyout、setCollapsedFlyout 保存变量 collapsedFlyout、变量 setCollapsedFlyout。 */
   const [collapsedFlyout, setCollapsedFlyout] = useState<null | {
     key: string;
     label: string;
@@ -671,6 +760,7 @@ function AdminNavigation({
   }>(null);
 
   useEffect(() => {
+    /** available 保存可用状态。 */
     const available = new Set(availableOpenKeys);
     setExpandedKeys((current) => [
       ...new Set([
@@ -684,19 +774,26 @@ function AdminNavigation({
     if (!collapsed) setCollapsedFlyout(null);
   }, [collapsed]);
 
+  /** showCollapsedFlyout 负责计算或维护变量 showCollapsedFlyout。 */
   const showCollapsedFlyout = (event: MouseEvent<HTMLDivElement>) => {
     if (!collapsed) return;
+    /** target 保存目标。 */
     const target = event.target as HTMLElement;
+    /** rootItem 保存当前条目。 */
     const rootItem = target.closest<HTMLElement>('.antd-main-menu > .antd-collapsed-root-item');
     if (!rootItem) {
       setCollapsedFlyout(null);
       return;
     }
+    /** siblingRootItems 保存根节点当前条目。 */
     const siblingRootItems = Array.from(rootItem.parentElement?.querySelectorAll<HTMLElement>(':scope > .antd-collapsed-root-item') ?? []);
+    /** group 保存分组。 */
     const group = collapsedGroups[siblingRootItems.indexOf(rootItem)];
     if (!group) return;
+    /** rect 保存元素边界。 */
     const rect = rootItem.getBoundingClientRect();
     setCollapsedFlyout((current) => {
+      /** top 保存变量 top。 */
       const top = Math.max(12, Math.min(rect.top, window.innerHeight - 180));
       if (current?.key === group.key && current.top === top) return current;
       return { ...group, top };
@@ -707,6 +804,7 @@ function AdminNavigation({
     <div
       className="antd-sider-inner"
       onMouseLeave={(event) => {
+        /** currentTarget、relatedTarget 保存当前目标、目标。 */
         const { currentTarget, relatedTarget } = event;
         if (!(relatedTarget instanceof Node) || !currentTarget.contains(relatedTarget)) setCollapsedFlyout(null);
       }}

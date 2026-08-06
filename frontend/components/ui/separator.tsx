@@ -4,6 +4,7 @@ import { Separator as SeparatorPrimitive } from "@base-ui/react/separator"
 
 import { cn } from "@/lib/utils"
 
+/** Separator 实现对应业务逻辑。 */
 function Separator({
   className,
   orientation = "horizontal",

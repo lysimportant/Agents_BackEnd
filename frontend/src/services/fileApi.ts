@@ -2,8 +2,10 @@ import { API_BASE_URL } from '@/src/config/constants';
 import { requestWithSession } from '@/src/services/api';
 import type { ManagedFile } from '@/src/types/admin';
 
+/** parseApiError 解析对应业务数据。 */
 async function parseApiError(response: Response, fallback: string) {
   try {
+    /** payload 保存请求载荷。 */
     const payload = await response.json() as { error?: string };
     return payload.error || fallback;
   } catch {
@@ -11,7 +13,9 @@ async function parseApiError(response: Response, fallback: string) {
   }
 }
 
+/** 读取已授权文件在服务端保存的最新文本内容。 */
 export async function readTextFileContent(fileId: number) {
+  /** response 保存接口响应及其关联状态。 */
   const response = await requestWithSession(`${API_BASE_URL}/api/files/${fileId}/preview`, {
     // 文本内容刚保存后必须读取服务器最新字节，不能使用浏览器预览缓存。
     cache: 'no-store',
@@ -22,8 +26,11 @@ export async function readTextFileContent(fileId: number) {
   return response.text();
 }
 
+/** 以 Blob 形式读取已授权预览，同时不暴露物理存储路径。 */
 export async function readFilePreviewBlob(file: Pick<ManagedFile, 'id' | 'previewUrl'>) {
+  /** previewPath 保存预览路径。 */
   const previewPath = file.previewUrl || `/api/files/${file.id}/preview`;
+  /** response 保存接口响应及其关联状态。 */
   const response = await requestWithSession(`${API_BASE_URL}${previewPath}`, {
     cache: 'no-store',
   });
@@ -33,10 +40,12 @@ export async function readFilePreviewBlob(file: Pick<ManagedFile, 'id' | 'previe
   return response.blob();
 }
 
+/** 更新受管文件可编辑的展示和隐私元数据。 */
 export async function updateFileMetadata(
   fileId: number,
   data: Pick<ManagedFile, 'displayName' | 'category' | 'description'> & { isPrivate?: boolean },
 ) {
+  /** response 保存接口响应及其关联状态。 */
   const response = await requestWithSession(`${API_BASE_URL}/api/files/${fileId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -53,7 +62,9 @@ export async function updateFileMetadata(
   return response.json() as Promise<ManagedFile>;
 }
 
+/** 替换可编辑文本文件的内容。 */
 export async function updateTextFileContent(fileId: number, content: string) {
+  /** response 保存接口响应及其关联状态。 */
   const response = await requestWithSession(`${API_BASE_URL}/api/files/${fileId}/content`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -65,7 +76,9 @@ export async function updateTextFileContent(fileId: number, content: string) {
   return response.json() as Promise<ManagedFile>;
 }
 
+/** 在界面明确确认后永久删除已经软删除的文件。 */
 export async function permanentlyDeleteFile(fileId: number) {
+  /** response 保存接口响应及其关联状态。 */
   const response = await requestWithSession(`${API_BASE_URL}/api/files/${fileId}/permanent`, { method: 'DELETE' });
   if (!response.ok) {
     throw new Error(await parseApiError(response, '永久删除文件失败'));

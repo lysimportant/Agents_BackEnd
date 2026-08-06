@@ -7,7 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// registerUserRoutes 执行对应业务操作。
 func registerUserRoutes(routes *gin.RouterGroup, store middleware.UserStore, handler *handlers.UserHandler) {
+	// requireMenu 保存菜单。
 	requireMenu := middleware.RequireMenu(store, "users")
 	routes.GET("/users", requireMenu, middleware.RequireAction(store, permissions.UsersQuery), handler.List)
 	routes.GET("/profile", handler.GetCurrentProfile)

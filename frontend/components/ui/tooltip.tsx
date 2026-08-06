@@ -4,6 +4,7 @@ import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
 import { cn } from "@/lib/utils"
 
+/** TooltipProvider 实现对应业务逻辑。 */
 function TooltipProvider({
   delay = 0,
   ...props
@@ -17,14 +18,17 @@ function TooltipProvider({
   )
 }
 
+/** Tooltip 实现对应业务逻辑。 */
 function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
 }
 
+/** TooltipTrigger 实现对应业务逻辑。 */
 function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
 }
 
+/** TooltipContent 实现对应业务逻辑。 */
 function TooltipContent({
   className,
   side = "top",

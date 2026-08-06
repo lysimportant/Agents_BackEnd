@@ -11,25 +11,40 @@ import type { Department, DepartmentForm, Menu, User } from '@/src/types/admin';
 import styles from './DepartmentsPage.module.css';
 
 type DepartmentsPageProps = {
+  /** actions 表示操作权限。 */
   actions: ResourceActionAccess;
+  /** departments 表示部门。 */
   departments: Department[];
+  /** users 表示用户。 */
   users: User[];
+  /** menus 表示菜单。 */
   menus: Menu[];
+  /** isLoading 表示加载状态。 */
   isLoading: boolean;
+  /** isSaving 表示保存状态。 */
   isSaving: boolean;
+  /** isSavingPermissions 表示权限。 */
   isSavingPermissions: boolean;
+  /** onRefresh 表示刷新回调。 */
   onRefresh: () => void;
+  /** onSave 表示保存状态。 */
   onSave: (departmentId: number | null, form: DepartmentForm) => Promise<boolean>;
+  /** onDelete 表示删除回调。 */
   onDelete: (departmentId: number) => Promise<boolean>;
+  /** onLoadPermissions 表示权限。 */
   onLoadPermissions: (departmentId: number) => Promise<number[] | null>;
+  /** onLoadUsers 表示用户。 */
   onLoadUsers: (departmentId: number) => Promise<User[] | null>;
+  /** onSavePermissions 表示保存状态。 */
   onSavePermissions: (departmentId: number, menuIds: number[]) => Promise<boolean>;
 };
 
+/** byOrder 实现对应业务逻辑。 */
 function byOrder<T extends { sort: number; id: number }>(first: T, second: T) {
   return first.sort - second.sort || first.id - second.id;
 }
 
+/** DepartmentsPage 实现对应业务逻辑。 */
 export function DepartmentsPage({
   actions,
   departments,
@@ -45,19 +60,32 @@ export function DepartmentsPage({
   onLoadUsers,
   onSavePermissions,
 }: DepartmentsPageProps) {
+  /** selectedId、setSelectedId 保存已选择标识、已选择标识。 */
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  /** editingId、setEditingId 保存标识、标识。 */
   const [editingId, setEditingId] = useState<number | null>(null);
+  /** editorOpen、setEditorOpen 分别保存编辑器打开状态状态及其更新函数。 */
   const [editorOpen, setEditorOpen] = useState(false);
+  /** permissionOpen、setPermissionOpen 分别保存权限状态及其更新函数。 */
   const [permissionOpen, setPermissionOpen] = useState(false);
+  /** form、setForm 保存表单、表单。 */
   const [form, setForm] = useState<DepartmentForm>(emptyDepartmentForm);
+  /** permissionIds、setPermissionIds 保存权限标识列表、权限标识列表。 */
   const [permissionIds, setPermissionIds] = useState<number[]>([]);
+  /** usersDepartment、setUsersDepartment 保存部门、部门。 */
   const [usersDepartment, setUsersDepartment] = useState<Department | null>(null);
+  /** associatedUsers、setAssociatedUsers 保存用户、用户。 */
   const [associatedUsers, setAssociatedUsers] = useState<User[]>([]);
+  /** isLoadingUsers、setIsLoadingUsers 分别保存加载状态状态及其更新函数。 */
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  /** usersError、setUsersError 分别保存错误状态状态及其更新函数。 */
   const [usersError, setUsersError] = useState('');
 
+  /** selected 负责计算或维护已选择。 */
   const selected = departments.find((department) => department.id === selectedId) ?? null;
+  /** childrenCount 负责计算或维护数量。 */
   const childrenCount = selected ? departments.filter((department) => department.parentId === selected.id).length : 0;
+  /** userCount 负责计算或维护用户数量。 */
   const userCount = selected ? users.filter((user) => user.departmentId === selected.id).length : 0;
 
   useEffect(() => {
@@ -70,8 +98,11 @@ export function DepartmentsPage({
     }
   }, [departments, selectedId]);
 
+  /** departmentTree 负责计算或维护部门树形数据。 */
   const departmentTree = useMemo<DataNode[]>(() => {
+    /** sorted 保存排序结果。 */
     const sorted = [...departments].sort(byOrder);
+    /** nodesFor 负责计算或维护节点。 */
     const nodesFor = (parentId: number | null): DataNode[] => sorted
       .filter((department) => (department.parentId ?? null) === parentId)
       .map((department) => ({
@@ -87,8 +118,11 @@ export function DepartmentsPage({
     return nodesFor(null);
   }, [departments]);
 
+  /** parentTree 缓存计算得到的树形数据。 */
   const parentTree = useMemo(() => {
+    /** descendants 保存后代节点。 */
     const descendants = new Set<number>();
+    /** collect 负责计算或维护收集结果。 */
     const collect = (departmentId: number) => {
       departments.filter((item) => item.parentId === departmentId).forEach((item) => {
         descendants.add(item.id);
@@ -96,7 +130,9 @@ export function DepartmentsPage({
       });
     };
     if (editingId) collect(editingId);
+    /** sorted 保存排序结果。 */
     const sorted = [...departments].sort(byOrder);
+    /** nodesFor 负责计算或维护节点。 */
     const nodesFor = (parentId: number | null): DataNode[] => sorted
       .filter((department) => (department.parentId ?? null) === parentId)
       .map((department) => ({
@@ -109,20 +145,25 @@ export function DepartmentsPage({
     return nodesFor(null);
   }, [departments, editingId]);
 
+  /** menuTree 负责计算或维护菜单树形数据。 */
   const menuTree = useMemo<DataNode[]>(() => {
+    /** sorted 负责计算或维护排序结果。 */
     const sorted = [...menus].filter((menu) => menu.status === '启用').sort(byOrder);
+    /** nodesFor 负责计算或维护节点。 */
     const nodesFor = (parentId: number | null): DataNode[] => sorted
       .filter((menu) => (menu.parentId ?? null) === parentId)
       .map((menu) => ({ key: menu.id, title: menu.name, children: nodesFor(menu.id) }));
     return nodesFor(null);
   }, [menus]);
 
+  /** openCreate 负责计算或维护打开状态。 */
   const openCreate = () => {
     setEditingId(null);
     setForm({ ...emptyDepartmentForm, parentId: selectedId });
     setEditorOpen(true);
   };
 
+  /** openEdit 负责计算或维护打开状态。 */
   const openEdit = (department: Department) => {
     setEditingId(department.id);
     setForm({
@@ -138,20 +179,24 @@ export function DepartmentsPage({
     setEditorOpen(true);
   };
 
+  /** submitEditor 负责执行对应业务操作。 */
   const submitEditor = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (editingId ? !actions.update : !actions.create) return;
     if (await onSave(editingId, form)) setEditorOpen(false);
   };
 
+  /** openPermissions 负责计算或维护打开状态权限。 */
   const openPermissions = async (department: Department) => {
     setSelectedId(department.id);
+    /** menuIds 保存菜单标识列表。 */
     const menuIds = await onLoadPermissions(department.id);
     if (menuIds === null) return;
     setPermissionIds(menuIds);
     setPermissionOpen(true);
   };
 
+  /** confirmDelete 负责计算或维护变量 confirmDelete。 */
   const confirmDelete = (department: Department) => {
     Modal.confirm({
       title: `删除部门“${department.name}”？`,
@@ -165,11 +210,13 @@ export function DepartmentsPage({
     });
   };
 
+  /** openUsers 负责计算或维护打开状态用户。 */
   const openUsers = async (department: Department) => {
     setUsersDepartment(department);
     setAssociatedUsers([]);
     setUsersError('');
     setIsLoadingUsers(true);
+    /** result 保存操作结果。 */
     const result = await onLoadUsers(department.id);
     if (result === null) setUsersError('无法加载该部门的归属用户，请稍后重试。');
     else setAssociatedUsers(result);

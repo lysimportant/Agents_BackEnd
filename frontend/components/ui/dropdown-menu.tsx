@@ -6,18 +6,22 @@ import { Menu as MenuPrimitive } from "@base-ui/react/menu"
 import { cn } from "@/lib/utils"
 import { ChevronRightIcon, CheckIcon } from "lucide-react"
 
+/** DropdownMenu 实现对应业务逻辑。 */
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
   return <MenuPrimitive.Root data-slot="dropdown-menu" {...props} />
 }
 
+/** DropdownMenuPortal 实现对应业务逻辑。 */
 function DropdownMenuPortal({ ...props }: MenuPrimitive.Portal.Props) {
   return <MenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
 }
 
+/** DropdownMenuTrigger 实现对应业务逻辑。 */
 function DropdownMenuTrigger({ ...props }: MenuPrimitive.Trigger.Props) {
   return <MenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />
 }
 
+/** DropdownMenuContent 实现对应业务逻辑。 */
 function DropdownMenuContent({
   align = "start",
   alignOffset = 0,
@@ -49,10 +53,12 @@ function DropdownMenuContent({
   )
 }
 
+/** DropdownMenuGroup 实现对应业务逻辑。 */
 function DropdownMenuGroup({ ...props }: MenuPrimitive.Group.Props) {
   return <MenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />
 }
 
+/** DropdownMenuLabel 实现对应业务逻辑。 */
 function DropdownMenuLabel({
   className,
   inset,
@@ -73,6 +79,7 @@ function DropdownMenuLabel({
   )
 }
 
+/** DropdownMenuItem 实现对应业务逻辑。 */
 function DropdownMenuItem({
   className,
   inset,
@@ -96,10 +103,12 @@ function DropdownMenuItem({
   )
 }
 
+/** DropdownMenuSub 实现对应业务逻辑。 */
 function DropdownMenuSub({ ...props }: MenuPrimitive.SubmenuRoot.Props) {
   return <MenuPrimitive.SubmenuRoot data-slot="dropdown-menu-sub" {...props} />
 }
 
+/** DropdownMenuSubTrigger 实现对应业务逻辑。 */
 function DropdownMenuSubTrigger({
   className,
   inset,
@@ -124,6 +133,7 @@ function DropdownMenuSubTrigger({
   )
 }
 
+/** DropdownMenuSubContent 实现对应业务逻辑。 */
 function DropdownMenuSubContent({
   align = "start",
   alignOffset = -3,
@@ -145,6 +155,7 @@ function DropdownMenuSubContent({
   )
 }
 
+/** DropdownMenuCheckboxItem 实现对应业务逻辑。 */
 function DropdownMenuCheckboxItem({
   className,
   children,
@@ -179,6 +190,7 @@ function DropdownMenuCheckboxItem({
   )
 }
 
+/** DropdownMenuRadioGroup 实现对应业务逻辑。 */
 function DropdownMenuRadioGroup({ ...props }: MenuPrimitive.RadioGroup.Props) {
   return (
     <MenuPrimitive.RadioGroup
@@ -188,6 +200,7 @@ function DropdownMenuRadioGroup({ ...props }: MenuPrimitive.RadioGroup.Props) {
   )
 }
 
+/** DropdownMenuRadioItem 实现对应业务逻辑。 */
 function DropdownMenuRadioItem({
   className,
   children,
@@ -220,6 +233,7 @@ function DropdownMenuRadioItem({
   )
 }
 
+/** DropdownMenuSeparator 实现对应业务逻辑。 */
 function DropdownMenuSeparator({
   className,
   ...props
@@ -233,6 +247,7 @@ function DropdownMenuSeparator({
   )
 }
 
+/** DropdownMenuShortcut 实现对应业务逻辑。 */
 function DropdownMenuShortcut({
   className,
   ...props

@@ -6,8 +6,10 @@ import { ADMIN_THEME_BOOTSTRAP_SCRIPT } from '@/src/theme/themes';
 import { LOGIN_BACKGROUND_BOOTSTRAP_SCRIPT } from '@/src/utils/loginBackground';
 import './globals.css';
 
+/** siteUrl 保存模块使用的固定配置或共享状态。 */
 const siteUrl = new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000');
 
+/** metadata 保存模块使用的固定配置或共享状态。 */
 export const metadata: Metadata = {
   title: 'HuaJian_AI',
   metadataBase: siteUrl,
@@ -36,7 +38,9 @@ export const metadata: Metadata = {
   formatDetection: { email: false, address: false, telephone: false },
 };
 
+/** RootLayout 实现对应业务逻辑。 */
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  /** structuredData 保存业务数据。 */
   const structuredData = JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'WebApplication',

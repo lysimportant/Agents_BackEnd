@@ -1,24 +1,40 @@
+/** ActionPermissionDefinition 定义对应业务的数据结构与调用契约。 */
 export type ActionPermissionDefinition = {
+  /** code 表示编码。 */
   code: string;
+  /** label 表示显示标签。 */
   label: string;
+  /** description 表示说明。 */
   description: string;
 };
 
+/** ActionPermissionGroup 定义对应业务的数据结构与调用契约。 */
 export type ActionPermissionGroup = {
+  /** resource 表示变量 resource。 */
   resource: string;
+  /** label 表示显示标签。 */
   label: string;
+  /** actions 表示操作权限。 */
   actions: ActionPermissionDefinition[];
 };
 
+/** ResourceActionAccess 定义对应业务的数据结构与调用契约。 */
 export type ResourceActionAccess = {
+  /** create 表示变量 create。 */
   create: boolean;
+  /** update 表示变量 update。 */
   update: boolean;
+  /** delete 表示变量 delete。 */
   delete: boolean;
+  /** permissions 表示权限。 */
   permissions?: boolean;
+  /** restore 表示变量 restore。 */
   restore?: boolean;
+  /** permanentDelete 表示变量 permanentDelete。 */
   permanentDelete?: boolean;
 };
 
+/** actionPermissionGroups 保存模块使用的固定配置或共享状态。 */
 export const actionPermissionGroups: ActionPermissionGroup[] = [
   {
     resource: 'dashboard',
@@ -120,4 +136,5 @@ export const actionPermissionGroups: ActionPermissionGroup[] = [
   },
 ];
 
+/** allActionPermissionCodes 保存模块使用的固定配置或共享状态。 */
 export const allActionPermissionCodes = actionPermissionGroups.flatMap((group) => group.actions.map((action) => action.code));

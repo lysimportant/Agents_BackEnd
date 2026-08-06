@@ -1,5 +1,15 @@
 # AGENTS.md
 
+## 代码文档与命名
+
+- 业务源码中的文档注释和解释性行内注释必须使用简体中文；协议名、库名、标识符和代码字面量可以保留英文。
+- 后端包、类型、函数、方法、常量、变量和局部业务状态都必须使用中文 GoDoc 或解释性注释；处理函数和数据访问方法内部的参数、短变量、查询结果及错误状态也不得遗漏。HTTP 处理函数还要说明请求方法、路径、鉴权、请求参数与响应语义。
+- 前端类型、组件、钩子、服务函数、共享状态、模块级常量、页面内部函数、回调和局部变量都必须使用中文 JSDoc/TypeDoc 或解释性注释；页面外层已有注释不能代替页面内部声明的注释。
+- 每张 SQLite 表、迁移新增列和索引都要在迁移 SQL 旁用中文说明用途、关联关系和访问规则。
+- 优先使用 `recipientID`、`attachmentIDs`、`visitorLogRetentionDays` 等能表达领域含义的名称；不得新增 `data`、`info`、`item`、`handle` 等含义宽泛的名称。
+- 注释必须说明变量保存的业务内容、函数执行的行为或状态变化；不得用“保存数据”“处理信息”之类无实际信息的注释充数。
+- 在 `backend/` 使用 `Get-ChildItem -Directory | Where-Object { Test-Path "$($_.FullName)\doc.go" } | ForEach-Object { go doc ".\$($_.Name)" }` 生成或检查后端文档；HTTP 契约维护在 `docs/api/openapi.yaml`，前端 TypeDoc 配置位于 `frontend/typedoc.json`。
+
 ## AI 编程行为准则
 
 本准则适用于 Cursor、Codex、Claude、GitHub Copilot 及所有 AI 辅助编程场景：
@@ -50,7 +60,7 @@
 ## 内部聊天与客服聊天边界
 
 - `frontend/app/chat/page.tsx` 是内部聊天 `/chat`；`frontend/src/features/chat/CustomerChatPage.tsx` 是客服聊天，二者是独立业务边界。
-- `/chat` 的表情、输入框、附件和链接图片预览只能修改内部聊天页面及 `/api/internal-chat/*`，不得修改或复用客服聊天页面实现。
+- `/chat` 的表情、输入框、附件和链接图片预览属于内部聊天及 `/api/internal-chat/*`；客服聊天可独立修改其 `CustomerChatPage.tsx`、客服 socket 和对应接口，但两套实现不得混用业务状态或鉴权规则。
 - 内部聊天附件必须通过会话参与者鉴权的接口下载或预览，禁止使用任意公开静态地址暴露物理文件。
 - 处理内部聊天附件时，必须同时修改并验证前端发送与展示、后端持久化、下载与预览鉴权以及相关测试。
 - 内部聊天实时事件使用认证后的 `/api/internal-chat/socket`；新增消息必须同步驱动首页未读角标、聊天页视觉/声音提示和在线状态，不能只依赖手动刷新。

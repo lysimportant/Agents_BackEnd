@@ -1,5 +1,13 @@
 # frontend/AGENTS.md
 
+## 代码文档与命名
+
+- 业务源码中的文档注释和解释性行内注释必须使用简体中文；协议名、库名、标识符和代码字面量可以保留英文。
+- 类型、React 组件、钩子、服务函数、共享状态、模块级常量、页面内部函数、回调和局部变量都必须使用中文 JSDoc/TypeDoc 或解释性注释，说明用途、参数、返回值和副作用；页面外层已有注释不能代替页面内部声明的注释。
+- 使用 `loadConversationMessages`、`selectedAttachmentIds`、`isEmojiPickerOpen` 等可直接理解的领域名称；避免新增 `data`、`info`、`item`、`handle` 等模糊名称。
+- 注释必须说明变量保存的业务内容、函数执行的行为或状态变化；不得添加“保存数据”一类不能补充业务语义的注释。
+- HTTP 契约必须与 `../docs/api/openapi.yaml` 保持同步；TypeDoc 配置位于 `typedoc.json`。
+
 ## 目录与开发流程
 
 前端目录按职责组织：`app/` 只保留 Next.js App Router 路由入口、全局布局和全局样式；`src/admin-pages/` 存放管理页面；`src/features/` 存放跨页面业务功能；`src/components/` 存放共享组件；`src/services/` 存放 API 请求与后端服务封装；`src/utils/` 存放无状态工具；`src/config/` 存放常量；`src/types/` 存放共享类型；`src/theme/` 存放主题；`src/styles/` 存放全局增强样式。管理页面目录不能命名为 `src/pages/`，避免与 Next.js Pages Router 冲突。
@@ -30,7 +38,7 @@
 
 - App Router 只有根页面 `/`；`app/page.tsx` 根据 `activePage` 条件渲染各业务页，不要假设 `/users`、`/files` 等独立 URL 已存在。
 - `app/chat/page.tsx` 是内部聊天 `/chat`；`src/features/chat/CustomerChatPage.tsx` 是客服聊天，二者是独立业务边界。
-- `/chat` 的表情、输入框、附件和链接图片预览只能修改内部聊天页面及 `/api/internal-chat/*`，不得修改或复用客服聊天页面实现。
+- `/chat` 的表情、输入框、附件和链接图片预览属于内部聊天及 `/api/internal-chat/*`；客服聊天可独立修改其 `CustomerChatPage.tsx`、客服 socket 和对应接口，但两套实现不得混用业务状态或鉴权规则。
 - 内部聊天附件必须通过会话参与者鉴权的接口下载或预览，禁止使用任意公开静态地址暴露物理文件。
 - 处理内部聊天附件时，必须同时修改并验证前端发送与展示、后端持久化、下载与预览鉴权以及相关测试。
 - 内部聊天应连接认证 WebSocket `/api/internal-chat/socket`：首页内部聊天入口显示未读总数，聊天页按会话显示未读角标，并在收到新消息时提供视觉提示和可用的声音提示；登录成功后立即发送在线状态。
@@ -72,7 +80,7 @@
 - 3D 卡片只更新 CSS 变量和 transform；保持触摸设备与 `prefers-reduced-motion` 禁用逻辑。文件管理外层 `.file-browser-panel` 必须保持普通静态 Card，内部 `.file-card` 才启用效果。
 - 弹窗和折叠权限区域要检查文字截断、Tooltip、左右留白以及 390px 移动端无横向溢出。
 - 所有新增或修改的折叠面板、侧栏（sidebar）及展开/收起交互都必须为宽度、位移或内容显隐提供平滑过渡，禁止无动画瞬间跳变；动画不得造成遮挡或横向溢出，并必须在 `prefers-reduced-motion: reduce` 下关闭或显著弱化。
-- 内部聊天 `/chat` 与客服聊天页面的主内容区应优先填满可用宽度，避免桌面端两侧产生不必要的大留白；调整一侧页面时不得修改另一侧的业务组件实现。
+- 内部聊天 `/chat` 与客服聊天页面的主内容区应优先填满可用宽度，避免桌面端两侧产生不必要的大留白；调整一侧页面时保持另一侧的 API、状态和鉴权边界独立即可。
 - 使用 Ant Design Modal 时遵循当前版本 API，禁止新增已弃用的 `maskClosable`，应使用 `mask={{ closable: ... }}`。
 
 ## 文章与文件能力

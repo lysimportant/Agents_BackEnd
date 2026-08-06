@@ -5,7 +5,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// registerInternalChatRoutes 注册需要登录鉴权的内部聊天 REST 和 WebSocket 接口。
 func registerInternalChatRoutes(protected *gin.RouterGroup, handler *handlers.InternalChatHandler) {
+	// group 保存分组。
 	group := protected.Group("/internal-chat")
 	group.GET("/users", handler.Users)
 	group.POST("/presence", handler.Presence)

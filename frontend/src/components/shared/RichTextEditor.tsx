@@ -12,17 +12,27 @@ import {
 } from '@ant-design/icons';
 
 type RichTextEditorProps = {
+  /** value 表示值。 */
   value: string;
+  /** onChange 表示变量 onChange。 */
   onChange: (value: string) => void;
+  /** minHeight 表示高度。 */
   minHeight?: number;
+  /** placeholder 表示占位内容。 */
   placeholder?: string;
 };
 
+/** RichTextEditor 实现对应业务逻辑。 */
 export function RichTextEditor({ value, onChange, minHeight = 260, placeholder = '请输入内容…' }: RichTextEditorProps) {
+  /** editorRef 保存跨渲染周期使用的编辑器引用。 */
   const editorRef = useRef<HTMLDivElement | null>(null);
+  /** selectionRef 保存跨渲染周期使用的文本选区引用。 */
   const selectionRef = useRef<Range | null>(null);
+  /** linkDialogOpen、setLinkDialogOpen 分别保存对话框状态及其更新函数。 */
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  /** linkUrl、setLinkUrl 分别保存地址状态及其更新函数。 */
   const [linkUrl, setLinkUrl] = useState('');
+  /** linkError、setLinkError 分别保存错误状态状态及其更新函数。 */
   const [linkError, setLinkError] = useState('');
 
   useEffect(() => {
@@ -33,12 +43,15 @@ export function RichTextEditor({ value, onChange, minHeight = 260, placeholder =
     }
   }, [value]);
 
+  /** syncContent 负责更新并保存对应业务状态。 */
   const syncContent = () => {
     onChange(editorRef.current?.innerHTML ?? '');
   };
 
+  /** runCommand 负责计算或维护变量 runCommand。 */
   const runCommand = (command: string, argument?: string) => {
     editorRef.current?.focus();
+    /** selection 保存文本选区。 */
     const selection = window.getSelection();
     if (selectionRef.current && selection) {
       selection.removeAllRanges();
@@ -48,7 +61,9 @@ export function RichTextEditor({ value, onChange, minHeight = 260, placeholder =
     syncContent();
   };
 
+  /** createLink 负责创建或追加对应业务记录。 */
   const createLink = () => {
+    /** url 保存地址。 */
     const url = linkUrl.trim();
     if (!/^https?:\/\//i.test(url)) {
       setLinkError('请输入以 http:// 或 https:// 开头的有效地址。');
@@ -60,7 +75,9 @@ export function RichTextEditor({ value, onChange, minHeight = 260, placeholder =
     setLinkError('');
   };
 
+  /** openLinkDialog 负责计算或维护对话框。 */
   const openLinkDialog = () => {
+    /** selection 保存文本选区。 */
     const selection = window.getSelection();
     if (selection?.rangeCount) selectionRef.current = selection.getRangeAt(0).cloneRange();
     setLinkUrl('');

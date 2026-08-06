@@ -31,42 +31,71 @@ import { requestWithSession } from '@/src/services/api';
 import { articleExportOptions, exportArticle, type ArticleExportFormat } from '@/src/utils/articleExport';
 
 type ArticlesPageProps = {
+  /** filteredArticles 表示筛选后。 */
   filteredArticles: Article[];
+  /** actions 表示操作权限。 */
   actions: ResourceActionAccess;
+  /** articleForm 表示文章表单。 */
   articleForm: ArticleForm;
+  /** editingArticleId 表示文章标识。 */
   editingArticleId: number | null;
+  /** articleKeyword 表示文章搜索关键词。 */
   articleKeyword: string;
+  /** articleStatus 表示文章状态。 */
   articleStatus: string;
+  /** isSavingArticle 表示文章。 */
   isSavingArticle: boolean;
+  /** onArticleFormChange 表示文章表单。 */
   onArticleFormChange: (form: ArticleForm) => void;
+  /** onSubmitArticle 表示文章。 */
   onSubmitArticle: (event: FormEvent<HTMLFormElement>) => Promise<boolean>;
+  /** onResetArticleForm 表示文章表单。 */
   onResetArticleForm: () => void;
+  /** onArticleKeywordChange 表示文章搜索关键词。 */
   onArticleKeywordChange: (keyword: string) => void;
+  /** onArticleStatusChange 表示文章状态。 */
   onArticleStatusChange: (status: string) => void;
+  /** onResetFilters 表示筛选条件。 */
   onResetFilters: () => void;
+  /** onEditArticle 表示文章。 */
   onEditArticle: (article: Article) => void;
+  /** onToggleArticleStatus 表示文章状态。 */
   onToggleArticleStatus: (article: Article) => void;
+  /** onDeleteArticle 表示文章。 */
   onDeleteArticle: (articleId: number) => void;
 };
 
+/** ArticlesPage 实现对应业务逻辑。 */
 export function ArticlesPage(props: ArticlesPageProps) {
+  /** message、feedbackMessage 保存消息、消息。 */
   const { message: feedbackMessage } = App.useApp();
   const {
     filteredArticles, actions, articleForm, editingArticleId, articleKeyword, articleStatus, isSavingArticle,
     onArticleFormChange, onSubmitArticle, onResetArticleForm, onArticleKeywordChange,
     onArticleStatusChange, onResetFilters, onEditArticle, onToggleArticleStatus, onDeleteArticle,
   } = props;
+  /** previewArticle、setPreviewArticle 保存预览文章、预览文章。 */
   const [previewArticle, setPreviewArticle] = useState<Article | null>(null);
+  /** isEditorOpen、setIsEditorOpen 分别保存编辑器打开状态状态及其更新函数。 */
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  /** editorArticleId、setEditorArticleId 保存文章标识、文章标识。 */
   const [editorArticleId, setEditorArticleId] = useState<number | null>(null);
+  /** exportingArticle、setExportingArticle 保存文章、文章。 */
   const [exportingArticle, setExportingArticle] = useState<{ articleId: number; format: ArticleExportFormat } | null>(null);
+  /** exportFeedback、setExportFeedback 保存导出反馈、导出操作。 */
   const [exportFeedback, setExportFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  /** isEditing 保存编辑状态。 */
   const isEditing = editorArticleId !== null;
+  /** published 负责计算或维护发布状态。 */
   const published = filteredArticles.filter((article) => article.status === '已发布').length;
 
+  /** openNew 负责计算或维护打开状态。 */
   const openNew = () => { if (!actions.create) return; onResetArticleForm(); setEditorArticleId(null); setIsEditorOpen(true); };
+  /** openEdit 负责计算或维护打开状态。 */
   const openEdit = (article: Article) => { if (!actions.update) return; setEditorArticleId(article.id); setIsEditorOpen(true); onEditArticle(article); };
+  /** closeEditor 负责删除或清理对应业务状态。 */
   const closeEditor = () => { onResetArticleForm(); setEditorArticleId(null); setIsEditorOpen(false); };
+  /** submit 负责执行对应业务操作。 */
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     if (isEditing ? !actions.update : !actions.create) return;
     if (await onSubmitArticle(event)) {
@@ -74,14 +103,18 @@ export function ArticlesPage(props: ArticlesPageProps) {
       setIsEditorOpen(false);
     }
   };
+  /** handleExport 负责处理对应的界面事件和状态变化。 */
   const handleExport = async (article: Article, format: ArticleExportFormat) => {
     setExportFeedback(null);
     setExportingArticle({ articleId: article.id, format });
     try {
+      /** exportedMessage 保存消息。 */
       const exportedMessage = await exportArticle(article, format);
       setExportFeedback({ type: 'success', message: exportedMessage });
       void feedbackMessage.success(exportedMessage);
+    /** error 保存当前操作结果以及可能返回的错误状态。 */
     } catch (error) {
+      /** errorMessage 保存错误状态消息。 */
       const errorMessage = error instanceof Error ? error.message : `《${article.title}》导出失败，请重试。`;
       setExportFeedback({ type: 'error', message: errorMessage });
       void feedbackMessage.error(errorMessage);
@@ -133,19 +166,33 @@ export function ArticlesPage(props: ArticlesPageProps) {
 }
 
 type ArticleCardProps = {
+  /** article 表示文章。 */
   article: Article;
+  /** actions 表示操作权限。 */
   actions: ResourceActionAccess;
+  /** exportingFormat 表示导出格式。 */
   exportingFormat: ArticleExportFormat | null;
+  /** exportDisabled 表示导出操作。 */
   exportDisabled: boolean;
+  /** onExport 表示导出回调。 */
   onExport: (article: Article, format: ArticleExportFormat) => Promise<void>;
+  /** onPreview 表示预览。 */
   onPreview: (article: Article) => void;
+  /** onEdit 表示编辑回调。 */
   onEdit: (article: Article) => void;
+  /** onToggle 表示变量 onToggle。 */
   onToggle: (article: Article) => void;
+  /** onDelete 表示删除回调。 */
   onDelete: (articleId: number) => void;
 };
+
+/** ArticleCard 保存模块使用的固定配置或共享状态。 */
 function ArticleCard({ article, actions, exportingFormat, exportDisabled, onExport, onPreview, onEdit, onToggle, onDelete }: ArticleCardProps) {
+  /** isPublished 保存发布状态。 */
   const isPublished = article.status === '已发布';
+  /** isIndexable 保存可索引状态。 */
   const isIndexable = isPublished && !article.isPrivate;
+  /** titleId 保存标题标识。 */
   const titleId = `article-title-${article.id}`;
   return <article className="article-library-card" aria-labelledby={titleId} itemScope={isIndexable} itemType={isIndexable ? 'https://schema.org/Article' : undefined}>
     <div className="article-library-main"><div className="article-library-title"><h3 id={titleId} itemProp={isIndexable ? 'headline' : undefined}>{article.title}</h3><Space size={6} wrap><Tag color={isPublished ? 'success' : article.status === '下架' ? 'default' : 'processing'}>{article.status}</Tag><Tag color={article.isPrivate ? 'warning' : 'blue'}>{article.isPrivate ? '私密' : '公开'}</Tag></Space></div><p itemProp={isIndexable ? 'description' : undefined}>{article.summary || '暂无摘要，打开文章后可补充内容概览。'}</p><div className="article-library-meta"><span itemProp={isIndexable ? 'articleSection' : undefined}>{article.category}</span><span itemProp={isIndexable ? 'author' : undefined}>作者：{article.author}</span><span>归属：{article.ownerName || '未知'}</span><span>浏览 {article.views}</span><time itemProp={isIndexable ? 'dateModified' : undefined} dateTime={article.updatedAt}>{new Date(article.updatedAt).toLocaleString()}</time></div></div>
@@ -171,14 +218,23 @@ function ArticleCard({ article, actions, exportingFormat, exportDisabled, onExpo
   </article>;
 }
 
+/** RichTextEditor 实现对应业务逻辑。 */
 function RichTextEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  /** editorRef 保存跨渲染周期使用的编辑器引用。 */
   const editorRef = useRef<HTMLDivElement>(null);
+  /** imageInputRef 保存跨渲染周期使用的图片输入值引用。 */
   const imageInputRef = useRef<HTMLInputElement>(null);
+  /** videoInputRef 保存跨渲染周期使用的输入值引用。 */
   const videoInputRef = useRef<HTMLInputElement>(null);
+  /** selectionRef 保存跨渲染周期使用的文本选区引用。 */
   const selectionRef = useRef<Range | null>(null);
+  /** isUploading、setIsUploading 分别保存上传状态状态及其更新函数。 */
   const [isUploading, setIsUploading] = useState(false);
+  /** uploadError、setUploadError 分别保存上传错误状态状态及其更新函数。 */
   const [uploadError, setUploadError] = useState('');
+  /** externalMedia、setExternalMedia 保存外部媒体、变量 setExternalMedia。 */
   const [externalMedia, setExternalMedia] = useState<{ kind: 'link' | 'image' | 'video'; url: string; description: string } | null>(null);
+  /** externalMediaError、setExternalMediaError 分别保存错误状态状态及其更新函数。 */
   const [externalMediaError, setExternalMediaError] = useState('');
 
   useEffect(() => {
@@ -187,33 +243,42 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
     }
   }, [value]);
 
+  /** sync 负责更新并保存对应业务状态。 */
   const sync = () => onChange(editorRef.current?.innerHTML ?? '');
+  /** restoreSelection 负责计算或维护文本选区。 */
   const restoreSelection = () => {
+    /** selection 保存文本选区。 */
     const selection = window.getSelection();
     if (!selectionRef.current || !selection) return;
     selection.removeAllRanges();
     selection.addRange(selectionRef.current);
   };
+  /** command 负责计算或维护变量 command。 */
   const command = (name: string, commandValue?: string) => {
     editorRef.current?.focus();
     restoreSelection();
     document.execCommand(name, false, commandValue);
     sync();
   };
+  /** insertHTML 负责创建或追加对应业务记录。 */
   const insertHTML = (html: string) => {
     editorRef.current?.focus();
     restoreSelection();
     document.execCommand('insertHTML', false, html);
     sync();
   };
+  /** openExternalMediaDialog 负责计算或维护对话框。 */
   const openExternalMediaDialog = (kind: 'link' | 'image' | 'video') => {
+    /** selection 保存文本选区。 */
     const selection = window.getSelection();
     if (selection?.rangeCount) selectionRef.current = selection.getRangeAt(0).cloneRange();
     setExternalMediaError('');
     setExternalMedia({ kind, url: '', description: kind === 'image' ? '文章配图' : '' });
   };
+  /** confirmExternalMedia 负责计算或维护变量 confirmExternalMedia。 */
   const confirmExternalMedia = () => {
     if (!externalMedia) return;
+    /** url 保存地址。 */
     const url = normalizeExternalUrl(externalMedia.url);
     if (!url) {
       setExternalMediaError('请输入以 http:// 或 https:// 开头的有效地址。');
@@ -221,6 +286,7 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
     }
     if (externalMedia.kind === 'link') command('createLink', url);
     if (externalMedia.kind === 'image') {
+      /** safeDescription 保存说明。 */
       const safeDescription = escapeHtmlAttribute(externalMedia.description.trim() || '文章配图');
       insertHTML(`<figure class="article-media image-media"><img src="${escapeHtmlAttribute(url)}" alt="${safeDescription}" title="${safeDescription}" loading="lazy" decoding="async" /><figcaption>${safeDescription}</figcaption></figure><p><br /></p>`);
     }
@@ -230,10 +296,13 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
     setExternalMedia(null);
     setExternalMediaError('');
   };
+  /** uploadMedia 负责执行对应业务操作。 */
   const uploadMedia = async (event: ChangeEvent<HTMLInputElement>, kind: 'image' | 'video') => {
+    /** file 保存文件。 */
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+    /** expectedPrefix 保存变量 expectedPrefix。 */
     const expectedPrefix = `${kind}/`;
     if (!file.type.startsWith(expectedPrefix)) {
       setUploadError(kind === 'image' ? '请选择图片文件。' : '请选择视频文件。');
@@ -246,21 +315,27 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
     setUploadError('');
     setIsUploading(true);
     try {
+      /** formData 保存表单业务数据。 */
       const formData = new FormData();
       formData.set('file', file);
       formData.set('displayName', file.name);
       formData.set('category', kind === 'image' ? '文章图片' : '文章视频');
       formData.set('description', `文章富文本本地${kind === 'image' ? '图片' : '视频'}资源`);
+      /** response 保存接口响应及其关联状态。 */
       const response = await requestWithSession(`${API_BASE_URL}/api/files`, { method: 'POST', body: formData });
       if (!response.ok) throw new Error(await readMediaUploadError(response));
+      /** uploaded 保存变量 uploaded。 */
       const uploaded = (await response.json()) as { id: number; displayName?: string };
+      /** source 保存来源。 */
       const source = `${API_BASE_URL}/api/files/${uploaded.id}/preview`;
+      /** label 保存显示标签。 */
       const label = escapeHtmlAttribute(uploaded.displayName || file.name);
       if (kind === 'image') {
         insertHTML(`<figure class="article-media image-media"><img src="${source}" alt="${label}" title="${label}" loading="lazy" decoding="async" /><figcaption>${label}</figcaption></figure><p><br /></p>`);
       } else {
         insertHTML(`<figure class="article-media video-media"><video controls preload="metadata" src="${source}">当前浏览器不支持视频播放。</video><figcaption>${label}</figcaption></figure><p><br /></p>`);
       }
+    /** error 保存当前操作结果以及可能返回的错误状态。 */
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : '媒体上传失败，请重试。');
     } finally {
@@ -315,22 +390,38 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (value: 
   </section>;
 }
 
+/** readMediaUploadError 加载对应业务数据。 */
 async function readMediaUploadError(response: Response) {
   try { const payload = (await response.json()) as { error?: string }; return payload.error || '媒体上传失败。'; } catch { return '媒体上传失败。'; }
 }
+
+/** normalizeExternalUrl 实现对应业务逻辑。 */
 function normalizeExternalUrl(value: string) {
+  /** url 保存地址。 */
   const url = value.trim();
   return /^https?:\/\//i.test(url) ? url : '';
 }
+
+/** escapeHtmlAttribute 实现对应业务逻辑。 */
 function escapeHtmlAttribute(value: string) {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+/** formatUploadSize 转换并生成对应业务结果。 */
 function formatUploadSize(size: number) { return size >= 1024 * 1024 ? `${(size / 1024 / 1024).toFixed(0)} MB` : `${Math.ceil(size / 1024)} KB`; }
+
+/** ToolbarButton 定义对应业务的数据结构与调用契约。 */
 function ToolbarButton({ label, icon, text, onClick }: { label: string; icon?: ReactNode; text?: string; onClick: () => void }) { return <Tooltip title={label}><Button aria-label={label} type="text" onMouseDown={(event) => event.preventDefault()} onClick={onClick}>{icon ?? text}</Button></Tooltip>; }
+
+/** ArticlePreview 实现对应业务逻辑。 */
 function ArticlePreview({ article, onClose }: { article: Article | null; onClose: () => void }) {
+  /** safeContent 保存内容。 */
   const safeContent = article ? sanitizeArticleHtml(article.content || '<p>暂无正文内容。</p>') : '';
+  /** imageSource、setImageSource 保存图片来源、图片来源。 */
   const [imageSource, setImageSource] = useState<string | null>(null);
+  /** isIndexable 保存可索引状态。 */
   const isIndexable = Boolean(article && article.status === '已发布' && !article.isPrivate);
+  /** structuredData 保存业务数据。 */
   const structuredData = article && isIndexable ? JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'Article',
@@ -342,7 +433,9 @@ function ArticlePreview({ article, onClose }: { article: Article | null; onClose
     dateModified: article.updatedAt,
     isAccessibleForFree: true,
   }).replace(/</g, '\\u003c') : '';
+  /** handlePreviewContentClick 负责处理对应的界面事件和状态变化。 */
   const handlePreviewContentClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    /** image 保存图片。 */
     const image = (event.target as HTMLElement).closest('img');
     if (image instanceof HTMLImageElement && image.currentSrc) {
       setImageSource(image.currentSrc);
@@ -363,14 +456,19 @@ function ArticlePreview({ article, onClose }: { article: Article | null; onClose
   </>;
 }
 
+/** ImageZoomPreview 实现对应业务逻辑。 */
 function ImageZoomPreview({ source, onClose }: { source: string | null; onClose: () => void }) {
+  /** scale、setScale 分别保存缩放比例状态及其更新函数。 */
   const [scale, setScale] = useState(1);
+  /** offset、setOffset 分别保存偏移量状态及其更新函数。 */
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  /** dragRef 保存跨渲染周期使用的变量 dragRef引用。 */
   const dragRef = useRef<{ x: number; y: number; originX: number; originY: number } | null>(null);
   useEffect(() => { setScale(1); setOffset({ x: 0, y: 0 }); }, [source]);
-  // Keep a lower bound so the preview remains recoverable, but do not cap
-  // the upper bound: large source images may need more than a few hundred %.
+  // 保留最小缩放下限，确保预览始终可恢复；不设置上限，
+  // 因为高分辨率原图可能需要放大数倍才能正常检查。
   const adjustScale = (amount: number) => setScale((current) => Math.max(0.1, Number((current + amount).toFixed(2))));
+  /** reset 负责计算或维护变量 reset。 */
   const reset = () => { setScale(1); setOffset({ x: 0, y: 0 }); };
   return <Modal className="article-image-zoom-modal" open={Boolean(source)} title="图片放大预览" footer={null} width="min(1500px, 98vw)" onCancel={onClose} destroyOnHidden>
     <div className="image-zoom-toolbar">
@@ -382,6 +480,7 @@ function ImageZoomPreview({ source, onClose }: { source: string | null; onClose:
       <span>{Math.round(scale * 100)}% · 滚轮缩放，按住图片拖动</span>
     </div>
     <div className="image-zoom-stage" onWheelCapture={(event) => { event.preventDefault(); adjustScale(event.deltaY < 0 ? 0.15 : -0.15); }} onPointerMove={(event) => {
+      /** drag 保存变量 drag。 */
       const drag = dragRef.current;
       if (!drag) return;
       setOffset({ x: drag.originX + event.clientX - drag.x, y: drag.originY + event.clientY - drag.y });
@@ -391,16 +490,22 @@ function ImageZoomPreview({ source, onClose }: { source: string | null; onClose:
   </Modal>;
 }
 
+/** sanitizeArticleHtml 实现对应业务逻辑。 */
 function sanitizeArticleHtml(input: string) {
   if (typeof window === 'undefined') return '';
+  /** template 保存变量 template。 */
   const template = document.createElement('template');
   template.innerHTML = input;
+  /** allowedTags 保存允许范围标签。 */
   const allowedTags = new Set(['A', 'B', 'BR', 'BLOCKQUOTE', 'CODE', 'DIV', 'EM', 'FIGCAPTION', 'FIGURE', 'H1', 'H2', 'H3', 'H4', 'HR', 'I', 'IMG', 'LI', 'OL', 'P', 'PRE', 'S', 'SOURCE', 'SPAN', 'STRONG', 'U', 'UL', 'VIDEO']);
   template.content.querySelectorAll('*').forEach((node) => {
     if (!allowedTags.has(node.tagName)) { node.replaceWith(...Array.from(node.childNodes)); return; }
     Array.from(node.attributes).forEach((attribute) => {
+      /** name 保存名称。 */
       const name = attribute.name.toLowerCase();
+      /** value 保存值。 */
       const value = attribute.value.trim();
+      /** isSafeMediaSource 保存来源。 */
       const isSafeMediaSource = /^(https?:\/\/|\/api\/files\/)/i.test(value) || value.startsWith(`${API_BASE_URL}/api/files/`);
       if (node.tagName === 'A' && name === 'href' && /^(https?:|mailto:|#)/i.test(value)) return;
       if ((node.tagName === 'IMG' || node.tagName === 'VIDEO' || node.tagName === 'SOURCE') && name === 'src' && isSafeMediaSource) return;

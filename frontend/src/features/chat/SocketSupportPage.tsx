@@ -19,24 +19,41 @@ import { socketAttachmentURL, socketWidgetConfigURL, socketWidgetScriptURL } fro
 import type { SocketConversation, SocketMessage } from './types';
 import { useSocketSupport } from './useSocketSupport';
 
+/** emojiOptions 保存模块使用的固定配置或共享状态。 */
 const emojiOptions = ['😀', '😁', '😂', '😊', '😍', '🤝', '👍', '🎉', '❤️', '🙏', '📦', '✅'];
 
+/** SocketSupportPage 保存模块使用的固定配置或共享状态。 */
 export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; canDelete: boolean }) {
+  /** socket 保存实时连接。 */
   const socket = useSocketSupport();
+  /** messageApi、messageContext 保存消息、消息上下文。 */
   const [messageApi, messageContext] = message.useMessage();
+  /** notificationApi、notificationContext 保存通知、通知上下文。 */
   const [notificationApi, notificationContext] = notification.useNotification();
+  /** draft、setDraft 分别保存输入草稿状态及其更新函数。 */
   const [draft, setDraft] = useState('');
+  /** fileError、setFileError 分别保存文件错误状态状态及其更新函数。 */
   const [fileError, setFileError] = useState('');
+  /** searchTitle、setSearchTitle 分别保存标题状态及其更新函数。 */
   const [searchTitle, setSearchTitle] = useState('');
+  /** fileInputRef 保存跨渲染周期使用的文件输入值引用。 */
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** messageListRef 保存跨渲染周期使用的消息列表引用。 */
   const messageListRef = useRef<HTMLDivElement>(null);
+  /** onlineCount 负责处理对应的界面事件和状态变化。 */
   const onlineCount = socket.conversations.filter((item) => item.online).length;
+  /** messageCount 负责计算或维护消息数量。 */
   const messageCount = socket.conversations.reduce((sum, item) => sum + item.messageCount, 0);
+  /** canReply 保存变量 canReply。 */
   const canReply = Boolean(canSend && socket.selectedConversation?.online && socket.selectedConversation.status === 'open');
+  /** embedCode 缓存计算得到的编码。 */
   const embedCode = useMemo(() => `<script src="${socketWidgetConfigURL()}"></script>\n<script src="${socketWidgetScriptURL()}" data-title="在线客服" data-session-key="default"></script>`, []);
+  /** filteredConversations 缓存计算得到的筛选后。 */
   const filteredConversations = useMemo(() => {
+    /** keyword 保存搜索关键词。 */
     const keyword = searchTitle.trim().toLowerCase();
     return socket.conversations.filter((conversation) => {
+      /** titleMatches 保存标题。 */
       const titleMatches = !keyword || [conversation.title, conversation.id, conversation.lastMessage]
         .some((value) => String(value || '').toLowerCase().includes(keyword));
       return titleMatches;
@@ -44,11 +61,14 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
   }, [searchTitle, socket.conversations]);
 
   useEffect(() => {
+    /** messageList 保存消息列表。 */
     const messageList = messageListRef.current;
     if (messageList) messageList.scrollTop = messageList.scrollHeight;
   }, [socket.messages]);
 
+  /** submitMessage 负责执行对应业务操作。 */
   const submitMessage = async () => {
+    /** content 保存内容。 */
     const content = draft.trim();
     if (!content || !canSend) return;
     if (await socket.sendMessage(content)) {
@@ -57,6 +77,7 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
     } else void messageApi.error('消息发送失败，请查看页面提示');
   };
 
+  /** handleFile 负责处理对应的界面事件和状态变化。 */
   const handleFile = async (file?: File) => {
     if (!file || !canSend) return;
     if (file.size > MAX_UPLOAD_SIZE) {
@@ -185,6 +206,7 @@ export function SocketSupportPage({ canSend, canDelete }: { canSend: boolean; ca
   );
 }
 
+/** ConversationItem 保存模块使用的固定配置或共享状态。 */
 function ConversationItem({ conversation, active, removing, canDelete, onClick, onDelete }: { conversation: SocketConversation; active: boolean; removing: boolean; canDelete: boolean; onClick: () => void; onDelete: () => void }) {
   return (
     <div className={`socket-conversation-item ${active ? 'is-active' : ''}${removing ? ' is-removing' : ''}`}>
@@ -212,7 +234,9 @@ function ConversationItem({ conversation, active, removing, canDelete, onClick, 
   );
 }
 
+/** MessageBubble 实现对应业务逻辑。 */
 function MessageBubble({ message }: { message: SocketMessage }) {
+  /** isAgent 保存变量 isAgent。 */
   const isAgent = message.senderType === 'agent';
   return (
     <div className={`socket-message-row ${isAgent ? 'is-agent' : 'is-visitor'}`}>
@@ -236,12 +260,15 @@ function MessageBubble({ message }: { message: SocketMessage }) {
   );
 }
 
+/** formatTime 转换并生成对应业务结果。 */
 function formatTime(value: string) {
+  /** date 保存日期。 */
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '--';
   return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
+/** formatBytes 转换并生成对应业务结果。 */
 function formatBytes(size: number) {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KiB`;

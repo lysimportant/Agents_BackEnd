@@ -16,54 +16,91 @@ import { API_BASE_URL, MAX_UPLOAD_SIZE } from '@/src/config/constants';
 import type { SocketConversation, SocketEnvelope, SocketMessage } from './types';
 import './customer-chat.css';
 
-const emojis = ['😀', '😁', '😂', '😊', '😍', '🤝', '👍', '🎉', '❤️', '🙏', '📦', '✅', '😎', '😉', '😇', '😘', '😗', '😙', '😚', '🙂'];
+/** 客服聊天输入区展示的表情选项。 */
+const customerChatEmojiOptions = ['😀', '😁', '😂', '😊', '😍', '🤝', '👍', '🎉', '❤️', '🙏', '📦', '✅', '😎', '😉', '😇', '😘', '😗', '😙', '😚', '🙂'];
+/** 客户端滚动时间窗口内允许新建咨询的最大次数。 */
 const NEW_CONSULTATION_LIMIT = 3;
+/** 用于限制误操作重复创建咨询的滚动时间窗口。 */
 const NEW_CONSULTATION_WINDOW = 60_000;
 
+/** 渲染客服聊天页面并管理其 WebSocket 生命周期。 */
 export function CustomerChatPage({ initialConversationId }: { initialConversationId: string }) {
+  /** 页面导航以及全局消息、通知实例。 */
   const router = useRouter();
+  /** messageApi、messageContext 保存消息、消息上下文。 */
   const [messageApi, messageContext] = message.useMessage();
+  /** notificationApi、notificationContext 保存通知、通知上下文。 */
   const [notificationApi, notificationContext] = notification.useNotification();
+  /** 当前咨询标识、会话摘要、消息时间线和输入草稿。 */
   const [conversationId, setConversationId] = useState(initialConversationId);
+  /** conversation、setConversation 保存会话、会话。 */
   const [conversation, setConversation] = useState<SocketConversation | null>(null);
+  /** messages、setMessages 保存消息、消息。 */
   const [messages, setMessages] = useState<SocketMessage[]>([]);
+  /** draft、setDraft 分别保存输入草稿状态及其更新函数。 */
   const [draft, setDraft] = useState('');
+  /** WebSocket 连接、上传及会话管理操作的界面状态。 */
   const [connected, setConnected] = useState(false);
+  /** connecting、setConnecting 分别保存变量 connecting状态及其更新函数。 */
   const [connecting, setConnecting] = useState(true);
+  /** error、setError 分别保存错误状态状态及其更新函数。 */
   const [error, setError] = useState('');
+  /** uploading、setUploading 分别保存上传状态状态及其更新函数。 */
   const [uploading, setUploading] = useState(false);
+  /** titleDialogOpen、setTitleDialogOpen 分别保存标题对话框状态及其更新函数。 */
   const [titleDialogOpen, setTitleDialogOpen] = useState(false);
+  /** titleDraft、setTitleDraft 分别保存标题输入草稿状态及其更新函数。 */
   const [titleDraft, setTitleDraft] = useState('');
+  /** savingTitle、setSavingTitle 分别保存标题状态及其更新函数。 */
   const [savingTitle, setSavingTitle] = useState(false);
+  /** deleting、setDeleting 分别保存删除状态状态及其更新函数。 */
   const [deleting, setDeleting] = useState(false);
+  /** deleted、setDeleted 分别保存删除状态状态及其更新函数。 */
   const [deleted, setDeleted] = useState(false);
+  /** startingNew、setStartingNew 分别保存变量 startingNew状态及其更新函数。 */
   const [startingNew, setStartingNew] = useState(false);
+  /** newConsultationRetrySeconds、setNewConsultationRetrySeconds 分别保存重试状态及其更新函数。 */
   const [newConsultationRetrySeconds, setNewConsultationRetrySeconds] = useState(0);
+  /** disconnectDialogOpen、setDisconnectDialogOpen 分别保存对话框状态及其更新函数。 */
   const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false);
+  /** 跨渲染周期保存连接、文件输入、滚动容器及访客凭据。 */
   const socketRef = useRef<WebSocket | null>(null);
+  /** fileInputRef 保存跨渲染周期使用的文件输入值引用。 */
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** messageListRef 保存跨渲染周期使用的消息列表引用。 */
   const messageListRef = useRef<HTMLDivElement>(null);
+  /** tokenRef 保存跨渲染周期使用的访问凭据引用。 */
   const tokenRef = useRef('');
+  /** intentionalCloseRef 保存跨渲染周期使用的变量 intentionalCloseRef引用。 */
   const intentionalCloseRef = useRef(false);
+  /** seenMessageIds 保存跨渲染周期使用的消息标识列表引用。 */
   const seenMessageIds = useRef(new Set<number>());
+  /** lastAgentNotificationRef 保存跨渲染周期使用的通知引用。 */
   const lastAgentNotificationRef = useRef<{ key: string; at: number } | null>(null);
 
-  const tokenKey = useCallback((id: string) => `socket-chat-token:${API_BASE_URL}:${id}`, []);
+  /** 生成访客会话访问凭据使用的本地存储键。 */
+  const conversationTokenStorageKey = useCallback((id: string) => `socket-chat-token:${API_BASE_URL}:${id}`, []);
+  /** 当前后端环境下记录新建咨询频率的本地存储键。 */
   const newConsultationKey = useMemo(() => `socket-new-consultations:${API_BASE_URL}`, []);
-  const addMessage = useCallback((message: SocketMessage) => {
+  /** 去重追加 socket 消息，并保持客服消息时间线有序。 */
+  const appendUniqueCustomerMessage = useCallback((message: SocketMessage) => {
     if (seenMessageIds.current.has(message.id)) return;
     seenMessageIds.current.add(message.id);
     setMessages((current) => [...current, message].sort((a, b) => a.id - b.id));
   }, []);
 
   useEffect(() => {
+    /** list 保存列表。 */
     const list = messageListRef.current;
     if (list) list.scrollTop = list.scrollHeight;
   }, [messages]);
 
+  /** 读取仍处于限流时间窗口内的新建咨询时间点。 */
   const recentNewConsultations = useCallback(() => {
     try {
+      /** parsed 保存解析结果。 */
       const parsed = JSON.parse(window.localStorage.getItem(newConsultationKey) || '[]') as unknown;
+      /** now 保存当前时间。 */
       const now = Date.now();
       return Array.isArray(parsed) ? parsed.filter((value): value is number => typeof value === 'number' && value > now - NEW_CONSULTATION_WINDOW) : [];
     } catch {
@@ -71,16 +108,21 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
     }
   }, [newConsultationKey]);
 
+  /** 根据本地时间窗口同步再次新建咨询的等待秒数。 */
   const syncNewConsultationLimit = useCallback(() => {
+    /** attempts 保存尝试次数。 */
     const attempts = recentNewConsultations();
     window.localStorage.setItem(newConsultationKey, JSON.stringify(attempts));
+    /** retry 保存重试。 */
     const retry = attempts.length >= NEW_CONSULTATION_LIMIT
       ? Math.max(1, Math.ceil((attempts[0] + NEW_CONSULTATION_WINDOW - Date.now()) / 1000))
       : 0;
     setNewConsultationRetrySeconds(retry);
   }, [newConsultationKey, recentNewConsultations]);
 
+  /** 记录一次成功创建咨询的时间，并立即刷新限流状态。 */
   const recordNewConsultation = useCallback(() => {
+    /** attempts 保存尝试次数。 */
     const attempts = [...recentNewConsultations(), Date.now()];
     window.localStorage.setItem(newConsultationKey, JSON.stringify(attempts));
     syncNewConsultationLimit();
@@ -88,11 +130,13 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
 
   useEffect(() => {
     syncNewConsultationLimit();
+    /** timer 保存定时器。 */
     const timer = window.setInterval(syncNewConsultationLimit, 1000);
     return () => window.clearInterval(timer);
   }, [syncNewConsultationLimit]);
 
   useEffect(() => {
+    /** 在咨询仍有效时提示访客确认是否离开页面。 */
     const warnBeforeClose = (event: BeforeUnloadEvent) => {
       if (!conversationId || deleted || intentionalCloseRef.current) return;
       event.preventDefault();
@@ -103,10 +147,13 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
   }, [conversationId, deleted]);
 
   useEffect(() => {
+    /** active 保存当前激活。 */
     let active = true;
+    /** reconnectTimer 保存定时器。 */
     let reconnectTimer = 0;
     intentionalCloseRef.current = false;
-    const savedToken = initialConversationId ? window.localStorage.getItem(tokenKey(initialConversationId)) ?? '' : '';
+    /** savedToken 保存访问凭据。 */
+    const savedToken = initialConversationId ? window.localStorage.getItem(conversationTokenStorageKey(initialConversationId)) ?? '' : '';
     if (initialConversationId && !savedToken) {
       setConnecting(false);
       setError('当前浏览器没有这个聊天 ID 的访问凭证，请从本机已创建的咨询链接进入，或开始新的咨询。');
@@ -114,9 +161,11 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
     }
     tokenRef.current = savedToken;
 
+    /** 建立客服 WebSocket，并注册会话、消息和断线事件处理。 */
     const connect = () => {
       if (!active) return;
       setConnecting(true);
+      /** url 保存地址。 */
       const url = new URL('/api/socket/customer', API_BASE_URL);
       url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
       if (initialConversationId && tokenRef.current) {
@@ -124,6 +173,7 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
         url.searchParams.set('visitorToken', tokenRef.current);
       }
       url.searchParams.set('visitorName', '网页访客');
+      /** socket 保存实时连接。 */
       const socket = new WebSocket(url.toString());
       socketRef.current = socket;
       socket.onopen = () => {
@@ -140,10 +190,12 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
           return;
         }
         if (envelope.type === 'session' && envelope.conversation) {
+          /** id 保存标识。 */
           const id = envelope.conversation.id;
+          /** token 保存访问凭据。 */
           const token = envelope.visitorToken || tokenRef.current;
           tokenRef.current = token;
-          window.localStorage.setItem(tokenKey(id), token);
+          window.localStorage.setItem(conversationTokenStorageKey(id), token);
           setConversationId(id);
           setConversation(envelope.conversation);
           setTitleDraft(envelope.conversation.title || '新咨询');
@@ -155,13 +207,16 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
           seenMessageIds.current = new Set(envelope.messages.map((message) => message.id));
           setMessages([...envelope.messages].sort((a, b) => a.id - b.id));
         } else if (envelope.type === 'message' && envelope.message) {
-          addMessage(envelope.message);
+          appendUniqueCustomerMessage(envelope.message);
         } else if (envelope.type === 'conversation' && envelope.conversation) {
           setConversation(envelope.conversation);
           setTitleDraft(envelope.conversation.title || '新咨询');
         } else if (envelope.type === 'agent_joined') {
+          /** notificationKey 保存通知存储键。 */
           const notificationKey = `${conversationId}:${envelope.actorName || 'agent'}`;
+          /** now 保存当前时间。 */
           const now = Date.now();
+          /** lastNotification 保存通知。 */
           const lastNotification = lastAgentNotificationRef.current;
           if (lastNotification?.key === notificationKey && now - lastNotification.at < 2500) return;
           lastAgentNotificationRef.current = { key: notificationKey, at: now };
@@ -199,10 +254,13 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
       window.clearTimeout(reconnectTimer);
       socketRef.current?.close();
     };
-  }, [addMessage, initialConversationId, notificationApi, recordNewConsultation, router, tokenKey]);
+  }, [appendUniqueCustomerMessage, conversationTokenStorageKey, initialConversationId, notificationApi, recordNewConsultation, router]);
 
-  const submit = () => {
+  /** 通过当前有效连接发送客服聊天草稿。 */
+  const submitCustomerMessage = () => {
+    /** content 保存内容。 */
     const content = draft.trim();
+    /** socket 保存实时连接。 */
     const socket = socketRef.current;
     if (!content || !socket || socket.readyState !== WebSocket.OPEN) return;
     socket.send(JSON.stringify({ type: 'message', messageType: 'text', content }));
@@ -210,7 +268,8 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
     void messageApi.success('消息发送完成');
   };
 
-  const upload = async (file?: File) => {
+  /** 上传一个客服附件，并把对应消息追加到时间线。 */
+  const uploadCustomerAttachment = async (file?: File) => {
     if (!file || !conversationId || !tokenRef.current) return;
     if (file.size > MAX_UPLOAD_SIZE) {
       setError('图片或文件不能超过 32 MiB。');
@@ -219,16 +278,19 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
     setUploading(true);
     setError('');
     try {
+      /** form 保存表单。 */
       const form = new FormData();
       form.append('file', file);
+      /** response 保存接口响应及其关联状态。 */
       const response = await fetch(`${API_BASE_URL}/api/socket/customer/${encodeURIComponent(conversationId)}/files`, {
         method: 'POST',
         headers: { 'X-Socket-Visitor-Token': tokenRef.current },
         body: form,
       });
       if (!response.ok) throw new Error('文件发送失败');
-      addMessage(await response.json() as SocketMessage);
+      appendUniqueCustomerMessage(await response.json() as SocketMessage);
       void messageApi.success('文件发送完成');
+    /** uploadError 保存上传错误状态。 */
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : '文件发送失败');
     } finally {
@@ -237,7 +299,9 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
     }
   };
 
-  const updateTitle = async () => {
+  /** 持久化客服会话标题并更新本地会话摘要。 */
+  const saveConversationTitle = async () => {
+    /** title 保存标题。 */
     const title = titleDraft.trim();
     if (!conversationId || !tokenRef.current || !title) {
       void messageApi.warning('请输入会话标题');
@@ -245,17 +309,20 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
     }
     setSavingTitle(true);
     try {
+      /** response 保存接口响应及其关联状态。 */
       const response = await fetch(`${API_BASE_URL}/api/socket/customer/${encodeURIComponent(conversationId)}/title`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-Socket-Visitor-Token': tokenRef.current },
         body: JSON.stringify({ title }),
       });
       if (!response.ok) throw new Error(await readCustomerError(response, '修改会话标题失败'));
+      /** updated 保存更新时间。 */
       const updated = await response.json() as SocketConversation;
       setConversation(updated);
       setTitleDraft(updated.title);
       setTitleDialogOpen(false);
       void messageApi.success('标题修改完成');
+    /** titleError 保存标题错误状态。 */
     } catch (titleError) {
       void messageApi.error(titleError instanceof Error ? titleError.message : '修改会话标题失败');
     } finally {
@@ -263,10 +330,12 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
     }
   };
 
+  /** 删除当前客服咨询及其访客侧访问凭据。 */
   const deleteConversation = async () => {
     if (!conversationId || !tokenRef.current || deleting) return;
     setDeleting(true);
     try {
+      /** response 保存接口响应及其关联状态。 */
       const response = await fetch(`${API_BASE_URL}/api/socket/customer/${encodeURIComponent(conversationId)}`, {
         method: 'DELETE',
         headers: { 'X-Socket-Visitor-Token': tokenRef.current },
@@ -274,11 +343,12 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
       if (!response.ok) throw new Error(await readCustomerError(response, '删除会话失败'));
       intentionalCloseRef.current = true;
       socketRef.current?.close();
-      window.localStorage.removeItem(tokenKey(conversationId));
+      window.localStorage.removeItem(conversationTokenStorageKey(conversationId));
       setDeleted(true);
       setConnected(false);
       setDisconnectDialogOpen(false);
       void messageApi.success('会话删除完成');
+    /** deleteError 保存错误状态。 */
     } catch (deleteError) {
       void messageApi.error(deleteError instanceof Error ? deleteError.message : '删除会话失败');
     } finally {
@@ -286,7 +356,9 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
     }
   };
 
+  /** 在通过客户端频率限制后跳转到新的客服咨询。 */
   const startNewConsultation = () => {
+    /** attempts 保存尝试次数。 */
     const attempts = recentNewConsultations();
     if (attempts.length >= NEW_CONSULTATION_LIMIT) {
       syncNewConsultationLimit();
@@ -297,9 +369,10 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
     router.push('/chat/new');
   };
 
+  /** 缓存客服输入区的表情选择面板。 */
   const emojiPanel = useMemo(() => (
     <div className="customer-chat-emoji-grid">
-      {emojis.map((emoji) => <button type="button" key={emoji} onClick={() => setDraft((current) => current + emoji)}>{emoji}</button>)}
+      {customerChatEmojiOptions.map((emoji) => <button type="button" key={emoji} onClick={() => setDraft((current) => current + emoji)}>{emoji}</button>)}
     </div>
   ), []);
 
@@ -367,22 +440,22 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
             placeholder="请输入咨询内容，Ctrl + Enter 发送"
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
-              if (event.ctrlKey && event.key === 'Enter') submit();
+              if (event.ctrlKey && event.key === 'Enter') submitCustomerMessage();
             }}
           />
           <div className="customer-chat-actions">
             <Space wrap>
               <Popover trigger="click" content={emojiPanel}><Button icon={<SmileOutlined />}>表情</Button></Popover>
               <Button loading={uploading} icon={<PaperClipOutlined />} onClick={() => fileInputRef.current?.click()}>图片 / 文件</Button>
-              <input ref={fileInputRef} hidden type="file" onChange={(event) => void upload(event.target.files?.[0])} />
+              <input ref={fileInputRef} hidden type="file" onChange={(event) => void uploadCustomerAttachment(event.target.files?.[0])} />
             </Space>
-            <Button type="primary" icon={<SendOutlined />} disabled={!connected || !draft.trim()} onClick={submit}>发送</Button>
+            <Button type="primary" icon={<SendOutlined />} disabled={!connected || !draft.trim()} onClick={submitCustomerMessage}>发送</Button>
           </div>
         </footer>}
       </section>
 
-      <Modal open={titleDialogOpen} title="修改会话标题" okText="保存" cancelText="取消" confirmLoading={savingTitle} onOk={() => void updateTitle()} onCancel={() => setTitleDialogOpen(false)} destroyOnHidden>
-        <Input value={titleDraft} maxLength={60} showCount autoFocus placeholder="请输入便于识别的会话标题" onChange={(event) => setTitleDraft(event.target.value)} onPressEnter={() => void updateTitle()} />
+      <Modal open={titleDialogOpen} title="修改会话标题" okText="保存" cancelText="取消" confirmLoading={savingTitle} onOk={() => void saveConversationTitle()} onCancel={() => setTitleDialogOpen(false)} destroyOnHidden>
+        <Input value={titleDraft} maxLength={60} showCount autoFocus placeholder="请输入便于识别的会话标题" onChange={(event) => setTitleDraft(event.target.value)} onPressEnter={() => void saveConversationTitle()} />
       </Modal>
 
       <Modal
@@ -413,7 +486,9 @@ export function CustomerChatPage({ initialConversationId }: { initialConversatio
   );
 }
 
+/** 渲染客服时间线中的一条访客或客服人员消息。 */
 function CustomerMessage({ message, token }: { message: SocketMessage; token: string }) {
+  /** isVisitor 保存访问者。 */
   const isVisitor = message.senderType === 'visitor';
   return (
     <article className={`customer-chat-message ${isVisitor ? 'is-visitor' : 'is-agent'}`}>
@@ -426,10 +501,14 @@ function CustomerMessage({ message, token }: { message: SocketMessage; token: st
   );
 }
 
+/** 加载并渲染经过鉴权的客服聊天附件。 */
 function CustomerAttachment({ message, token }: { message: SocketMessage; token: string }) {
+  /** url、setURL 分别保存地址状态及其更新函数。 */
   const [url, setURL] = useState('');
   useEffect(() => {
+    /** active 保存当前激活。 */
     let active = true;
+    /** objectURL 保存地址。 */
     let objectURL = '';
     void fetch(`${API_BASE_URL}/api/socket/customer/${encodeURIComponent(message.conversationId)}/files/${message.id}`, {
       headers: { 'X-Socket-Visitor-Token': token },
@@ -452,19 +531,24 @@ function CustomerAttachment({ message, token }: { message: SocketMessage; token:
   return url ? <a className="customer-chat-file" href={url} download={message.attachmentName}><FileImageOutlined /><span><strong>{message.attachmentName}</strong><small>{formatBytes(message.attachmentSize)}</small></span></a> : <Spin size="small" />;
 }
 
+/** 将 ISO 时间戳格式化为客服消息行使用的时间文本。 */
 function formatTime(value: string) {
+  /** date 保存日期。 */
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '--' : new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
+/** 使用易读的二进制单位格式化附件大小。 */
 function formatBytes(size: number) {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KiB`;
   return `${(size / 1024 / 1024).toFixed(1)} MiB`;
 }
 
+/** 优先读取客服接口返回的错误文案，解析失败时使用兜底文案。 */
 async function readCustomerError(response: Response, fallback: string) {
   try {
+    /** payload 保存请求载荷。 */
     const payload = await response.json() as { error?: string };
     return payload.error || fallback;
   } catch {
@@ -472,7 +556,9 @@ async function readCustomerError(response: Response, fallback: string) {
   }
 }
 
+/** 根据消息第一句内容生成简短会话标题。 */
 function deriveDisplayTitle(content: string) {
+  /** firstSentence 保存变量 firstSentence。 */
   const firstSentence = content.trim().split(/[\r\n。！？!?；;]/, 1)[0]?.trim() || '新咨询';
   return Array.from(firstSentence).length > 40 ? `${Array.from(firstSentence).slice(0, 40).join('')}…` : firstSentence;
 }

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { ArticlesPage } from '@/src/admin-pages/articles/ArticlesPage';
 import type { ResourceActionAccess } from '@/src/utils/actionPermissions';
@@ -16,7 +16,9 @@ import { UsersPage } from '@/src/admin-pages/users/UsersPage';
 import { SocketSupportPage } from '@/src/features/chat/SocketSupportPage';
 import { VisitorAnalyticsPage } from '@/src/admin-pages/visitor-analytics/VisitorAnalyticsPage';
 
+/** Home 实现对应业务逻辑。 */
 export default function Home() {
+  /** workspace 保存工作台。 */
   const workspace = useAdminWorkspace();
 
   if (!workspace.authUser) {
@@ -32,31 +34,38 @@ export default function Home() {
     );
   }
 
+  /** authUser 保存认证用户。 */
   const authUser = workspace.authUser;
+  /** hasAction 负责校验对应业务条件。 */
   const hasAction = (actionCode: string) => isAdministratorRoleCode(authUser.roleCode)
     || authUser.actionPermissions?.includes(actionCode) === true;
+  /** roleActions、ResourceActionAccess 保存角色、操作权限。 */
   const roleActions: ResourceActionAccess = {
     create: hasAction('roles.create'),
     update: hasAction('roles.update'),
     delete: hasAction('roles.delete'),
     permissions: hasAction('roles.permissions.update'),
   };
+  /** menuActions、ResourceActionAccess 保存菜单、操作权限。 */
   const menuActions: ResourceActionAccess = {
     create: hasAction('menus.create'),
     update: hasAction('menus.update'),
     delete: hasAction('menus.delete'),
   };
+  /** departmentActions、ResourceActionAccess 保存部门、操作权限。 */
   const departmentActions: ResourceActionAccess = {
     create: hasAction('departments.create'),
     update: hasAction('departments.update'),
     delete: hasAction('departments.delete'),
     permissions: hasAction('departments.permissions.update'),
   };
+  /** articleActions、ResourceActionAccess 保存文章、操作权限。 */
   const articleActions: ResourceActionAccess = {
     create: hasAction('articles.create'),
     update: hasAction('articles.update'),
     delete: hasAction('articles.delete'),
   };
+  /** fileActions、ResourceActionAccess 保存文件、操作权限。 */
   const fileActions: ResourceActionAccess = {
     create: hasAction('files.create'),
     update: hasAction('files.update'),

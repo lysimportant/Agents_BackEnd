@@ -2,6 +2,7 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+/** Card 实现对应业务逻辑。 */
 function Card({
   className,
   size = "default",
@@ -21,6 +22,7 @@ function Card({
   )
 }
 
+/** CardHeader 定义对应业务的数据结构与调用契约。 */
 function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -34,6 +36,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** CardTitle 定义对应业务的数据结构与调用契约。 */
 function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -47,6 +50,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** CardDescription 定义对应业务的数据结构与调用契约。 */
 function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -57,6 +61,7 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** CardAction 定义对应业务的数据结构与调用契约。 */
 function CardAction({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -70,6 +75,7 @@ function CardAction({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** CardContent 定义对应业务的数据结构与调用契约。 */
 function CardContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -80,6 +86,7 @@ function CardContent({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** CardFooter 定义对应业务的数据结构与调用契约。 */
 function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div

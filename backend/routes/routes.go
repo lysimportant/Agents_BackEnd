@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Store 定义对应业务的数据结构与调用契约。
 type Store interface {
 	auth.SessionStore
 	middleware.UserStore
@@ -28,6 +29,7 @@ type Store interface {
 	middleware.VisitorAccessStore
 }
 
+// Setup 注册公开及鉴权 API 路由和对应权限中间件。
 func Setup(router *gin.Engine, appStore Store, authService *auth.Service, passwordCodes *verification.PasswordCodeService, cfg config.Config) {
 	router.MaxMultipartMemory = handlers.MaxUploadSize
 	router.Use(middleware.CORS(cfg.AllowedOrigins), middleware.VisitorAccessLogger(appStore, cfg.VisitorLogRetentionDays))
@@ -36,11 +38,14 @@ func Setup(router *gin.Engine, appStore Store, authService *auth.Service, passwo
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	// api 保存变量 api。
 	api := router.Group("/api")
+	// socketHandler 保存实时连接。
 	socketHandler := handlers.NewSocketHandler(appStore, cfg.UploadDir)
 	registerAuthRoutes(api, handlers.NewAuthHandler(appStore, authService, socketHandler))
 	registerPublicSocketRoutes(api, socketHandler)
 
+	// protected 保存变量 protected。
 	protected := api.Group("")
 	protected.Use(middleware.RequireAuth(appStore, authService))
 	registerDataPointRoutes(protected, appStore, handlers.NewDataPointHandler(appStore))

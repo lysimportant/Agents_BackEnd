@@ -1,5 +1,14 @@
 # backend/AGENTS.md
 
+## 代码文档与命名
+
+- 业务源码中的文档注释和解释性行内注释必须使用简体中文；协议名、库名、标识符和代码字面量可以保留英文。
+- 每个 Go 包、类型、函数、方法、常量、变量和局部业务状态都必须有中文 GoDoc 或解释性注释；处理函数、数据访问方法和服务方法内部的参数、短变量、循环变量、查询结果及错误状态也不得遗漏。导出声明的 GoDoc 以被说明的标识符开头，Gin 处理函数还要说明 HTTP 方法、路径、鉴权和响应语义。
+- SQLite 表、列和索引必须在迁移 SQL 旁用中文说明；模型字段、repository 扫描顺序、handler 和测试必须同步。
+- 使用 `recipientID`、`attachmentIDs` 等领域名称，避免新增 `data`、`info`、`item`、`handle` 等宽泛名称。
+- 注释必须说明变量保存的业务内容、函数执行的行为或状态变化；不得添加“保存变量”一类无助于理解业务的注释。
+- 使用 `Get-ChildItem -Directory | Where-Object { Test-Path "$($_.FullName)\doc.go" } | ForEach-Object { go doc ".\$($_.Name)" }` 检查生成的包文档；API 总览维护在 `../docs/api/openapi.yaml`。
+
 ## 适用范围
 
 ## 后端新增功能说明
@@ -43,7 +52,7 @@
 - 保持现有直接清晰的 `handler -> repository` 结构；只有确有复用或复杂业务规则时才新增层次。
 - 新增业务接口时，将 HTTP 处理放入 `handlers/<domain>.go`，将路由放入 `routes/<domain>.go`；跨 handler 的无状态工具才放入 `utils/`。
 - `frontend/app/chat/page.tsx` 是内部聊天 `/chat`；`frontend/src/features/chat/CustomerChatPage.tsx` 是客服聊天，二者是独立业务边界。
-- `/chat` 的表情、输入框、附件和链接图片预览只能修改内部聊天页面及 `/api/internal-chat/*`，不得修改或复用客服聊天页面实现。
+- `/chat` 的表情、输入框、附件和链接图片预览属于内部聊天及 `/api/internal-chat/*`；客服聊天可独立修改其 `CustomerChatPage.tsx`、客服 socket 和对应接口，但两套实现不得混用业务状态或鉴权规则。
 - 内部聊天附件必须通过会话参与者鉴权的接口下载或预览，禁止使用任意公开静态地址暴露物理文件。
 - 处理内部聊天附件时，必须同时修改并验证前端发送与展示、后端持久化、下载与预览鉴权以及相关测试。
 - 内部聊天实时路由为认证后的 `/api/internal-chat/socket`；私聊消息只能广播给发送者和接收者，群聊消息才广播给所有已连接内部聊天用户。

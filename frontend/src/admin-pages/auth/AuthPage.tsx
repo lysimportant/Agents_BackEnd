@@ -5,18 +5,27 @@ import { LOGIN_BACKGROUND_CHANGE_EVENT, applyStoredLoginBackground } from '@/src
 import type { LoginForm } from '@/src/types/admin';
 
 type AuthPageProps = {
+  /** isCheckingSession 表示登录会话。 */
   isCheckingSession: boolean;
+  /** loginForm 表示登录表单。 */
   loginForm: LoginForm;
+  /** loginError 表示登录错误状态。 */
   loginError: string;
+  /** isLoggingIn 表示登录状态。 */
   isLoggingIn: boolean;
+  /** onLoginFormChange 表示登录表单。 */
   onLoginFormChange: Dispatch<SetStateAction<LoginForm>>;
+  /** onSubmit 表示提交回调。 */
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
 
+/** AuthPage 实现对应业务逻辑。 */
 export function AuthPage({ isCheckingSession, loginForm, loginError, isLoggingIn, onLoginFormChange, onSubmit }: AuthPageProps) {
+  /** formRef 保存跨渲染周期使用的表单引用。 */
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
+    /** refreshLoginBackground 负责计算或维护登录。 */
     const refreshLoginBackground = () => {
       applyStoredLoginBackground();
     };
@@ -35,15 +44,18 @@ export function AuthPage({ isCheckingSession, loginForm, loginError, isLoggingIn
   useEffect(() => {
     if (isCheckingSession) return;
 
+    /** onKeyDown 负责处理对应的界面事件和状态变化。 */
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Enter' || event.defaultPrevented || event.isComposing || isLoggingIn) return;
 
+      /** target 保存目标。 */
       const target = event.target as HTMLElement | null;
       if (target && formRef.current?.contains(target)) {
         // 焦点已在表单内时交给原生 submit（input/button 的 Enter）
         return;
       }
 
+      /** form 保存表单。 */
       const form = formRef.current;
       if (!form) return;
 

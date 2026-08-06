@@ -7,7 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// registerDepartmentRoutes 执行对应业务操作。
 func registerDepartmentRoutes(routes *gin.RouterGroup, store middleware.UserStore, handler *handlers.DepartmentHandler) {
+	// requireMenu 保存菜单。
 	requireMenu := middleware.RequireMenu(store, "departments")
 	routes.GET("/departments", requireMenu, middleware.RequireAction(store, permissions.DepartmentsQuery), handler.List)
 	routes.GET("/departments/:id", requireMenu, middleware.RequireAction(store, permissions.DepartmentsView), handler.Get)

@@ -41,30 +41,50 @@ import { RichTextEditor } from '@/src/components/shared/RichTextEditor';
 import type { FileForm, ManagedFile } from '@/src/types/admin';
 
 type FilesPageProps = {
+  /** actions 表示操作权限。 */
   actions: ResourceActionAccess;
+  /** filteredFiles 表示筛选后。 */
   filteredFiles: ManagedFile[];
+  /** recycleFiles 表示文件。 */
   recycleFiles: ManagedFile[];
+  /** fileForm 表示文件表单。 */
   fileForm: FileForm;
+  /** selectedUploadFile 表示已选择上传文件。 */
   selectedUploadFile: File | null;
+  /** editingFileId 表示文件标识。 */
   editingFileId: number | null;
+  /** fileKeyword 表示文件搜索关键词。 */
   fileKeyword: string;
+  /** isSavingFile 表示文件。 */
   isSavingFile: boolean;
+  /** onFileFormChange 表示文件表单。 */
   onFileFormChange: (form: FileForm) => void;
+  /** onSelectUploadFile 表示上传文件。 */
   onSelectUploadFile: (event: ChangeEvent<HTMLInputElement>) => void;
+  /** onSubmitFile 表示文件。 */
   onSubmitFile: (event: FormEvent<HTMLFormElement>) => Promise<boolean>;
+  /** onResetFileForm 表示文件表单。 */
   onResetFileForm: () => void;
+  /** onFileKeywordChange 表示文件搜索关键词。 */
   onFileKeywordChange: (keyword: string) => void;
+  /** onEditFile 表示文件。 */
   onEditFile: (file: ManagedFile) => void;
+  /** onDownloadFile 表示文件。 */
   onDownloadFile: (file: ManagedFile) => void;
+  /** onDeleteFile 表示文件。 */
   onDeleteFile: (fileId: number) => void;
+  /** onRestoreFile 表示文件。 */
   onRestoreFile: (fileId: number) => void;
+  /** onLoadRecycleFiles 表示文件。 */
   onLoadRecycleFiles: () => Promise<ManagedFile[]>;
+  /** onRefreshFiles 表示文件。 */
   onRefreshFiles: () => Promise<unknown>;
 };
 
 type FileKind = 'all' | 'image' | 'pdf' | 'word' | 'spreadsheet' | 'presentation' | 'archive' | 'executable' | 'text' | 'other';
 type FileKindMeta = { key: FileKind; label: string; icon: string; tone: string; description: string };
 
+/** FILE_KIND_OPTIONS 保存模块使用的固定配置或共享状态。 */
 const FILE_KIND_OPTIONS: FileKindMeta[] = [
   { key: 'all', label: '全部', icon: '🗂️', tone: 'slate', description: '所有文件' },
   { key: 'image', label: '图片', icon: '🖼️', tone: 'green', description: 'JPG / PNG / GIF / SVG' },
@@ -77,9 +97,13 @@ const FILE_KIND_OPTIONS: FileKindMeta[] = [
   { key: 'text', label: '文本', icon: '📄', tone: 'cyan', description: 'TXT / MD / JSON' },
   { key: 'other', label: '其它', icon: '📦', tone: 'gray', description: '无法归类的文件' },
 ];
+
+/** CATEGORY_PRESETS 保存模块使用的固定配置或共享状态。 */
 const CATEGORY_PRESETS = ['制度文档', '图片素材', '合同资料', '报表台账', '安装包', '培训资料', '其它'];
 
+/** FilesPage 实现对应业务逻辑。 */
 export function FilesPage(props: FilesPageProps) {
+  /** message 保存消息。 */
   const { message } = App.useApp();
   const {
     actions,
@@ -87,40 +111,71 @@ export function FilesPage(props: FilesPageProps) {
     onFileFormChange, onSelectUploadFile, onSubmitFile, onResetFileForm, onFileKeywordChange,
     onEditFile, onDownloadFile, onDeleteFile, onRestoreFile, onLoadRecycleFiles, onRefreshFiles,
   } = props;
+  /** activeKind、setActiveKind 保存当前激活、当前激活。 */
   const [activeKind, setActiveKind] = useState<FileKind>('all');
+  /** isUploadOpen、setIsUploadOpen 分别保存上传状态及其更新函数。 */
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  /** isEditOpen、setIsEditOpen 分别保存打开状态状态及其更新函数。 */
   const [isEditOpen, setIsEditOpen] = useState(false);
+  /** isRecycleOpen、setIsRecycleOpen 分别保存打开状态状态及其更新函数。 */
   const [isRecycleOpen, setIsRecycleOpen] = useState(false);
+  /** isRecycleLoading、setIsRecycleLoading 分别保存加载状态状态及其更新函数。 */
   const [isRecycleLoading, setIsRecycleLoading] = useState(false);
+  /** textEditorFile、setTextEditorFile 保存文件、文件。 */
   const [textEditorFile, setTextEditorFile] = useState<ManagedFile | null>(null);
+  /** textEditorContent、setTextEditorContent 分别保存内容状态及其更新函数。 */
   const [textEditorContent, setTextEditorContent] = useState('');
+  /** isTextLoading、setIsTextLoading 分别保存加载状态状态及其更新函数。 */
   const [isTextLoading, setIsTextLoading] = useState(false);
+  /** isTextSaving、setIsTextSaving 分别保存文本内容状态及其更新函数。 */
   const [isTextSaving, setIsTextSaving] = useState(false);
+  /** deletingPermanentId、setDeletingPermanentId 保存标识、标识。 */
   const [deletingPermanentId, setDeletingPermanentId] = useState<number | null>(null);
+  /** recycleError、setRecycleError 分别保存错误状态状态及其更新函数。 */
   const [recycleError, setRecycleError] = useState('');
+  /** textEditorError、setTextEditorError 分别保存错误状态状态及其更新函数。 */
   const [textEditorError, setTextEditorError] = useState('');
+  /** previewFile、setPreviewFile 保存预览文件、预览文件。 */
   const [previewFile, setPreviewFile] = useState<ManagedFile | null>(null);
+  /** originalLoading、setOriginalLoading 分别保存加载状态状态及其更新函数。 */
   const [originalLoading, setOriginalLoading] = useState(true);
+  /** imageScale、setImageScale 分别保存图片状态及其更新函数。 */
   const [imageScale, setImageScale] = useState(1);
+  /** imageOffset、setImageOffset 分别保存图片状态及其更新函数。 */
   const [imageOffset, setImageOffset] = useState({ x: 0, y: 0 });
+  /** isDraggingImage、setIsDraggingImage 分别保存图片状态及其更新函数。 */
   const [isDraggingImage, setIsDraggingImage] = useState(false);
+  /** settingLoginBackgroundKey、setSettingLoginBackgroundKey 保存登录存储键、登录存储键。 */
   const [settingLoginBackgroundKey, setSettingLoginBackgroundKey] = useState<string | null>(null);
+  /** isRefreshingFiles、setIsRefreshingFiles 分别保存文件状态及其更新函数。 */
   const [isRefreshingFiles, setIsRefreshingFiles] = useState(false);
+  /** dragStartRef 保存跨渲染周期使用的开始位置引用。 */
   const dragStartRef = useRef({ pointerX: 0, pointerY: 0, offsetX: 0, offsetY: 0 });
+  /** files 保存文件。 */
   const files = Array.isArray(filteredFiles) ? filteredFiles : [];
+  /** kindCounts 缓存计算得到的数量。 */
   const kindCounts = useMemo(() => {
+    /** counts 负责计算或维护数量。 */
     const counts = FILE_KIND_OPTIONS.reduce<Record<FileKind, number>>((all, item) => ({ ...all, [item.key]: 0 }), {} as Record<FileKind, number>);
     counts.all = files.length;
     files.forEach((file) => { counts[getFileKind(file).key] += 1; });
     return counts;
   }, [files]);
+  /** categoryOptions 缓存计算得到的分类。 */
   const categoryOptions = useMemo(() => Array.from(new Set([...CATEGORY_PRESETS, ...files.map((f) => f.category), fileForm.category].filter(Boolean))), [files, fileForm.category]);
+  /** visibleFiles 负责计算或维护可见状态。 */
   const visibleFiles = activeKind === 'all' ? files : files.filter((file) => getFileKind(file).key === activeKind);
+  /** clampScale 负责计算或维护缩放比例。 */
   const clampScale = (next: number) => Math.max(0.35, Number(next.toFixed(2)));
+  /** resetImageTransform 负责计算或维护图片。 */
   const resetImageTransform = () => { setImageScale(1); setImageOffset({ x: 0, y: 0 }); };
+  /** openImage 负责计算或维护图片。 */
   const openImage = (file: ManagedFile) => { setOriginalLoading(true); resetImageTransform(); setPreviewFile(file); };
+  /** closeUploadDialog 负责删除或清理对应业务状态。 */
   const closeUploadDialog = () => { setIsUploadOpen(false); onResetFileForm(); };
+  /** closeEditDialog 负责删除或清理对应业务状态。 */
   const closeEditDialog = () => { setIsEditOpen(false); onResetFileForm(); };
+  /** openTextEditor 负责计算或维护打开状态文本内容编辑器。 */
   const openTextEditor = async (file: ManagedFile) => {
     if (!actions.update || file.readOnly) return;
     onEditFile(file);
@@ -129,9 +184,12 @@ export function FilesPage(props: FilesPageProps) {
     setTextEditorError('');
     setIsTextLoading(true);
     try {
+      /** content 保存内容。 */
       const content = await readTextFileContent(file.id);
       setTextEditorContent(content);
+    /** error 保存当前操作结果以及可能返回的错误状态。 */
     } catch (error) {
+      /** errorMessage 保存错误状态消息。 */
       const errorMessage = error instanceof Error ? error.message : '读取文本内容失败';
       setTextEditorError(errorMessage);
       void message.error(errorMessage);
@@ -139,6 +197,7 @@ export function FilesPage(props: FilesPageProps) {
       setIsTextLoading(false);
     }
   };
+  /** saveTextContent 负责更新并保存对应业务状态。 */
   const saveTextContent = async () => {
     if (!actions.update || !textEditorFile) return;
     setTextEditorError('');
@@ -155,7 +214,9 @@ export function FilesPage(props: FilesPageProps) {
       onResetFileForm();
       setTextEditorFile(null);
       void message.success('文件内容保存完成');
+    /** error 保存当前操作结果以及可能返回的错误状态。 */
     } catch (error) {
+      /** errorMessage 保存错误状态消息。 */
       const errorMessage = error instanceof Error ? error.message : '保存文件失败';
       setTextEditorError(errorMessage);
       void message.error(errorMessage);
@@ -163,6 +224,7 @@ export function FilesPage(props: FilesPageProps) {
       setIsTextSaving(false);
     }
   };
+  /** permanentlyDeleteFromRecycle 负责计算或维护起始时间。 */
   const permanentlyDeleteFromRecycle = async (fileId: number) => {
     if (!actions.permanentDelete) return;
     setRecycleError('');
@@ -172,7 +234,9 @@ export function FilesPage(props: FilesPageProps) {
       await onLoadRecycleFiles();
       await onRefreshFiles();
       void message.success('文件永久删除完成');
+    /** error 保存当前操作结果以及可能返回的错误状态。 */
     } catch (error) {
+      /** errorMessage 保存错误状态消息。 */
       const errorMessage = error instanceof Error ? error.message : '永久删除文件失败';
       setRecycleError(errorMessage);
       void message.error(errorMessage);
@@ -180,6 +244,7 @@ export function FilesPage(props: FilesPageProps) {
       setDeletingPermanentId(null);
     }
   };
+  /** openEditDialog 负责计算或维护对话框。 */
   const openEditDialog = (file: ManagedFile) => {
     if (!actions.update || file.readOnly) return;
     if (getFileKind(file).key === 'text') {
@@ -189,6 +254,7 @@ export function FilesPage(props: FilesPageProps) {
     onEditFile(file);
     setIsEditOpen(true);
   };
+  /** openRecycleBin 负责计算或维护打开状态。 */
   const openRecycleBin = async () => {
     if (!actions.restore && !actions.permanentDelete) return;
     setIsRecycleOpen(true);
@@ -199,6 +265,7 @@ export function FilesPage(props: FilesPageProps) {
       setIsRecycleLoading(false);
     }
   };
+  /** setAsLoginBackground 负责更新并保存对应业务状态。 */
   const setAsLoginBackground = async (file: ManagedFile) => {
     if (getFileKind(file).key !== 'image') {
       void message.warning('只有图片文件可以设置为登录背景');
@@ -207,7 +274,9 @@ export function FilesPage(props: FilesPageProps) {
 
     setSettingLoginBackgroundKey(getFileIdentity(file));
     try {
+      /** blob 保存二进制内容。 */
       const blob = await readFilePreviewBlob(file);
+      /** dataUrl 保存业务数据地址。 */
       const dataUrl = await createLoginBackgroundDataUrl(blob, file.contentType);
       setStoredLoginBackground({
         url: dataUrl,
@@ -217,37 +286,45 @@ export function FilesPage(props: FilesPageProps) {
         size: blob.size || file.size,
       });
       void message.success('已设为登录背景，退出到登录页后会使用这张本地背景');
+    /** error 保存当前操作结果以及可能返回的错误状态。 */
     } catch (error) {
+      /** errorMessage 保存错误状态消息。 */
       const errorMessage = error instanceof Error ? error.message : '设置登录背景失败';
       void message.error(errorMessage);
     } finally {
       setSettingLoginBackgroundKey(null);
     }
   };
+  /** refreshFiles 负责计算或维护文件。 */
   const refreshFiles = async () => {
     setIsRefreshingFiles(true);
     try {
       await onRefreshFiles();
       void message.success('文件列表已刷新');
+    /** error 保存当前操作结果以及可能返回的错误状态。 */
     } catch (error) {
       void message.error(error instanceof Error ? error.message : '刷新文件列表失败');
     } finally {
       setIsRefreshingFiles(false);
     }
   };
+  /** resetLoginBackground 负责计算或维护登录。 */
   const resetLoginBackground = () => {
     clearStoredLoginBackground();
     void message.success('已恢复默认登录背景');
   };
+  /** onPreviewWheel 负责处理对应的界面事件和状态变化。 */
   const onPreviewWheel = (event: WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
     setImageScale((current) => clampScale(current + (event.deltaY < 0 ? 0.12 : -0.12)));
   };
+  /** startImageDrag 负责计算或维护图片。 */
   const startImageDrag = (event: MouseEvent<HTMLDivElement>) => {
     if (imageScale <= 1) return;
     setIsDraggingImage(true);
     dragStartRef.current = { pointerX: event.clientX, pointerY: event.clientY, offsetX: imageOffset.x, offsetY: imageOffset.y };
   };
+  /** moveImageDrag 负责计算或维护图片。 */
   const moveImageDrag = (event: MouseEvent<HTMLDivElement>) => {
     if (!isDraggingImage) return;
     setImageOffset({
@@ -255,12 +332,14 @@ export function FilesPage(props: FilesPageProps) {
       y: dragStartRef.current.offsetY + event.clientY - dragStartRef.current.pointerY,
     });
   };
+  /** stopImageDrag 负责计算或维护图片。 */
   const stopImageDrag = () => setIsDraggingImage(false);
 
   useEffect(() => {
     if (!editingFileId) setIsEditOpen(false);
   }, [editingFileId]);
 
+  /** submitFileForm 负责执行对应业务操作。 */
   const submitFileForm = async (event: FormEvent<HTMLFormElement>, mode: 'upload' | 'edit') => {
     if (mode === 'upload' ? !actions.create : !actions.update) return;
     if (!(await onSubmitFile(event))) return;
@@ -268,7 +347,9 @@ export function FilesPage(props: FilesPageProps) {
     else setIsEditOpen(false);
   };
 
+  /** fileFormContent 负责计算或维护文件表单内容。 */
   const fileFormContent = (mode: 'upload' | 'edit', asForm = true) => {
+    /** fields 保存表单字段。 */
     const fields = <>
       {mode === 'upload' && <label className="file-dropzone antd-dropzone"><input required type="file" onChange={onSelectUploadFile} /><InboxOutlined /><strong>{selectedUploadFile?.name ?? '点击选择文件上传'}</strong><small>{selectedUploadFile ? `${formatFileSize(selectedUploadFile.size)} · ${getFileKindFromName(selectedUploadFile.name, selectedUploadFile.type).label}` : `图片、PDF、Office、程序等，单文件最大 ${formatFileSize(MAX_UPLOAD_SIZE)}`}</small></label>}
       <label>显示名称<Input required value={fileForm.displayName} onChange={(event) => onFileFormChange({ ...fileForm, displayName: event.target.value })} placeholder="请输入文件显示名称" /></label>
@@ -329,24 +410,43 @@ export function FilesPage(props: FilesPageProps) {
 }
 
 type FileCardProps = {
+  /** file 表示文件。 */
   file: ManagedFile;
+  /** actions 表示操作权限。 */
   actions: ResourceActionAccess;
+  /** onOpenImage 表示图片。 */
   onOpenImage: (file: ManagedFile) => void;
+  /** onEditFile 表示文件。 */
   onEditFile: (file: ManagedFile) => void;
+  /** onDownloadFile 表示文件。 */
   onDownloadFile: (file: ManagedFile) => void;
+  /** onDeleteFile 表示文件。 */
   onDeleteFile: (fileId: number) => void;
+  /** onSetLoginBackground 表示登录。 */
   onSetLoginBackground: (file: ManagedFile) => void;
+  /** settingLoginBackgroundKey 表示登录存储键。 */
   settingLoginBackgroundKey: string | null;
 };
+
+/** FileCard 保存模块使用的固定配置或共享状态。 */
 function FileCard({ file, actions, onOpenImage, onEditFile, onDownloadFile, onDeleteFile, onSetLoginBackground, settingLoginBackgroundKey }: FileCardProps) {
+  /** meta 保存元数据。 */
   const meta = getFileKind(file);
+  /** previewUrl 保存预览地址。 */
   const previewUrl = resolveFilePreviewUrl(file);
+  /** thumbnailUrl 保存地址。 */
   const thumbnailUrl = file.previewUrl ? previewUrl : `${API_BASE_URL}/api/files/${file.id}/thumbnail`;
+  /** isImage 保存图片。 */
   const isImage = meta.key === 'image';
+  /** isPDF 保存变量 isPDF。 */
   const isPDF = meta.key === 'pdf';
+  /** isIndexableImage 保存图片。 */
   const isIndexableImage = isImage && !file.isPrivate && !file.readOnly;
+  /** isSettingLoginBackground 保存登录。 */
   const isSettingLoginBackground = settingLoginBackgroundKey === getFileIdentity(file);
+  /** titleId 保存标题标识。 */
   const titleId = `file-title-${file.source || 'managed'}-${file.id}`;
+  /** imageText 保存图片。 */
   const imageText = getImageAccessibleText(file);
   return <article className={`file-card tone-${meta.tone}`} aria-labelledby={titleId} itemScope={isIndexableImage} itemType={isIndexableImage ? 'https://schema.org/ImageObject' : undefined}>
     {isIndexableImage && <meta itemProp="contentUrl" content={previewUrl} />}
@@ -364,10 +464,18 @@ function FileCard({ file, actions, onOpenImage, onEditFile, onDownloadFile, onDe
   </article>;
 }
 
+/** getFileKind 获取对应业务记录。 */
 function getFileKind(file: ManagedFile) { return getFileKindFromName(file.originalName || file.displayName, file.contentType); }
+
+/** getFileIdentity 获取对应业务记录。 */
 function getFileIdentity(file: ManagedFile) { return `${file.source || 'managed'}:${file.id}`; }
+
+/** resolveFilePreviewUrl 转换并生成对应业务结果。 */
 function resolveFilePreviewUrl(file: ManagedFile) { return `${API_BASE_URL}${file.previewUrl || `/api/files/${file.id}/preview`}`; }
+
+/** getFileKindFromName 获取对应业务记录。 */
 function getFileKindFromName(filename: string, contentType = ''): FileKindMeta {
+  /** ext 保存文件扩展名。 */
   const ext = getFileExtension(filename); const mime = contentType.toLowerCase();
   if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) return FILE_KIND_OPTIONS.find((item) => item.key === 'image')!;
   if (mime.includes('pdf') || ext === 'pdf') return FILE_KIND_OPTIONS.find((item) => item.key === 'pdf')!;
@@ -379,19 +487,34 @@ function getFileKindFromName(filename: string, contentType = ''): FileKindMeta {
   if (mime.startsWith('text/') || ['txt', 'md', 'json', 'xml', 'log'].includes(ext)) return FILE_KIND_OPTIONS.find((item) => item.key === 'text')!;
   return FILE_KIND_OPTIONS.find((item) => item.key === 'other')!;
 }
+
+/** getFileExtension 保存模块使用的固定配置或共享状态。 */
 function getFileExtension(filename: string) { const ext = filename.split('.').pop()?.trim().toLowerCase(); return ext && ext !== filename.toLowerCase() ? ext : ''; }
+
+/** formatFileSize 转换并生成对应业务结果。 */
 function formatFileSize(size: number) { if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`; if (size >= 1024) return `${(size / 1024).toFixed(1)} KB`; return `${size} B`; }
+
+/** getImageAccessibleText 获取对应业务记录。 */
 function getImageAccessibleText(file: ManagedFile) {
+  /** description 保存说明。 */
   const description = file.description.trim();
+  /** category 保存分类。 */
   const category = file.category.trim();
   return description || `${file.displayName}${category ? `，${category}` : ''}`;
 }
 
+/** LOGIN_BACKGROUND_MAX_EDGE 保存模块使用的固定配置或共享状态。 */
 const LOGIN_BACKGROUND_MAX_EDGE = 1920;
+
+/** LOGIN_BACKGROUND_WEBP_QUALITY 保存模块使用的固定配置或共享状态。 */
 const LOGIN_BACKGROUND_WEBP_QUALITY = 0.88;
+
+/** LOGIN_BACKGROUND_MAX_DATA_URL_LENGTH 保存模块使用的固定配置或共享状态。 */
 const LOGIN_BACKGROUND_MAX_DATA_URL_LENGTH = 4_700_000;
 
+/** createLoginBackgroundDataUrl 创建或追加对应业务记录。 */
 async function createLoginBackgroundDataUrl(blob: Blob, fallbackContentType = '') {
+  /** mimeType 保存媒体类型类型。 */
   const mimeType = (blob.type || fallbackContentType).toLowerCase();
   if (mimeType && !mimeType.startsWith('image/')) {
     throw new Error('只有图片文件可以设置为登录背景');
@@ -400,6 +523,7 @@ async function createLoginBackgroundDataUrl(blob: Blob, fallbackContentType = ''
   let dataUrl: string;
   try {
     dataUrl = await rasterizeImageBlob(blob);
+  /** error 保存当前操作结果以及可能返回的错误状态。 */
   } catch (error) {
     if (mimeType.includes('svg')) {
       throw new Error('SVG 图片无法安全转换为登录背景，请换 JPG、PNG 或 WebP 图片');
@@ -414,8 +538,11 @@ async function createLoginBackgroundDataUrl(blob: Blob, fallbackContentType = ''
   return dataUrl;
 }
 
+/** rasterizeImageBlob 实现对应业务逻辑。 */
 async function rasterizeImageBlob(blob: Blob) {
+  /** objectUrl 保存地址。 */
   const objectUrl = URL.createObjectURL(blob);
+  /** image 保存图片。 */
   const image = new Image();
 
   try {
@@ -425,18 +552,25 @@ async function rasterizeImageBlob(blob: Blob) {
       image.src = objectUrl;
     });
 
+    /** width 保存宽度。 */
     const width = image.naturalWidth || image.width;
+    /** height 保存高度。 */
     const height = image.naturalHeight || image.height;
     if (!width || !height) {
       throw new Error('图片尺寸无效');
     }
 
+    /** scale 保存缩放比例。 */
     const scale = Math.min(1, LOGIN_BACKGROUND_MAX_EDGE / Math.max(width, height));
+    /** targetWidth 保存目标宽度。 */
     const targetWidth = Math.max(1, Math.round(width * scale));
+    /** targetHeight 保存目标。 */
     const targetHeight = Math.max(1, Math.round(height * scale));
+    /** canvas 保存绘图画布。 */
     const canvas = document.createElement('canvas');
     canvas.width = targetWidth;
     canvas.height = targetHeight;
+    /** context 保存上下文。 */
     const context = canvas.getContext('2d');
     if (!context) {
       throw new Error('浏览器不支持图片压缩');
@@ -445,6 +579,7 @@ async function rasterizeImageBlob(blob: Blob) {
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = 'high';
     context.drawImage(image, 0, 0, targetWidth, targetHeight);
+    /** dataUrl 保存业务数据地址。 */
     const dataUrl = canvas.toDataURL('image/webp', LOGIN_BACKGROUND_WEBP_QUALITY);
     if (!dataUrl || dataUrl === 'data:,') {
       throw new Error('图片压缩失败');
@@ -455,8 +590,10 @@ async function rasterizeImageBlob(blob: Blob) {
   }
 }
 
+/** readBlobAsDataUrl 加载对应业务数据。 */
 function readBlobAsDataUrl(blob: Blob) {
   return new Promise<string>((resolve, reject) => {
+    /** reader 保存内容读取器。 */
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {

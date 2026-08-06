@@ -1,0 +1,682 @@
+openapi: 3.1.0
+info:
+  title: 采集数据管理平台 API
+  version: 1.0.0
+  description: 使用 Cookie 会话鉴权的管理、文件、分析和聊天接口。
+servers:
+  - url: http://localhost:8080
+    description: 本地后端服务
+tags:
+  - name: 认证
+  - name: 用户
+  - name: 管理
+  - name: 内容
+  - name: 文件
+  - name: 内部聊天
+  - name: 客服聊天
+  - name: 访问分析
+paths:
+  /health:
+    get:
+      summary: 检查后端健康状态
+      responses:
+        '200':
+          description: 后端服务已就绪。
+  /api/auth/login:
+    post:
+      tags: [认证]
+      summary: 创建登录会话
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200': { description: 登录成功并已设置会话 Cookie。 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/auth/session:
+    get:
+      tags: [认证]
+      summary: 获取当前会话用户
+      responses:
+        '200': { description: 当前已登录用户及其权限。 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/auth/logout:
+    post:
+      tags: [认证]
+      summary: 删除当前会话
+      responses:
+        '204': { description: 会话已删除且 Cookie 已过期。 }
+  /api/users:
+    get:
+      tags: [用户]
+      summary: 查询用户列表
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: 已授权用户列表。 }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [用户]
+      summary: 创建用户
+      security: [{ cookieSession: [] }]
+      responses:
+        '201': { description: 用户创建成功。 }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/departments:
+    get:
+      tags: [管理]
+      summary: 查询部门列表
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: 部门列表。 }
+    post:
+      tags: [管理]
+      summary: 创建部门
+      security: [{ cookieSession: [] }]
+      responses:
+        '201': { description: 部门创建成功。 }
+  /api/roles:
+    get:
+      tags: [管理]
+      summary: 查询角色列表
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: 角色列表。 }
+    post:
+      tags: [管理]
+      summary: 创建角色
+      security: [{ cookieSession: [] }]
+      responses:
+        '201': { description: 角色创建成功。 }
+  /api/menus:
+    get:
+      tags: [管理]
+      summary: 查询有效菜单
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: 当前用户可见菜单列表。 }
+    post:
+      tags: [管理]
+      summary: 创建菜单
+      security: [{ cookieSession: [] }]
+      responses: { '201': { description: 菜单创建成功。 } }
+  /api/data-points:
+    get:
+      tags: [访问分析]
+      summary: 查询工作台指标
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: 工作台指标列表。 }
+    post:
+      tags: [访问分析]
+      summary: 创建工作台指标
+      security: [{ cookieSession: [] }]
+      responses:
+        '201': { description: 指标创建成功。 }
+  /api/visitor-analytics:
+    get:
+      tags: [访问分析]
+      summary: 查询最新访问记录和聚合数据
+      description: 仅具有访问分析权限的系统管理员和超级管理员可以访问。
+      security: [{ cookieSession: [] }]
+      parameters:
+        - { name: range, in: query, schema: { type: string, enum: [24h, 7d, 30d] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, enum: [10, 20, 30, 50, 100], default: 10 } }
+        - { name: keyword, in: query, schema: { type: string } }
+        - { name: statusCode, in: query, schema: { type: integer } }
+      responses:
+        '200': { description: 按最新优先排列的访问记录和图表聚合数据。 }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/articles:
+    get:
+      tags: [内容]
+      summary: 查询可见文章
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: 按所有权和隐私规则过滤后的文章列表。 }
+    post:
+      tags: [内容]
+      summary: 创建文章
+      security: [{ cookieSession: [] }]
+      responses:
+        '201': { description: 文章创建成功。 }
+  /api/files:
+    get:
+      tags: [文件]
+      summary: 查询可见文件和受保护聊天数据
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: 按来源和分类分组的文件列表。 }
+    post:
+      tags: [文件]
+      summary: 上传文件管理资源
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201': { description: 文件已保存且元数据已持久化。 }
+  /api/files/{id}/download:
+    get:
+      tags: [文件]
+      summary: 下载已授权文件
+      security: [{ cookieSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/NumericID'
+      responses:
+        '200': { description: 带下载响应头的文件内容。 }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/internal-chat/users:
+    get:
+      tags: [内部聊天]
+      summary: 查询内部聊天成员和在线状态
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: 可参与内部聊天的用户。 }
+  /api/internal-chat/messages:
+    get:
+      tags: [内部聊天]
+      summary: 查询可见内部聊天消息
+      security: [{ cookieSession: [] }]
+      parameters:
+        - { name: peerId, in: query, required: true, schema: { type: integer } }
+        - { name: afterId, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200': { description: 按 ID 排序的可见消息。 }
+    post:
+      tags: [内部聊天]
+      summary: 发送文本和本人附件
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InternalChatMessageRequest' }
+      responses:
+        '201': { description: 消息和附件已原子化持久化。 }
+        '400': { description: 接收者、内容或附件所有权无效。 }
+  /api/internal-chat/attachments:
+    post:
+      tags: [内部聊天]
+      summary: 上传待发送的内部聊天附件
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201': { description: 当前用户拥有的待发送附件。 }
+  /api/internal-chat/attachments/{id}/preview:
+    get:
+      tags: [内部聊天]
+      summary: 预览已授权内部聊天附件
+      security: [{ cookieSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/NumericID'
+      responses:
+        '200': { description: 使用检测到的内容类型内联返回文件。 }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/internal-chat/attachments/{id}/download:
+    get:
+      tags: [内部聊天]
+      summary: 下载已授权内部聊天附件
+      security: [{ cookieSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/NumericID'
+      responses:
+        '200': { description: 带下载响应头的文件内容。 }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/internal-chat/presence:
+    post:
+      tags: [内部聊天]
+      summary: 刷新当前用户在线状态
+      security: [{ cookieSession: [] }]
+      responses:
+        '204': { description: 在线状态心跳已接收。 }
+  /api/internal-chat/socket:
+    get:
+      tags: [内部聊天]
+      summary: 升级为已鉴权的内部聊天 WebSocket
+      security: [{ cookieSession: [] }]
+      responses:
+        '101': { description: WebSocket 升级成功。 }
+  /api/users/{id}:
+    put:
+      tags: [用户]
+      summary: 更新用户
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses:
+        '200': { description: 用户更新成功。 }
+    delete:
+      tags: [用户]
+      summary: 删除用户
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses:
+        '200': { description: 用户删除成功。 }
+  /api/users/{id}/menus:
+    get:
+      tags: [用户]
+      summary: 查询用户有效菜单
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses:
+        '200': { description: 菜单列表。 }
+    put:
+      tags: [用户]
+      summary: 替换用户附加菜单
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses:
+        '200': { description: 附加菜单 ID 已保存。 }
+  /api/users/{id}/permissions:
+    get:
+      tags: [用户]
+      summary: 查询权限来源和有效并集
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses:
+        '200': { description: 有效菜单和动作权限详情。 }
+  /api/users/{id}/actions:
+    put:
+      tags: [用户]
+      summary: 替换用户附加动作权限
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses:
+        '200': { description: 附加动作编码已保存。 }
+  /api/users/{id}/profile:
+    get:
+      tags: [用户]
+      summary: 查询当前用户可见的用户资料
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 用户资料。 } }
+    put:
+      tags: [用户]
+      summary: 更新已授权用户资料
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 用户资料更新成功。 } }
+  /api/profile:
+    get:
+      tags: [用户]
+      summary: 查询当前用户资料
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: 当前用户资料。 }
+    put:
+      tags: [用户]
+      summary: 更新当前用户资料
+      security: [{ cookieSession: [] }]
+      responses:
+        '200': { description: 更新后的用户资料。 }
+  /api/profile/password-code:
+    post:
+      tags: [用户]
+      summary: 发送密码修改验证码
+      security: [{ cookieSession: [] }]
+      responses:
+        '204': { description: 验证码已进入发送流程。 }
+  /api/profile/password:
+    put:
+      tags: [用户]
+      summary: 使用验证码修改当前用户密码
+      security: [{ cookieSession: [] }]
+      responses:
+        '204': { description: 密码修改成功。 }
+  /api/departments/{id}:
+    get:
+      tags: [管理]
+      summary: 查询部门
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 部门详情。 } }
+    put:
+      tags: [管理]
+      summary: 更新部门
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 部门更新成功。 } }
+    delete:
+      tags: [管理]
+      summary: 删除部门
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 部门删除成功。 } }
+  /api/departments/{id}/menus:
+    get:
+      tags: [管理]
+      summary: 查询部门菜单权限
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 部门菜单权限。 } }
+    put:
+      tags: [管理]
+      summary: 替换部门菜单权限
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 部门菜单权限已保存。 } }
+  /api/departments/{id}/users:
+    get:
+      tags: [管理]
+      summary: 查询部门所属用户
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 部门所属用户。 } }
+  /api/roles/{id}:
+    get:
+      tags: [管理]
+      summary: 查询角色
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 角色详情。 } }
+    put:
+      tags: [管理]
+      summary: 更新角色
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 角色更新成功。 } }
+    delete:
+      tags: [管理]
+      summary: 删除角色
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 角色删除成功。 } }
+  /api/roles/{id}/menus:
+    get:
+      tags: [管理]
+      summary: 查询角色菜单权限
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 角色菜单权限。 } }
+    put:
+      tags: [管理]
+      summary: 替换角色菜单权限
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 角色菜单权限已保存。 } }
+  /api/roles/{id}/users:
+    get:
+      tags: [管理]
+      summary: 查询角色所属用户
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 角色所属用户。 } }
+  /api/menus/{id}:
+    put:
+      tags: [管理]
+      summary: 更新菜单
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 菜单更新成功。 } }
+    delete:
+      tags: [管理]
+      summary: 删除菜单
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 菜单删除成功。 } }
+  /api/articles/{id}:
+    get:
+      tags: [内容]
+      summary: 查询已授权文章
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 文章详情。 } }
+    put:
+      tags: [内容]
+      summary: 更新本人或管理员可管理的文章
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 文章更新成功。 } }
+    delete:
+      tags: [内容]
+      summary: 删除本人或管理员可管理的文章
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 文章删除成功。 } }
+  /api/articles/export:
+    get:
+      tags: [内容]
+      summary: 将已授权文章导出为 CSV 或 PDF
+      security: [{ cookieSession: [] }]
+      responses: { '200': { description: 导出的文档内容。 } }
+  /api/files/{id}:
+    get:
+      tags: [文件]
+      summary: 查询已授权文件元数据
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 文件元数据。 } }
+    put:
+      tags: [文件]
+      summary: 更新文件元数据
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 文件元数据更新成功。 } }
+    delete:
+      tags: [文件]
+      summary: 将文件移入回收站
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 文件已软删除。 } }
+  /api/files/recycle-bin:
+    get:
+      tags: [文件]
+      summary: 查询已软删除文件
+      security: [{ cookieSession: [] }]
+      responses: { '200': { description: 回收站文件列表。 } }
+  /api/files/{id}/restore:
+    post:
+      tags: [文件]
+      summary: 恢复已软删除文件
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 文件恢复成功。 } }
+  /api/files/{id}/content:
+    put:
+      tags: [文件]
+      summary: 替换已授权文本文件内容
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 文本内容替换成功。 } }
+  /api/files/{id}/preview:
+    get:
+      tags: [文件]
+      summary: 预览已授权文件
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 内联预览内容。 } }
+  /api/files/{id}/thumbnail:
+    get:
+      tags: [文件]
+      summary: 获取已授权图片缩略图
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 图片缩略图内容。 } }
+  /api/files/chat-data/{source}/{id}/preview:
+    get:
+      tags: [文件]
+      summary: 管理员预览受保护的内部或客服聊天数据
+      security: [{ cookieSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ChatSource'
+        - $ref: '#/components/parameters/NumericID'
+      responses: { '200': { description: 已授权聊天附件预览。 } }
+  /api/files/chat-data/{source}/{id}/download:
+    get:
+      tags: [文件]
+      summary: 管理员下载受保护的内部或客服聊天数据
+      security: [{ cookieSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ChatSource'
+        - $ref: '#/components/parameters/NumericID'
+      responses: { '200': { description: 已授权聊天附件下载。 } }
+  /api/files/{id}/permanent:
+    delete:
+      tags: [文件]
+      summary: 永久删除文件元数据和物理文件
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      responses: { '200': { description: 明确确认后文件已永久删除。 } }
+  /api/socket/customer:
+    get:
+      tags: [客服聊天]
+      summary: 将访客连接升级为客服 WebSocket
+      responses: { '101': { description: WebSocket 升级成功。 } }
+  /api/socket/customer/{id}/title:
+    put:
+      tags: [客服聊天]
+      summary: 更新访客会话标题
+      parameters: [{ $ref: '#/components/parameters/ConversationID' }]
+      responses: { '200': { description: 会话标题更新成功。 } }
+  /api/socket/customer/{id}:
+    delete:
+      tags: [客服聊天]
+      summary: 删除访客本人会话
+      parameters: [{ $ref: '#/components/parameters/ConversationID' }]
+      responses: { '200': { description: 会话删除成功。 } }
+  /api/socket/customer/{id}/close:
+    post:
+      tags: [客服聊天]
+      summary: 关闭访客本人会话
+      parameters: [{ $ref: '#/components/parameters/ConversationID' }]
+      responses: { '200': { description: 会话关闭成功。 } }
+  /api/socket/customer/{id}/files:
+    post:
+      tags: [客服聊天]
+      summary: 上传客服聊天附件
+      parameters: [{ $ref: '#/components/parameters/ConversationID' }]
+      responses: { '201': { description: 附件消息创建成功。 } }
+  /api/socket/customer/{id}/files/{messageId}:
+    get:
+      tags: [客服聊天]
+      summary: 获取访客本人客服附件
+      parameters:
+        - $ref: '#/components/parameters/ConversationID'
+        - $ref: '#/components/parameters/MessageID'
+      responses: { '200': { description: 已授权附件内容。 } }
+  /api/socket/notifications:
+    get:
+      tags: [客服聊天]
+      summary: 升级为已鉴权的全局客服通知连接
+      security: [{ cookieSession: [] }]
+      responses: { '101': { description: WebSocket 升级成功。 } }
+  /api/socket/conversations:
+    get:
+      tags: [客服聊天]
+      summary: 查询客服会话
+      security: [{ cookieSession: [] }]
+      responses: { '200': { description: 已授权客服会话列表。 } }
+  /api/socket/conversations/{id}/messages:
+    get:
+      tags: [客服聊天]
+      summary: 查询客服消息
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/ConversationID' }]
+      responses: { '200': { description: 会话消息列表。 } }
+    post:
+      tags: [客服聊天]
+      summary: 发送管理员客服消息
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/ConversationID' }]
+      responses: { '201': { description: 客服消息发送成功。 } }
+  /api/socket/admin:
+    get:
+      tags: [客服聊天]
+      summary: 将管理员连接升级为客服 WebSocket
+      security: [{ cookieSession: [] }]
+      responses: { '101': { description: WebSocket 升级成功。 } }
+  /api/socket/conversations/{id}/files:
+    post:
+      tags: [客服聊天]
+      summary: 上传管理员客服附件
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/ConversationID' }]
+      responses: { '201': { description: 附件消息创建成功。 } }
+  /api/socket/conversations/{id}/files/{messageId}:
+    get:
+      tags: [客服聊天]
+      summary: 下载已授权客服附件
+      security: [{ cookieSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ConversationID'
+        - $ref: '#/components/parameters/MessageID'
+      responses: { '200': { description: 已授权附件内容。 } }
+  /api/socket/conversations/{id}/join:
+    post:
+      tags: [客服聊天]
+      summary: 加入客服会话
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/ConversationID' }]
+      responses: { '200': { description: 客服人员已加入会话。 } }
+  /api/socket/conversations/{id}:
+    delete:
+      tags: [客服聊天]
+      summary: 管理员删除客服会话
+      security: [{ cookieSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/ConversationID' }]
+      responses: { '200': { description: 会话删除成功。 } }
+components:
+  securitySchemes:
+    cookieSession:
+      type: apiKey
+      in: cookie
+      name: sessionId
+  parameters:
+    NumericID:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    ConversationID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
+    MessageID:
+      name: messageId
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    ChatSource:
+      name: source
+      in: path
+      required: true
+      schema: { type: string, enum: [internal-chat, customer-chat] }
+  responses:
+    Unauthorized:
+      description: 会话缺失、无效或已过期。
+    Forbidden:
+      description: 已登录用户缺少所需菜单、动作或所有权权限。
+  schemas:
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string, format: password }
+    InternalChatMessageRequest:
+      type: object
+      properties:
+        recipientId:
+          oneOf:
+            - { type: integer, minimum: 1 }
+            - { type: 'null' }
+        content: { type: string, maxLength: 2000 }
+        attachmentIds:
+          type: array
+          maxItems: 10
+          items: { type: integer, minimum: 1 }

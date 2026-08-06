@@ -60,23 +60,32 @@ const (
 	VisitorAnalyticsView  = "visitor-analytics.view"
 )
 
+// IsSuperAdminRoleCode 校验对应业务条件。
 func IsSuperAdminRoleCode(code string) bool {
 	return strings.EqualFold(strings.TrimSpace(code), SuperAdminRoleCode)
 }
 
+// IsAdministratorRoleCode 校验对应业务条件。
 func IsAdministratorRoleCode(code string) bool {
 	code = strings.TrimSpace(code)
 	return strings.EqualFold(code, SuperAdminRoleCode) || strings.EqualFold(code, SystemAdminRoleCode)
 }
 
+// Definition 定义对应业务的数据结构与调用契约。
 type Definition struct {
-	Code     string `json:"code"`
+	// Code 表示编码。
+	Code string `json:"code"`
+	// Resource 表示变量 Resource。
 	Resource string `json:"resource"`
-	Action   string `json:"action"`
-	Label    string `json:"label"`
-	ReadOnly bool   `json:"readOnly"`
+	// Action 表示操作权限。
+	Action string `json:"action"`
+	// Label 表示显示标签。
+	Label string `json:"label"`
+	// ReadOnly 表示只读状态。
+	ReadOnly bool `json:"readOnly"`
 }
 
+// definitions 保存模块使用的固定配置或共享状态。
 var definitions = []Definition{
 	{DashboardQuery, "dashboard", "query", "查询工作台", true},
 	{DashboardView, "dashboard", "view", "查看工作台", true},
@@ -124,20 +133,25 @@ var definitions = []Definition{
 	{VisitorAnalyticsView, "visitor-analytics", "view", "查看访问明细", true},
 }
 
+// Definitions 实现对应业务逻辑。
 func Definitions() []Definition {
+	// result 保存操作结果。
 	result := make([]Definition, len(definitions))
 	copy(result, definitions)
 	return result
 }
 
+// AllCodes 实现对应业务逻辑。
 func AllCodes() []string {
 	return filterCodes(func(Definition) bool { return true })
 }
 
+// DefaultRoleCodes 实现对应业务逻辑。
 func DefaultRoleCodes() []string {
 	return filterCodes(func(definition Definition) bool { return definition.ReadOnly })
 }
 
+// RoleCodes 实现对应业务逻辑。
 func RoleCodes(roleCode string) []string {
 	if IsAdministratorRoleCode(roleCode) {
 		return AllCodes()
@@ -145,8 +159,10 @@ func RoleCodes(roleCode string) []string {
 	return DefaultRoleCodes()
 }
 
+// IsKnown 校验对应业务条件。
 func IsKnown(code string) bool {
 	code = strings.TrimSpace(code)
+	// definition 表示当前循环中的索引、键或业务元素。
 	for _, definition := range definitions {
 		if definition.Code == code {
 			return true
@@ -155,8 +171,10 @@ func IsKnown(code string) bool {
 	return false
 }
 
+// IsReadOnly 校验对应业务条件。
 func IsReadOnly(code string) bool {
 	code = strings.TrimSpace(code)
+	// definition 表示当前循环中的索引、键或业务元素。
 	for _, definition := range definitions {
 		if definition.Code == code {
 			return definition.ReadOnly
@@ -165,7 +183,9 @@ func IsReadOnly(code string) bool {
 	return false
 }
 
+// Contains 实现对应业务逻辑。
 func Contains(codes []string, required string) bool {
+	// code 表示当前循环中的索引、键或业务元素。
 	for _, code := range codes {
 		if code == required {
 			return true
@@ -174,11 +194,14 @@ func Contains(codes []string, required string) bool {
 	return false
 }
 
-// NormalizeCodes validates action codes and returns them once in catalog order.
-// An empty slice is valid and is used to clear a user's personal grants.
+// NormalizeCodes 校验动作权限编码，并按权限目录顺序去重返回。
+// 空切片是有效输入，用于清空用户个人附加权限。
 func NormalizeCodes(codes []string) ([]string, bool) {
+	// selected 保存已选择。
 	selected := make(map[string]bool, len(codes))
+	// rawCode 表示当前循环中的索引、键或业务元素。
 	for _, rawCode := range codes {
+		// code 保存编码。
 		code := strings.TrimSpace(rawCode)
 		if !IsKnown(code) {
 			return nil, false
@@ -188,11 +211,15 @@ func NormalizeCodes(codes []string) ([]string, bool) {
 	return selectedCodes(selected), true
 }
 
-// MergeCodes combines grants and returns only known codes in catalog order.
+// MergeCodes 合并权限并仅按目录顺序返回已知编码。
 func MergeCodes(codeGroups ...[]string) []string {
+	// selected 保存已选择。
 	selected := map[string]bool{}
+	// codes 表示当前循环中的索引、键或业务元素。
 	for _, codes := range codeGroups {
+		// rawCode 表示当前循环中的索引、键或业务元素。
 		for _, rawCode := range codes {
+			// code 保存编码。
 			code := strings.TrimSpace(rawCode)
 			if IsKnown(code) {
 				selected[code] = true
@@ -202,8 +229,11 @@ func MergeCodes(codeGroups ...[]string) []string {
 	return selectedCodes(selected)
 }
 
+// selectedCodes 实现对应业务逻辑。
 func selectedCodes(selected map[string]bool) []string {
+	// codes 保存编码。
 	codes := make([]string, 0, len(selected))
+	// definition 表示当前循环中的索引、键或业务元素。
 	for _, definition := range definitions {
 		if selected[definition.Code] {
 			codes = append(codes, definition.Code)
@@ -212,8 +242,11 @@ func selectedCodes(selected map[string]bool) []string {
 	return codes
 }
 
+// filterCodes 实现对应业务逻辑。
 func filterCodes(keep func(Definition) bool) []string {
+	// codes 保存编码。
 	codes := make([]string, 0, len(definitions))
+	// definition 表示当前循环中的索引、键或业务元素。
 	for _, definition := range definitions {
 		if keep(definition) {
 			codes = append(codes, definition.Code)

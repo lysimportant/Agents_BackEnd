@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// registerPublicSocketRoutes 执行对应业务操作。
 func registerPublicSocketRoutes(api *gin.RouterGroup, handler *handlers.SocketHandler) {
 	api.GET("/socket/customer", handler.CustomerSocket)
 	api.PUT("/socket/customer/:id/title", handler.CustomerUpdateTitle)
@@ -16,8 +17,10 @@ func registerPublicSocketRoutes(api *gin.RouterGroup, handler *handlers.SocketHa
 	api.GET("/socket/customer/:id/files/:messageId", handler.CustomerAttachment)
 }
 
+// registerProtectedSocketRoutes 执行对应业务操作。
 func registerProtectedSocketRoutes(routes *gin.RouterGroup, store middleware.UserStore, handler *handlers.SocketHandler) {
 	routes.GET("/socket/notifications", handler.NotificationSocket)
+	// requireMenu 保存菜单。
 	requireMenu := middleware.RequireMenu(store, "socket-support")
 	routes.GET("/socket/conversations", requireMenu, middleware.RequireAction(store, permissions.SocketQuery), handler.ListConversations)
 	routes.GET("/socket/conversations/:id/messages", requireMenu, middleware.RequireAction(store, permissions.SocketView), handler.ListMessages)

@@ -5,6 +5,7 @@ import { Avatar as AvatarPrimitive } from "@base-ui/react/avatar"
 
 import { cn } from "@/lib/utils"
 
+/** Avatar 实现对应业务逻辑。 */
 function Avatar({
   className,
   size = "default",
@@ -25,6 +26,7 @@ function Avatar({
   )
 }
 
+/** AvatarImage 定义对应业务的数据结构与调用契约。 */
 function AvatarImage({ className, ...props }: AvatarPrimitive.Image.Props) {
   return (
     <AvatarPrimitive.Image
@@ -38,6 +40,7 @@ function AvatarImage({ className, ...props }: AvatarPrimitive.Image.Props) {
   )
 }
 
+/** AvatarFallback 实现对应业务逻辑。 */
 function AvatarFallback({
   className,
   ...props
@@ -54,6 +57,7 @@ function AvatarFallback({
   )
 }
 
+/** AvatarBadge 定义对应业务的数据结构与调用契约。 */
 function AvatarBadge({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
@@ -70,6 +74,7 @@ function AvatarBadge({ className, ...props }: React.ComponentProps<"span">) {
   )
 }
 
+/** AvatarGroup 定义对应业务的数据结构与调用契约。 */
 function AvatarGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -83,6 +88,7 @@ function AvatarGroup({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** AvatarGroupCount 实现对应业务逻辑。 */
 function AvatarGroupCount({
   className,
   ...props

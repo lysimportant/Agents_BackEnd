@@ -1,0 +1,18 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": [
+    "src/services/api.ts",
+    "src/services/fileApi.ts",
+    "src/services/visitorAnalyticsApi.ts",
+    "src/types/admin.ts",
+    "src/features/chat/socketApi.ts",
+    "src/features/chat/types.ts",
+    "src/features/chat/unreadStore.ts",
+    "src/features/workspace/useAdminWorkspace.ts"
+  ],
+  "out": "../.workspace-temp/p29-docs/frontend",
+  "entryPointStrategy": "resolve",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "readme": "none"
+}

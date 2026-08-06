@@ -15,28 +15,49 @@ const (
 	systemAdminRoleCode = permissions.SystemAdminRoleCode
 )
 
+// MemoryStore 定义对应业务的数据结构与调用契约。
 type MemoryStore struct {
-	mu                sync.Mutex
-	dataPoints        []models.DataPoint
-	users             []models.User
-	departments       []models.Department
-	roles             []models.Role
-	menus             []models.Menu
-	articles          []models.Article
-	files             []models.ManagedFile
-	userMenuIDs       map[int][]int
-	userActionCodes   map[int][]string
+	// mu 表示并发互斥锁。
+	mu sync.Mutex
+	// dataPoints 表示业务数据。
+	dataPoints []models.DataPoint
+	// users 表示用户。
+	users []models.User
+	// departments 表示部门。
+	departments []models.Department
+	// roles 表示角色。
+	roles []models.Role
+	// menus 表示菜单。
+	menus []models.Menu
+	// articles 表示文章。
+	articles []models.Article
+	// files 表示文件。
+	files []models.ManagedFile
+	// userMenuIDs 表示用户菜单标识列表。
+	userMenuIDs map[int][]int
+	// userActionCodes 表示用户。
+	userActionCodes map[int][]string
+	// departmentMenuIDs 表示部门菜单标识列表。
 	departmentMenuIDs map[int][]int
-	roleMenuIDs       map[int][]int
-	nextUserID        int
-	nextDepartmentID  int
-	nextRoleID        int
-	nextMenuID        int
-	nextArticleID     int
-	nextFileID        int
+	// roleMenuIDs 表示角色菜单标识列表。
+	roleMenuIDs map[int][]int
+	// nextUserID 表示用户标识。
+	nextUserID int
+	// nextDepartmentID 表示部门标识。
+	nextDepartmentID int
+	// nextRoleID 表示角色标识。
+	nextRoleID int
+	// nextMenuID 表示菜单标识。
+	nextMenuID int
+	// nextArticleID 表示文章标识。
+	nextArticleID int
+	// nextFileID 表示文件标识。
+	nextFileID int
 }
 
+// NewMemoryStore 构造并返回对应业务实例。
 func NewMemoryStore() *MemoryStore {
+	// now 保存当前时间。
 	now := time.Now()
 	return &MemoryStore{
 		dataPoints: []models.DataPoint{
@@ -114,57 +135,70 @@ func NewMemoryStore() *MemoryStore {
 	}
 }
 
+// ListDataPoints 查询并返回对应业务列表。
 func (s *MemoryStore) ListDataPoints() []models.DataPoint {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]models.DataPoint(nil), s.dataPoints...)
 }
 
+// CreateDataPoint 创建或追加对应业务记录。
 func (s *MemoryStore) CreateDataPoint(request models.CreateDataPointRequest) models.DataPoint {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// dataPoint 保存业务数据。
 	dataPoint := models.DataPoint{ID: len(s.dataPoints) + 1, Source: request.Source, Metric: request.Metric, Value: request.Value, Unit: request.Unit, CreatedAt: time.Now()}
 	s.dataPoints = append(s.dataPoints, dataPoint)
 	return dataPoint
 }
 
+// ListUsers 查询并返回对应业务列表。
 func (s *MemoryStore) ListUsers() []models.User {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]models.User(nil), s.users...)
 }
 
+// FindUserByID 获取对应业务记录。
 func (s *MemoryStore) FindUserByID(id int) (models.User, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.findUserByID(id)
 }
 
+// FindUserByUsername 获取对应业务记录。
 func (s *MemoryStore) FindUserByUsername(username string) (models.User, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.findUserByUsername(username)
 }
 
+// CreateUser 创建或追加对应业务记录。
 func (s *MemoryStore) CreateUser(request models.UserRequest, passwordHash string) (models.User, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// username 保存用户名。
 	username := strings.TrimSpace(request.Username)
+	// exists 保存业务值及其是否存在或处理成功的标记。
 	if _, exists := s.findUserByUsername(username); exists {
 		return models.User{}, "账号已存在"
 	}
+	// departmentID、departmentName、message 保存部门标识、部门名称、消息。
 	departmentID, departmentName, message := s.resolveDepartment(request.DepartmentID, request.Department)
 	if message != "" {
 		return models.User{}, message
 	}
+	// roleID、roleName、roleCode、message 保存角色标识、角色名称、角色编码等关联值。
 	roleID, roleName, roleCode, message := s.resolveRole(request.RoleID, request.Role)
 	if message != "" {
 		return models.User{}, message
 	}
+	// canLogin 保存登录。
 	canLogin := true
 	if request.CanLogin != nil {
 		canLogin = *request.CanLogin
 	}
+	// status 保存状态。
 	status := strings.TrimSpace(request.Status)
 	if status == "" {
 		status = "在岗"
@@ -172,6 +206,7 @@ func (s *MemoryStore) CreateUser(request models.UserRequest, passwordHash string
 	if status == "停用" {
 		canLogin = false
 	}
+	// age 保存年龄。
 	age := 0
 	if request.Age != nil {
 		age = *request.Age
@@ -179,6 +214,7 @@ func (s *MemoryStore) CreateUser(request models.UserRequest, passwordHash string
 	if age < 0 || age > 150 {
 		return models.User{}, "年龄必须在 0 到 150 之间"
 	}
+	// description、avatarURL 保存说明、头像地址。
 	description, avatarURL := "", ""
 	if request.Description != nil {
 		description = strings.TrimSpace(*request.Description)
@@ -186,6 +222,7 @@ func (s *MemoryStore) CreateUser(request models.UserRequest, passwordHash string
 	if request.AvatarURL != nil {
 		avatarURL = strings.TrimSpace(*request.AvatarURL)
 	}
+	// user 保存用户。
 	user := models.User{ID: s.nextUserID, Username: username, Name: request.Name, RoleID: roleID, Role: roleName, RoleCode: roleCode, DepartmentID: departmentID, Department: departmentName, Status: status, Shift: request.Shift, Phone: request.Phone, Email: request.Email, Age: age, Description: description, AvatarURL: avatarURL, CanLogin: canLogin, PasswordHash: passwordHash, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	s.nextUserID++
 	s.users = append(s.users, user)
@@ -193,19 +230,24 @@ func (s *MemoryStore) CreateUser(request models.UserRequest, passwordHash string
 	return user, ""
 }
 
+// UpdateUser 更新并保存对应业务状态。
 func (s *MemoryStore) UpdateUser(id int, request models.UserRequest, passwordHash string) (models.User, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// index、found 保存业务值及其是否存在或处理成功的标记。
 	index, found := s.findUserIndexByID(id)
 	if !found {
 		return models.User{}, "用户不存在"
 	}
 	if strings.EqualFold(s.users[index].Username, "MH") {
+		// root、exists 保存业务值及其是否存在或处理成功的标记。
 		root, exists := s.findDepartmentByCode("huajian")
 		if !exists {
 			return models.User{}, "根部门不存在"
 		}
+		// canLogin 保存登录。
 		canLogin := true
+		// systemRole、exists 保存业务值及其是否存在或处理成功的标记。
 		systemRole, exists := s.findRoleByCode(superAdminRoleCode)
 		if !exists {
 			return models.User{}, "超级管理员角色不存在"
@@ -217,7 +259,9 @@ func (s *MemoryStore) UpdateUser(id int, request models.UserRequest, passwordHas
 		request.Department = root.Name
 		request.CanLogin = &canLogin
 	}
+	// username 保存用户名。
 	username := strings.TrimSpace(request.Username)
+	// existing、exists 保存业务值及其是否存在或处理成功的标记。
 	if existing, exists := s.findUserByUsername(username); exists && existing.ID != id {
 		return models.User{}, "账号已存在"
 	}
@@ -227,6 +271,7 @@ func (s *MemoryStore) UpdateUser(id int, request models.UserRequest, passwordHas
 	if strings.EqualFold(s.users[index].Username, "MH") {
 		request.Status = "在岗"
 	}
+	// canLogin 保存登录。
 	canLogin := s.users[index].CanLogin
 	if request.CanLogin != nil {
 		canLogin = *request.CanLogin
@@ -234,14 +279,17 @@ func (s *MemoryStore) UpdateUser(id int, request models.UserRequest, passwordHas
 	if request.Status == "停用" {
 		canLogin = false
 	}
+	// departmentID、departmentName、message 保存部门标识、部门名称、消息。
 	departmentID, departmentName, message := s.resolveDepartment(request.DepartmentID, request.Department)
 	if message != "" {
 		return models.User{}, message
 	}
+	// roleID、roleName、roleCode、message 保存角色标识、角色名称、角色编码等关联值。
 	roleID, roleName, roleCode, message := s.resolveRole(request.RoleID, request.Role)
 	if message != "" {
 		return models.User{}, message
 	}
+	// age 保存年龄。
 	age := s.users[index].Age
 	if request.Age != nil {
 		age = *request.Age
@@ -275,9 +323,11 @@ func (s *MemoryStore) UpdateUser(id int, request models.UserRequest, passwordHas
 	return s.users[index], ""
 }
 
+// DeleteUser 删除或清理对应业务记录。
 func (s *MemoryStore) DeleteUser(id int) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// index、found 保存业务值及其是否存在或处理成功的标记。
 	index, found := s.findUserIndexByID(id)
 	if !found {
 		return "用户不存在"
@@ -291,12 +341,14 @@ func (s *MemoryStore) DeleteUser(id int) string {
 	return ""
 }
 
+// UpdateUserPassword 更新并保存对应业务状态。
 func (s *MemoryStore) UpdateUserPassword(id int, passwordHash string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if strings.TrimSpace(passwordHash) == "" {
 		return "密码不能为空"
 	}
+	// index、found 保存业务值及其是否存在或处理成功的标记。
 	index, found := s.findUserIndexByID(id)
 	if !found {
 		return "用户不存在"
@@ -306,14 +358,18 @@ func (s *MemoryStore) UpdateUserPassword(id int, passwordHash string) string {
 	return ""
 }
 
+// UpdateUserProfile 更新并保存对应业务状态。
 func (s *MemoryStore) UpdateUserProfile(id int, request models.UserProfileRequest) (models.User, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// index、found 保存业务值及其是否存在或处理成功的标记。
 	index, found := s.findUserIndexByID(id)
 	if !found {
 		return models.User{}, "用户不存在"
 	}
+	// name、email、phone 保存名称、邮箱地址、电话号码。
 	name, email, phone := s.users[index].Name, s.users[index].Email, s.users[index].Phone
+	// age、description、avatarURL 保存年龄、说明、头像地址。
 	age, description, avatarURL := s.users[index].Age, s.users[index].Description, s.users[index].AvatarURL
 	if request.Name != nil {
 		name = strings.TrimSpace(*request.Name)
@@ -349,13 +405,17 @@ func (s *MemoryStore) UpdateUserProfile(id int, request models.UserProfileReques
 	return s.users[index], ""
 }
 
+// ListRoleUsers 查询并返回对应业务列表。
 func (s *MemoryStore) ListRoleUsers(roleID int) ([]models.User, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// found 保存业务值及其是否存在或处理成功的标记。
 	if _, found := s.findRoleByID(roleID); !found {
 		return nil, "角色不存在"
 	}
+	// users 保存用户。
 	users := []models.User{}
+	// user 表示当前循环中的索引、键或业务元素。
 	for _, user := range s.users {
 		if user.RoleID != nil && *user.RoleID == roleID {
 			users = append(users, user)
@@ -364,13 +424,17 @@ func (s *MemoryStore) ListRoleUsers(roleID int) ([]models.User, string) {
 	return users, ""
 }
 
+// ListDepartmentUsers 查询并返回对应业务列表。
 func (s *MemoryStore) ListDepartmentUsers(departmentID int) ([]models.User, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// found 保存业务值及其是否存在或处理成功的标记。
 	if _, found := s.findDepartmentByID(departmentID); !found {
 		return nil, "部门不存在"
 	}
+	// users 保存用户。
 	users := []models.User{}
+	// user 表示当前循环中的索引、键或业务元素。
 	for _, user := range s.users {
 		if user.DepartmentID != nil && *user.DepartmentID == departmentID {
 			users = append(users, user)
@@ -379,31 +443,39 @@ func (s *MemoryStore) ListDepartmentUsers(departmentID int) ([]models.User, stri
 	return users, ""
 }
 
+// ListDepartments 查询并返回对应业务列表。
 func (s *MemoryStore) ListDepartments() []models.Department {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]models.Department(nil), s.departments...)
 }
 
+// FindDepartmentByID 获取对应业务记录。
 func (s *MemoryStore) FindDepartmentByID(id int) (models.Department, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.findDepartmentByID(id)
 }
 
+// CreateDepartment 创建或追加对应业务记录。
 func (s *MemoryStore) CreateDepartment(request models.DepartmentRequest) (models.Department, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// code 保存编码。
 	code := strings.ToLower(strings.TrimSpace(request.Code))
+	// exists 保存业务值及其是否存在或处理成功的标记。
 	if _, exists := s.findDepartmentByCode(code); exists {
 		return models.Department{}, "部门编码已存在"
 	}
 	if request.ParentID != nil {
+		// exists 保存业务值及其是否存在或处理成功的标记。
 		if _, exists := s.findDepartmentByID(*request.ParentID); !exists {
 			return models.Department{}, "上级部门不存在"
 		}
 	}
+	// now 保存当前时间。
 	now := time.Now()
+	// department 保存部门。
 	department := models.Department{
 		ID: s.nextDepartmentID, Name: strings.TrimSpace(request.Name), Code: code, ParentID: request.ParentID,
 		Leader: request.Leader, Phone: request.Phone, Email: request.Email, Sort: request.Sort, Status: request.Status,
@@ -419,13 +491,16 @@ func (s *MemoryStore) CreateDepartment(request models.DepartmentRequest) (models
 	return department, ""
 }
 
+// UpdateDepartment 更新并保存对应业务状态。
 func (s *MemoryStore) UpdateDepartment(id int, request models.DepartmentRequest) (models.Department, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// index、exists 保存业务值及其是否存在或处理成功的标记。
 	index, exists := s.findDepartmentIndexByID(id)
 	if !exists {
 		return models.Department{}, "部门不存在"
 	}
+	// code 保存编码。
 	code := strings.ToLower(strings.TrimSpace(request.Code))
 	if s.departments[index].Code == "huajian" && code != "huajian" {
 		return models.Department{}, "根部门编码不可修改"
@@ -436,6 +511,7 @@ func (s *MemoryStore) UpdateDepartment(id int, request models.DepartmentRequest)
 	if s.departments[index].Code == "huajian" && request.Status != "启用" {
 		return models.Department{}, "根部门必须保持启用"
 	}
+	// other、exists 保存业务值及其是否存在或处理成功的标记。
 	if other, exists := s.findDepartmentByCode(code); exists && other.ID != id {
 		return models.Department{}, "部门编码已存在"
 	}
@@ -443,12 +519,14 @@ func (s *MemoryStore) UpdateDepartment(id int, request models.DepartmentRequest)
 		if *parentID == id {
 			return models.Department{}, "上级部门不能是当前部门的下级"
 		}
+		// parent、exists 保存业务值及其是否存在或处理成功的标记。
 		parent, exists := s.findDepartmentByID(*parentID)
 		if !exists {
 			return models.Department{}, "上级部门不存在"
 		}
 		parentID = parent.ParentID
 	}
+	// oldName 保存名称。
 	oldName := s.departments[index].Name
 	s.departments[index].Name = strings.TrimSpace(request.Name)
 	s.departments[index].Code = code
@@ -460,6 +538,7 @@ func (s *MemoryStore) UpdateDepartment(id int, request models.DepartmentRequest)
 	s.departments[index].Status = request.Status
 	s.departments[index].UpdatedAt = time.Now()
 	if oldName != s.departments[index].Name {
+		// userIndex 表示当前循环中的索引、键或业务元素。
 		for userIndex := range s.users {
 			if s.users[userIndex].DepartmentID != nil && *s.users[userIndex].DepartmentID == id {
 				s.users[userIndex].Department = s.departments[index].Name
@@ -469,18 +548,22 @@ func (s *MemoryStore) UpdateDepartment(id int, request models.DepartmentRequest)
 	return s.departments[index], ""
 }
 
+// DeleteDepartment 删除或清理对应业务记录。
 func (s *MemoryStore) DeleteDepartment(id int) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// index、exists 保存业务值及其是否存在或处理成功的标记。
 	index, exists := s.findDepartmentIndexByID(id)
 	if !exists {
 		return "部门不存在"
 	}
+	// department 表示当前循环中的索引、键或业务元素。
 	for _, department := range s.departments {
 		if department.ParentID != nil && *department.ParentID == id {
 			return "请先处理下级部门"
 		}
 	}
+	// user 表示当前循环中的索引、键或业务元素。
 	for _, user := range s.users {
 		if user.DepartmentID != nil && *user.DepartmentID == id {
 			return "请先转移该部门用户"
@@ -491,14 +574,19 @@ func (s *MemoryStore) DeleteDepartment(id int) string {
 	return ""
 }
 
+// ListDepartmentMenus 查询并返回对应业务列表。
 func (s *MemoryStore) ListDepartmentMenus(departmentID int) ([]models.Menu, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// exists 保存业务值及其是否存在或处理成功的标记。
 	if _, exists := s.findDepartmentByID(departmentID); !exists {
 		return nil, "部门不存在"
 	}
+	// menus 保存菜单。
 	menus := make([]models.Menu, 0, len(s.departmentMenuIDs[departmentID]))
+	// menuID 表示当前循环中的索引、键或业务元素。
 	for _, menuID := range s.departmentMenuIDs[departmentID] {
+		// menu、found 保存业务值及其是否存在或处理成功的标记。
 		if menu, found := s.findMenuByID(menuID); found {
 			menus = append(menus, menu)
 		}
@@ -506,21 +594,27 @@ func (s *MemoryStore) ListDepartmentMenus(departmentID int) ([]models.Menu, stri
 	return menus, ""
 }
 
+// UpdateDepartmentMenus 更新并保存对应业务状态。
 func (s *MemoryStore) UpdateDepartmentMenus(departmentID int, menuIDs []int) ([]int, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// department、exists 保存业务值及其是否存在或处理成功的标记。
 	department, exists := s.findDepartmentByID(departmentID)
 	if !exists {
 		return nil, "部门不存在"
 	}
+	// menuID 表示当前循环中的索引、键或业务元素。
 	for _, menuID := range menuIDs {
 		if !s.menuExists(menuID) {
 			return nil, "菜单不存在"
 		}
 	}
+	// ids 保存标识列表。
 	ids := uniqueIDs(menuIDs)
 	if department.Code == "huajian" {
+		// allMenuIDs 保存菜单标识列表。
 		allMenuIDs := make([]int, 0, len(s.menus))
+		// menu 表示当前循环中的索引、键或业务元素。
 		for _, menu := range s.menus {
 			allMenuIDs = append(allMenuIDs, menu.ID)
 		}
@@ -532,26 +626,33 @@ func (s *MemoryStore) UpdateDepartmentMenus(departmentID int, menuIDs []int) ([]
 	return append([]int(nil), ids...), ""
 }
 
+// ListRoles 查询并返回对应业务列表。
 func (s *MemoryStore) ListRoles() []models.Role {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]models.Role(nil), s.roles...)
 }
 
+// FindRoleByID 获取对应业务记录。
 func (s *MemoryStore) FindRoleByID(id int) (models.Role, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.findRoleByID(id)
 }
 
+// CreateRole 创建或追加对应业务记录。
 func (s *MemoryStore) CreateRole(request models.RoleRequest) (models.Role, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// code 保存编码。
 	code := strings.ToLower(strings.TrimSpace(request.Code))
+	// exists 保存业务值及其是否存在或处理成功的标记。
 	if _, exists := s.findRoleByCode(code); exists {
 		return models.Role{}, "角色编码已存在"
 	}
+	// now 保存当前时间。
 	now := time.Now()
+	// role 保存角色。
 	role := models.Role{
 		ID: s.nextRoleID, Name: strings.TrimSpace(request.Name), Code: code,
 		Description: strings.TrimSpace(request.Description), Sort: request.Sort, Status: request.Status,
@@ -563,15 +664,20 @@ func (s *MemoryStore) CreateRole(request models.RoleRequest) (models.Role, strin
 	return role, ""
 }
 
+// UpdateRole 更新并保存对应业务状态。
 func (s *MemoryStore) UpdateRole(id int, request models.RoleRequest) (models.Role, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// index、exists 保存业务值及其是否存在或处理成功的标记。
 	index, exists := s.findRoleIndexByID(id)
 	if !exists {
 		return models.Role{}, "角色不存在"
 	}
+	// existing 保存已有记录。
 	existing := s.roles[index]
+	// code 保存编码。
 	code := strings.ToLower(strings.TrimSpace(request.Code))
+	// name 保存名称。
 	name := strings.TrimSpace(request.Name)
 	if code != existing.Code {
 		return models.Role{}, "角色编码创建后不可修改"
@@ -582,6 +688,7 @@ func (s *MemoryStore) UpdateRole(id int, request models.RoleRequest) (models.Rol
 	if existing.Code == systemAdminRoleCode && (code != systemAdminRoleCode || name != "系统管理员" || request.Status != "启用") {
 		return models.Role{}, "系统管理员角色的名称、编码和状态不可修改"
 	}
+	// other、exists 保存业务值及其是否存在或处理成功的标记。
 	if other, exists := s.findRoleByCode(code); exists && other.ID != id {
 		return models.Role{}, "角色编码已存在"
 	}
@@ -591,6 +698,7 @@ func (s *MemoryStore) UpdateRole(id int, request models.RoleRequest) (models.Rol
 	s.roles[index].Sort = request.Sort
 	s.roles[index].Status = request.Status
 	s.roles[index].UpdatedAt = time.Now()
+	// userIndex 表示当前循环中的索引、键或业务元素。
 	for userIndex := range s.users {
 		if s.users[userIndex].RoleID != nil && *s.users[userIndex].RoleID == id {
 			s.users[userIndex].Role = name
@@ -601,9 +709,11 @@ func (s *MemoryStore) UpdateRole(id int, request models.RoleRequest) (models.Rol
 	return s.roles[index], ""
 }
 
+// DeleteRole 删除或清理对应业务记录。
 func (s *MemoryStore) DeleteRole(id int) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// index、exists 保存业务值及其是否存在或处理成功的标记。
 	index, exists := s.findRoleIndexByID(id)
 	if !exists {
 		return "角色不存在"
@@ -611,6 +721,7 @@ func (s *MemoryStore) DeleteRole(id int) string {
 	if permissions.IsAdministratorRoleCode(s.roles[index].Code) {
 		return "超级管理员和系统管理员角色不能删除"
 	}
+	// user 表示当前循环中的索引、键或业务元素。
 	for _, user := range s.users {
 		if user.RoleID != nil && *user.RoleID == id {
 			return "请先转移该角色用户"
@@ -621,30 +732,38 @@ func (s *MemoryStore) DeleteRole(id int) string {
 	return ""
 }
 
+// ListRoleMenuIDs 查询并返回对应业务列表。
 func (s *MemoryStore) ListRoleMenuIDs(roleID int) ([]int, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// exists 保存业务值及其是否存在或处理成功的标记。
 	if _, exists := s.findRoleByID(roleID); !exists {
 		return nil, "角色不存在"
 	}
 	return append([]int(nil), s.roleMenuIDs[roleID]...), ""
 }
 
+// UpdateRoleMenus 更新并保存对应业务状态。
 func (s *MemoryStore) UpdateRoleMenus(roleID int, menuIDs []int) ([]int, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// role、exists 保存业务值及其是否存在或处理成功的标记。
 	role, exists := s.findRoleByID(roleID)
 	if !exists {
 		return nil, "角色不存在"
 	}
+	// menuID 表示当前循环中的索引、键或业务元素。
 	for _, menuID := range menuIDs {
 		if !s.menuExists(menuID) {
 			return nil, "菜单不存在"
 		}
 	}
+	// ids 保存标识列表。
 	ids := uniqueIDs(menuIDs)
 	if permissions.IsAdministratorRoleCode(role.Code) {
+		// allMenuIDs 保存菜单标识列表。
 		allMenuIDs := make([]int, 0, len(s.menus))
+		// menu 表示当前循环中的索引、键或业务元素。
 		for _, menu := range s.menus {
 			allMenuIDs = append(allMenuIDs, menu.ID)
 		}
@@ -656,33 +775,40 @@ func (s *MemoryStore) UpdateRoleMenus(roleID int, menuIDs []int) ([]int, string)
 	return append([]int(nil), ids...), ""
 }
 
+// ListMenus 查询并返回对应业务列表。
 func (s *MemoryStore) ListMenus() []models.Menu {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]models.Menu(nil), s.menus...)
 }
 
+// FindMenuByID 获取对应业务记录。
 func (s *MemoryStore) FindMenuByID(id int) (models.Menu, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.findMenuByID(id)
 }
 
+// CreateMenu 创建或追加对应业务记录。
 func (s *MemoryStore) CreateMenu(request models.MenuRequest) (models.Menu, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if request.ParentID != nil && !s.menuExists(*request.ParentID) {
 		return models.Menu{}, "父级菜单不存在"
 	}
+	// menu 保存菜单。
 	menu := models.Menu{ID: s.nextMenuID, Name: request.Name, Code: request.Code, Path: request.Path, Icon: request.Icon, ParentID: request.ParentID, Sort: request.Sort, Status: request.Status, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	s.nextMenuID++
 	s.menus = append(s.menus, menu)
+	// root、exists 保存业务值及其是否存在或处理成功的标记。
 	if root, exists := s.findDepartmentByCode("huajian"); exists {
 		s.departmentMenuIDs[root.ID] = append(s.departmentMenuIDs[root.ID], menu.ID)
 	}
+	// board、exists 保存业务值及其是否存在或处理成功的标记。
 	if board, exists := s.findDepartmentByCode("board-office"); exists {
 		s.departmentMenuIDs[board.ID] = append(s.departmentMenuIDs[board.ID], menu.ID)
 	}
+	// role 表示当前循环中的索引、键或业务元素。
 	for _, role := range s.roles {
 		if permissions.IsAdministratorRoleCode(role.Code) {
 			s.roleMenuIDs[role.ID] = append(s.roleMenuIDs[role.ID], menu.ID)
@@ -691,9 +817,11 @@ func (s *MemoryStore) CreateMenu(request models.MenuRequest) (models.Menu, strin
 	return menu, ""
 }
 
+// UpdateMenu 更新并保存对应业务状态。
 func (s *MemoryStore) UpdateMenu(id int, request models.MenuRequest) (models.Menu, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// index、found 保存业务值及其是否存在或处理成功的标记。
 	index, found := s.findMenuIndexByID(id)
 	if !found {
 		return models.Menu{}, "菜单不存在"
@@ -706,6 +834,7 @@ func (s *MemoryStore) UpdateMenu(id int, request models.MenuRequest) (models.Men
 				}
 				return models.Menu{}, "父级菜单不能是当前菜单的下级"
 			}
+			// parent、exists 保存业务值及其是否存在或处理成功的标记。
 			parent, exists := s.findMenuByID(*parentID)
 			if !exists {
 				return models.Menu{}, "父级菜单不存在"
@@ -724,9 +853,11 @@ func (s *MemoryStore) UpdateMenu(id int, request models.MenuRequest) (models.Men
 	return s.menus[index], ""
 }
 
+// DeleteMenu 删除或清理对应业务记录。
 func (s *MemoryStore) DeleteMenu(id int) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// index、found 保存业务值及其是否存在或处理成功的标记。
 	index, found := s.findMenuIndexByID(id)
 	if !found {
 		return "菜单不存在"
@@ -735,39 +866,50 @@ func (s *MemoryStore) DeleteMenu(id int) string {
 		return "请先删除子菜单"
 	}
 	s.menus = append(s.menus[:index], s.menus[index+1:]...)
+	// userID、menuIDs 表示当前循环中的索引、键或业务元素。
 	for userID, menuIDs := range s.userMenuIDs {
 		s.userMenuIDs[userID] = removeMenuID(menuIDs, id)
 	}
+	// departmentID、menuIDs 表示当前循环中的索引、键或业务元素。
 	for departmentID, menuIDs := range s.departmentMenuIDs {
 		s.departmentMenuIDs[departmentID] = removeMenuID(menuIDs, id)
 	}
+	// roleID、menuIDs 表示当前循环中的索引、键或业务元素。
 	for roleID, menuIDs := range s.roleMenuIDs {
 		s.roleMenuIDs[roleID] = removeMenuID(menuIDs, id)
 	}
 	return ""
 }
 
+// ListUserMenus 查询并返回对应业务列表。
 func (s *MemoryStore) ListUserMenus(userID int) ([]models.Menu, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// user、exists 保存业务值及其是否存在或处理成功的标记。
 	user, exists := s.findUserByID(userID)
 	if !exists {
 		return nil, "用户不存在"
 	}
+	// menuIDs 保存菜单标识列表。
 	menuIDs := append([]int(nil), s.userMenuIDs[userID]...)
 	if user.DepartmentID != nil {
+		// department、found 保存业务值及其是否存在或处理成功的标记。
 		if department, found := s.findDepartmentByID(*user.DepartmentID); found && department.Status == "启用" {
 			menuIDs = append(menuIDs, s.departmentMenuIDs[*user.DepartmentID]...)
 		}
 	}
 	if user.RoleID != nil {
+		// role、found 保存业务值及其是否存在或处理成功的标记。
 		if role, found := s.findRoleByID(*user.RoleID); found && role.Status == "启用" {
 			menuIDs = append(menuIDs, s.roleMenuIDs[*user.RoleID]...)
 		}
 	}
 	menuIDs = s.expandMenuAncestors(menuIDs)
+	// assignedMenus 保存菜单。
 	assignedMenus := make([]models.Menu, 0, len(menuIDs))
+	// menuID 表示当前循环中的索引、键或业务元素。
 	for _, menuID := range menuIDs {
+		// menu、found 保存业务值及其是否存在或处理成功的标记。
 		if menu, found := s.findMenuByID(menuID); found {
 			assignedMenus = append(assignedMenus, menu)
 		}
@@ -775,9 +917,11 @@ func (s *MemoryStore) ListUserMenus(userID int) ([]models.Menu, string) {
 	return assignedMenus, ""
 }
 
+// ListUserActionPermissions 查询并返回对应业务列表。
 func (s *MemoryStore) ListUserActionPermissions(userID int) ([]string, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// user、exists 保存业务值及其是否存在或处理成功的标记。
 	user, exists := s.findUserByID(userID)
 	if !exists {
 		return nil, "用户不存在"
@@ -785,8 +929,10 @@ func (s *MemoryStore) ListUserActionPermissions(userID int) ([]string, string) {
 	if permissions.IsAdministratorRoleCode(user.RoleCode) {
 		return permissions.AllCodes(), ""
 	}
+	// roleCodes 保存角色。
 	roleCodes := []string{}
 	if user.RoleID != nil {
+		// role、found 保存业务值及其是否存在或处理成功的标记。
 		if role, found := s.findRoleByID(*user.RoleID); found && role.Status == "启用" {
 			roleCodes = permissions.RoleCodes(role.Code)
 		}
@@ -794,14 +940,18 @@ func (s *MemoryStore) ListUserActionPermissions(userID int) ([]string, string) {
 	return permissions.MergeCodes(roleCodes, s.userActionCodes[userID]), ""
 }
 
+// ListUserExtraMenus 查询并返回对应业务列表。
 func (s *MemoryStore) ListUserExtraMenus(userID int) ([]models.Menu, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.userExists(userID) {
 		return nil, "用户不存在"
 	}
+	// menus 保存菜单。
 	menus := make([]models.Menu, 0, len(s.userMenuIDs[userID]))
+	// menuID 表示当前循环中的索引、键或业务元素。
 	for _, menuID := range s.userMenuIDs[userID] {
+		// menu、found 保存业务值及其是否存在或处理成功的标记。
 		if menu, found := s.findMenuByID(menuID); found {
 			menus = append(menus, menu)
 		}
@@ -809,45 +959,59 @@ func (s *MemoryStore) ListUserExtraMenus(userID int) ([]models.Menu, string) {
 	return menus, ""
 }
 
+// GetUserPermissionDetail 获取对应业务记录。
 func (s *MemoryStore) GetUserPermissionDetail(userID int) (models.UserPermissionDetail, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// user、exists 保存业务值及其是否存在或处理成功的标记。
 	user, exists := s.findUserByID(userID)
 	if !exists {
 		return models.UserPermissionDetail{}, "用户不存在"
 	}
+	// departmentMenuIDs 保存部门菜单标识列表。
 	departmentMenuIDs := []int{}
 	if user.DepartmentID != nil {
 		departmentMenuIDs = append(departmentMenuIDs, s.departmentMenuIDs[*user.DepartmentID]...)
 	}
+	// roleMenuIDs 保存角色菜单标识列表。
 	roleMenuIDs := []int{}
 	if user.RoleID != nil {
 		roleMenuIDs = append(roleMenuIDs, s.roleMenuIDs[*user.RoleID]...)
 	}
+	// userMenuIDs 保存用户菜单标识列表。
 	userMenuIDs := append([]int(nil), s.userMenuIDs[userID]...)
+	// effectiveDepartmentMenuIDs 保存最终生效部门菜单标识列表。
 	effectiveDepartmentMenuIDs := departmentMenuIDs
 	if user.DepartmentID != nil {
+		// department、found 保存业务值及其是否存在或处理成功的标记。
 		if department, found := s.findDepartmentByID(*user.DepartmentID); !found || department.Status != "启用" {
 			effectiveDepartmentMenuIDs = nil
 		}
 	}
+	// effectiveRoleMenuIDs 保存最终生效角色菜单标识列表。
 	effectiveRoleMenuIDs := roleMenuIDs
 	if user.RoleID != nil {
+		// role、found 保存业务值及其是否存在或处理成功的标记。
 		if role, found := s.findRoleByID(*user.RoleID); !found || role.Status != "启用" {
 			effectiveRoleMenuIDs = nil
 		}
 	}
+	// roleActionCodes 保存角色。
 	roleActionCodes := []string{}
 	if user.RoleID != nil {
+		// role、found 保存业务值及其是否存在或处理成功的标记。
 		if role, found := s.findRoleByID(*user.RoleID); found {
 			roleActionCodes = permissions.RoleCodes(role.Code)
 		}
 	}
+	// userActionCodes 保存用户。
 	userActionCodes := permissions.MergeCodes(s.userActionCodes[userID])
+	// effectiveActionCodes 保存最终生效。
 	effectiveActionCodes := permissions.MergeCodes(userActionCodes)
 	if permissions.IsAdministratorRoleCode(user.RoleCode) {
 		effectiveActionCodes = permissions.AllCodes()
 	} else if user.RoleID != nil {
+		// role、found 保存业务值及其是否存在或处理成功的标记。
 		if role, found := s.findRoleByID(*user.RoleID); found && role.Status == "启用" {
 			effectiveActionCodes = permissions.MergeCodes(roleActionCodes, userActionCodes)
 		}
@@ -863,12 +1027,14 @@ func (s *MemoryStore) GetUserPermissionDetail(userID int) (models.UserPermission
 	}, ""
 }
 
+// UpdateUserMenus 更新并保存对应业务状态。
 func (s *MemoryStore) UpdateUserMenus(userID int, menuIDs []int) ([]int, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.userExists(userID) {
 		return nil, "用户不存在"
 	}
+	// menuID 表示当前循环中的索引、键或业务元素。
 	for _, menuID := range menuIDs {
 		if !s.menuExists(menuID) {
 			return nil, "包含不存在的菜单"
@@ -878,9 +1044,11 @@ func (s *MemoryStore) UpdateUserMenus(userID int, menuIDs []int) ([]int, string)
 	return append([]int(nil), s.userMenuIDs[userID]...), ""
 }
 
+// UpdateUserActions 更新并保存对应业务状态。
 func (s *MemoryStore) UpdateUserActions(userID int, actionCodes []string) ([]string, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// user、exists 保存业务值及其是否存在或处理成功的标记。
 	user, exists := s.findUserByID(userID)
 	if !exists {
 		return nil, "用户不存在"
@@ -888,6 +1056,7 @@ func (s *MemoryStore) UpdateUserActions(userID int, actionCodes []string) ([]str
 	if permissions.IsAdministratorRoleCode(user.RoleCode) {
 		return nil, "超级管理员和系统管理员动作权限固定为全部，不能修改"
 	}
+	// codes、valid 保存编码、校验结果。
 	codes, valid := permissions.NormalizeCodes(actionCodes)
 	if !valid {
 		return nil, "包含不存在的动作权限"
@@ -896,31 +1065,38 @@ func (s *MemoryStore) UpdateUserActions(userID int, actionCodes []string) ([]str
 	return append([]string(nil), codes...), ""
 }
 
+// ListArticles 查询并返回对应业务列表。
 func (s *MemoryStore) ListArticles() []models.Article {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]models.Article(nil), s.articles...)
 }
 
+// FindArticleByID 获取对应业务记录。
 func (s *MemoryStore) FindArticleByID(id int) (models.Article, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.findArticleByID(id)
 }
 
+// CreateArticle 创建或追加对应业务记录。
 func (s *MemoryStore) CreateArticle(request models.ArticleRequest) models.Article {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// now 保存当前时间。
 	now := time.Now()
+	// article 保存文章。
 	article := models.Article{ID: s.nextArticleID, Title: request.Title, Category: request.Category, Author: request.Author, Status: request.Status, Summary: request.Summary, Content: request.Content, Views: 0, CreatedAt: now, UpdatedAt: now}
 	s.nextArticleID++
 	s.articles = append(s.articles, article)
 	return article
 }
 
+// UpdateArticle 更新并保存对应业务状态。
 func (s *MemoryStore) UpdateArticle(id int, request models.ArticleRequest) (models.Article, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// index、found 保存业务值及其是否存在或处理成功的标记。
 	index, found := s.findArticleIndexByID(id)
 	if !found {
 		return models.Article{}, false
@@ -935,9 +1111,11 @@ func (s *MemoryStore) UpdateArticle(id int, request models.ArticleRequest) (mode
 	return s.articles[index], true
 }
 
+// DeleteArticle 删除或清理对应业务记录。
 func (s *MemoryStore) DeleteArticle(id int) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// index、found 保存业务值及其是否存在或处理成功的标记。
 	index, found := s.findArticleIndexByID(id)
 	if !found {
 		return false
@@ -946,21 +1124,25 @@ func (s *MemoryStore) DeleteArticle(id int) bool {
 	return true
 }
 
+// ListFiles 查询并返回对应业务列表。
 func (s *MemoryStore) ListFiles() []models.ManagedFile {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]models.ManagedFile(nil), s.files...)
 }
 
+// FindFileByID 获取对应业务记录。
 func (s *MemoryStore) FindFileByID(id int) (models.ManagedFile, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.findFileByID(id)
 }
 
+// CreateFile 创建或追加对应业务记录。
 func (s *MemoryStore) CreateFile(file models.ManagedFile) models.ManagedFile {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// now 保存当前时间。
 	now := time.Now()
 	file.ID = s.nextFileID
 	file.CreatedAt = now
@@ -970,9 +1152,11 @@ func (s *MemoryStore) CreateFile(file models.ManagedFile) models.ManagedFile {
 	return file
 }
 
+// UpdateFileMetadata 更新并保存对应业务状态。
 func (s *MemoryStore) UpdateFileMetadata(id int, request models.FileMetadataRequest) (models.ManagedFile, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// index、found 保存业务值及其是否存在或处理成功的标记。
 	index, found := s.findFileIndexByID(id)
 	if !found {
 		return models.ManagedFile{}, false
@@ -984,19 +1168,24 @@ func (s *MemoryStore) UpdateFileMetadata(id int, request models.FileMetadataRequ
 	return s.files[index], true
 }
 
+// DeleteFile 删除或清理对应业务记录。
 func (s *MemoryStore) DeleteFile(id int) (models.ManagedFile, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// index、found 保存业务值及其是否存在或处理成功的标记。
 	index, found := s.findFileIndexByID(id)
 	if !found {
 		return models.ManagedFile{}, false
 	}
+	// file 保存文件。
 	file := s.files[index]
 	s.files = append(s.files[:index], s.files[index+1:]...)
 	return file, true
 }
 
+// findUserByID 获取对应业务记录。
 func (s *MemoryStore) findUserByID(id int) (models.User, bool) {
+	// user 表示当前循环中的索引、键或业务元素。
 	for _, user := range s.users {
 		if user.ID == id {
 			return user, true
@@ -1005,7 +1194,9 @@ func (s *MemoryStore) findUserByID(id int) (models.User, bool) {
 	return models.User{}, false
 }
 
+// findUserByUsername 获取对应业务记录。
 func (s *MemoryStore) findUserByUsername(username string) (models.User, bool) {
+	// user 表示当前循环中的索引、键或业务元素。
 	for _, user := range s.users {
 		if strings.EqualFold(user.Username, strings.TrimSpace(username)) {
 			return user, true
@@ -1014,7 +1205,9 @@ func (s *MemoryStore) findUserByUsername(username string) (models.User, bool) {
 	return models.User{}, false
 }
 
+// findUserIndexByID 获取对应业务记录。
 func (s *MemoryStore) findUserIndexByID(id int) (int, bool) {
+	// index、user 表示当前循环中的索引、键或业务元素。
 	for index, user := range s.users {
 		if user.ID == id {
 			return index, true
@@ -1023,12 +1216,16 @@ func (s *MemoryStore) findUserIndexByID(id int) (int, bool) {
 	return -1, false
 }
 
+// userExists 实现对应业务逻辑。
 func (s *MemoryStore) userExists(id int) bool {
+	// found 保存业务值及其是否存在或处理成功的标记。
 	_, found := s.findUserByID(id)
 	return found
 }
 
+// findDepartmentByID 获取对应业务记录。
 func (s *MemoryStore) findDepartmentByID(id int) (models.Department, bool) {
+	// department 表示当前循环中的索引、键或业务元素。
 	for _, department := range s.departments {
 		if department.ID == id {
 			return department, true
@@ -1037,7 +1234,9 @@ func (s *MemoryStore) findDepartmentByID(id int) (models.Department, bool) {
 	return models.Department{}, false
 }
 
+// findDepartmentByCode 获取对应业务记录。
 func (s *MemoryStore) findDepartmentByCode(code string) (models.Department, bool) {
+	// department 表示当前循环中的索引、键或业务元素。
 	for _, department := range s.departments {
 		if strings.EqualFold(department.Code, strings.TrimSpace(code)) {
 			return department, true
@@ -1046,7 +1245,9 @@ func (s *MemoryStore) findDepartmentByCode(code string) (models.Department, bool
 	return models.Department{}, false
 }
 
+// findDepartmentIndexByID 获取对应业务记录。
 func (s *MemoryStore) findDepartmentIndexByID(id int) (int, bool) {
+	// index、department 表示当前循环中的索引、键或业务元素。
 	for index, department := range s.departments {
 		if department.ID == id {
 			return index, true
@@ -1055,18 +1256,24 @@ func (s *MemoryStore) findDepartmentIndexByID(id int) (int, bool) {
 	return -1, false
 }
 
+// resolveDepartment 转换并生成对应业务结果。
 func (s *MemoryStore) resolveDepartment(departmentID *int, legacyName string) (*int, string, string) {
 	if departmentID != nil {
+		// department、exists 保存业务值及其是否存在或处理成功的标记。
 		department, exists := s.findDepartmentByID(*departmentID)
 		if !exists {
 			return nil, "", "部门不存在"
 		}
+		// id 保存标识。
 		id := department.ID
 		return &id, department.Name, ""
 	}
+	// name 保存名称。
 	name := strings.TrimSpace(legacyName)
+	// department 表示当前循环中的索引、键或业务元素。
 	for _, department := range s.departments {
 		if department.Name == name {
+			// id 保存标识。
 			id := department.ID
 			return &id, department.Name, ""
 		}
@@ -1074,7 +1281,9 @@ func (s *MemoryStore) resolveDepartment(departmentID *int, legacyName string) (*
 	return nil, name, ""
 }
 
+// findRoleByID 获取对应业务记录。
 func (s *MemoryStore) findRoleByID(id int) (models.Role, bool) {
+	// role 表示当前循环中的索引、键或业务元素。
 	for _, role := range s.roles {
 		if role.ID == id {
 			return role, true
@@ -1083,7 +1292,9 @@ func (s *MemoryStore) findRoleByID(id int) (models.Role, bool) {
 	return models.Role{}, false
 }
 
+// findRoleByCode 获取对应业务记录。
 func (s *MemoryStore) findRoleByCode(code string) (models.Role, bool) {
+	// role 表示当前循环中的索引、键或业务元素。
 	for _, role := range s.roles {
 		if strings.EqualFold(role.Code, strings.TrimSpace(code)) {
 			return role, true
@@ -1092,7 +1303,9 @@ func (s *MemoryStore) findRoleByCode(code string) (models.Role, bool) {
 	return models.Role{}, false
 }
 
+// findRoleIndexByID 获取对应业务记录。
 func (s *MemoryStore) findRoleIndexByID(id int) (int, bool) {
+	// index、role 表示当前循环中的索引、键或业务元素。
 	for index, role := range s.roles {
 		if role.ID == id {
 			return index, true
@@ -1101,18 +1314,24 @@ func (s *MemoryStore) findRoleIndexByID(id int) (int, bool) {
 	return -1, false
 }
 
+// resolveRole 转换并生成对应业务结果。
 func (s *MemoryStore) resolveRole(roleID *int, legacyName string) (*int, string, string, string) {
 	if roleID != nil {
+		// role、exists 保存业务值及其是否存在或处理成功的标记。
 		role, exists := s.findRoleByID(*roleID)
 		if !exists {
 			return nil, "", "", "角色不存在"
 		}
+		// id 保存标识。
 		id := role.ID
 		return &id, role.Name, role.Code, ""
 	}
+	// name 保存名称。
 	name := strings.TrimSpace(legacyName)
+	// role 表示当前循环中的索引、键或业务元素。
 	for _, role := range s.roles {
 		if role.Name == name {
+			// id 保存标识。
 			id := role.ID
 			return &id, role.Name, role.Code, ""
 		}
@@ -1120,7 +1339,9 @@ func (s *MemoryStore) resolveRole(roleID *int, legacyName string) (*int, string,
 	return nil, "", "", "角色不存在"
 }
 
+// findMenuByID 获取对应业务记录。
 func (s *MemoryStore) findMenuByID(id int) (models.Menu, bool) {
+	// menu 表示当前循环中的索引、键或业务元素。
 	for _, menu := range s.menus {
 		if menu.ID == id {
 			return menu, true
@@ -1129,7 +1350,9 @@ func (s *MemoryStore) findMenuByID(id int) (models.Menu, bool) {
 	return models.Menu{}, false
 }
 
+// dashboardMenuIDs 实现对应业务逻辑。
 func (s *MemoryStore) dashboardMenuIDs() []int {
+	// menu 表示当前循环中的索引、键或业务元素。
 	for _, menu := range s.menus {
 		if menu.Code == "dashboard" {
 			return []int{menu.ID}
@@ -1138,15 +1361,20 @@ func (s *MemoryStore) dashboardMenuIDs() []int {
 	return []int{}
 }
 
+// allMenuIDs 实现对应业务逻辑。
 func (s *MemoryStore) allMenuIDs() []int {
+	// ids 保存标识列表。
 	ids := make([]int, 0, len(s.menus))
+	// menu 表示当前循环中的索引、键或业务元素。
 	for _, menu := range s.menus {
 		ids = append(ids, menu.ID)
 	}
 	return ids
 }
 
+// findMenuIndexByID 获取对应业务记录。
 func (s *MemoryStore) findMenuIndexByID(id int) (int, bool) {
+	// index、menu 表示当前循环中的索引、键或业务元素。
 	for index, menu := range s.menus {
 		if menu.ID == id {
 			return index, true
@@ -1155,18 +1383,25 @@ func (s *MemoryStore) findMenuIndexByID(id int) (int, bool) {
 	return -1, false
 }
 
+// menuExists 实现对应业务逻辑。
 func (s *MemoryStore) menuExists(id int) bool {
+	// found 保存业务值及其是否存在或处理成功的标记。
 	_, found := s.findMenuByID(id)
 	return found
 }
 
+// expandMenuAncestors 实现对应业务逻辑。
 func (s *MemoryStore) expandMenuAncestors(menuIDs []int) []int {
+	// expanded 保存变量 expanded。
 	expanded := uniqueIDs(menuIDs)
+	// seen 保存已处理集合。
 	seen := make(map[int]bool, len(expanded))
+	// menuID 表示当前循环中的索引、键或业务元素。
 	for _, menuID := range expanded {
 		seen[menuID] = true
 	}
 	for index := 0; index < len(expanded); index++ {
+		// menu、exists 保存业务值及其是否存在或处理成功的标记。
 		menu, exists := s.findMenuByID(expanded[index])
 		if !exists || menu.ParentID == nil || seen[*menu.ParentID] {
 			continue
@@ -1177,7 +1412,9 @@ func (s *MemoryStore) expandMenuAncestors(menuIDs []int) []int {
 	return expanded
 }
 
+// hasChildMenu 校验对应业务条件。
 func (s *MemoryStore) hasChildMenu(id int) bool {
+	// menu 表示当前循环中的索引、键或业务元素。
 	for _, menu := range s.menus {
 		if menu.ParentID != nil && *menu.ParentID == id {
 			return true
@@ -1186,7 +1423,9 @@ func (s *MemoryStore) hasChildMenu(id int) bool {
 	return false
 }
 
+// findArticleByID 获取对应业务记录。
 func (s *MemoryStore) findArticleByID(id int) (models.Article, bool) {
+	// article 表示当前循环中的索引、键或业务元素。
 	for _, article := range s.articles {
 		if article.ID == id {
 			return article, true
@@ -1195,7 +1434,9 @@ func (s *MemoryStore) findArticleByID(id int) (models.Article, bool) {
 	return models.Article{}, false
 }
 
+// findArticleIndexByID 获取对应业务记录。
 func (s *MemoryStore) findArticleIndexByID(id int) (int, bool) {
+	// index、article 表示当前循环中的索引、键或业务元素。
 	for index, article := range s.articles {
 		if article.ID == id {
 			return index, true
@@ -1204,7 +1445,9 @@ func (s *MemoryStore) findArticleIndexByID(id int) (int, bool) {
 	return -1, false
 }
 
+// findFileByID 获取对应业务记录。
 func (s *MemoryStore) findFileByID(id int) (models.ManagedFile, bool) {
+	// file 表示当前循环中的索引、键或业务元素。
 	for _, file := range s.files {
 		if file.ID == id {
 			return file, true
@@ -1213,7 +1456,9 @@ func (s *MemoryStore) findFileByID(id int) (models.ManagedFile, bool) {
 	return models.ManagedFile{}, false
 }
 
+// findFileIndexByID 获取对应业务记录。
 func (s *MemoryStore) findFileIndexByID(id int) (int, bool) {
+	// index、file 表示当前循环中的索引、键或业务元素。
 	for index, file := range s.files {
 		if file.ID == id {
 			return index, true
@@ -1222,8 +1467,11 @@ func (s *MemoryStore) findFileIndexByID(id int) (int, bool) {
 	return -1, false
 }
 
+// removeMenuID 删除或清理对应业务记录。
 func removeMenuID(menuIDs []int, removedID int) []int {
+	// filtered 保存筛选后。
 	filtered := make([]int, 0, len(menuIDs))
+	// menuID 表示当前循环中的索引、键或业务元素。
 	for _, menuID := range menuIDs {
 		if menuID != removedID {
 			filtered = append(filtered, menuID)
@@ -1232,9 +1480,13 @@ func removeMenuID(menuIDs []int, removedID int) []int {
 	return filtered
 }
 
+// uniqueIDs 实现对应业务逻辑。
 func uniqueIDs(ids []int) []int {
+	// seen 保存已处理集合。
 	seen := make(map[int]bool, len(ids))
+	// unique 保存去重结果。
 	unique := make([]int, 0, len(ids))
+	// id 表示当前循环中的索引、键或业务元素。
 	for _, id := range ids {
 		if !seen[id] {
 			seen[id] = true
@@ -1244,16 +1496,20 @@ func uniqueIDs(ids []int) []int {
 	return unique
 }
 
+// sameIDs 实现对应业务逻辑。
 func sameIDs(left, right []int) bool {
 	left = uniqueIDs(left)
 	right = uniqueIDs(right)
 	if len(left) != len(right) {
 		return false
 	}
+	// rightSet 保存变量 rightSet。
 	rightSet := make(map[int]bool, len(right))
+	// id 表示当前循环中的索引、键或业务元素。
 	for _, id := range right {
 		rightSet[id] = true
 	}
+	// id 表示当前循环中的索引、键或业务元素。
 	for _, id := range left {
 		if !rightSet[id] {
 			return false
@@ -1262,6 +1518,7 @@ func sameIDs(left, right []int) bool {
 	return true
 }
 
+// intPtr 实现对应业务逻辑。
 func intPtr(value int) *int {
 	return &value
 }

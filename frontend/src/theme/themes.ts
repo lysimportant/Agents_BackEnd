@@ -1,6 +1,10 @@
+/** THEME_STORAGE_KEY 保存模块使用的固定配置或共享状态。 */
 export const THEME_STORAGE_KEY = 'admin-theme';
+
+/** ADMIN_THEME_EVENT 保存模块使用的固定配置或共享状态。 */
 export const ADMIN_THEME_EVENT = 'admin-theme-change';
 
+/** AdminThemeId 定义对应业务的数据结构与调用契约。 */
 export type AdminThemeId =
   | 'ocean'
   | 'sunset'
@@ -13,13 +17,21 @@ export type AdminThemeId =
   | 'graphite'
   | 'snow';
 
+/** AdminTheme 定义对应业务的数据结构与调用契约。 */
 export type AdminTheme = {
+  /** id 表示标识。 */
   id: AdminThemeId;
+  /** label 表示显示标签。 */
   label: string;
+  /** description 表示说明。 */
   description: string;
+  /** kind 表示变量 kind。 */
   kind: 'gradient' | 'solid';
+  /** mode 表示变量 mode。 */
   mode: 'light' | 'dark';
+  /** swatch 表示变量 swatch。 */
   swatch: string;
+  /** palette 表示配色。 */
   palette: {
     primary: string;
     primaryHover: string;
@@ -46,6 +58,7 @@ export type AdminTheme = {
   };
 };
 
+/** adminThemes 保存模块使用的固定配置或共享状态。 */
 export const adminThemes: readonly AdminTheme[] = [
   {
     id: 'ocean',
@@ -223,27 +236,35 @@ export const adminThemes: readonly AdminTheme[] = [
   },
 ];
 
+/** DEFAULT_THEME_ID 保存模块使用的固定配置或共享状态。 */
 export const DEFAULT_THEME_ID: AdminThemeId = 'ocean';
 
+/** legacyThemeAliases 保存模块使用的固定配置或共享状态。 */
 const legacyThemeAliases: Record<string, AdminThemeId> = {
   light: 'sky',
   dark: 'graphite',
   pink: 'sunset',
 };
 
+/** resolveThemeId 转换并生成对应业务结果。 */
 export function resolveThemeId(value: string | null | undefined): AdminThemeId {
   if (!value) return DEFAULT_THEME_ID;
+  /** alias 保存变量 alias。 */
   const alias = legacyThemeAliases[value];
   if (alias) return alias;
   return adminThemes.some((theme) => theme.id === value) ? (value as AdminThemeId) : DEFAULT_THEME_ID;
 }
 
+/** getAdminTheme 获取对应业务记录。 */
 export function getAdminTheme(themeId: string | null | undefined): AdminTheme {
+  /** resolved 保存变量 resolved。 */
   const resolved = resolveThemeId(themeId);
   return adminThemes.find((theme) => theme.id === resolved) ?? adminThemes[0];
 }
 
+/** getThemeCssVariables 获取对应业务记录。 */
 export function getThemeCssVariables(theme: AdminTheme): Record<string, string> {
+  /** palette 保存配色。 */
   const { palette } = theme;
   return {
     '--background': palette.page,
@@ -309,9 +330,12 @@ export function getThemeCssVariables(theme: AdminTheme): Record<string, string> 
   };
 }
 
+/** applyAdminTheme 执行对应业务流程。 */
 export function applyAdminTheme(themeId: AdminThemeId, persist = true) {
   if (typeof document === 'undefined') return;
+  /** theme 保存主题。 */
   const theme = getAdminTheme(themeId);
+  /** root 保存根节点。 */
   const root = document.documentElement;
   root.dataset.theme = theme.id;
   root.dataset.themeMode = theme.mode;
@@ -324,17 +348,25 @@ export function applyAdminTheme(themeId: AdminThemeId, persist = true) {
   }
 }
 
+/** bootstrapThemes 保存模块使用的固定配置或共享状态。 */
 const bootstrapThemes = Object.fromEntries(
   adminThemes.map((theme) => [theme.id, { mode: theme.mode, variables: getThemeCssVariables(theme) }]),
 );
 
+/** ADMIN_THEME_BOOTSTRAP_SCRIPT 保存模块使用的固定配置或共享状态。 */
 export const ADMIN_THEME_BOOTSTRAP_SCRIPT = `(() => {
   try {
+    /** themes 保存主题。 */
     const themes = ${JSON.stringify(bootstrapThemes)};
+    /** aliases 保存变量 aliases。 */
     const aliases = ${JSON.stringify(legacyThemeAliases)};
+    /** stored 保存已存储。 */
     const stored = window.localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});
+    /** id 保存标识。 */
     const id = themes[stored] ? stored : (aliases[stored] || ${JSON.stringify(DEFAULT_THEME_ID)});
+    /** theme 保存主题。 */
     const theme = themes[id];
+    /** root 保存根节点。 */
     const root = document.documentElement;
     root.dataset.theme = id;
     root.dataset.themeMode = theme.mode;

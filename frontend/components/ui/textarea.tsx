@@ -2,6 +2,7 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+/** Textarea 定义对应业务的数据结构与调用契约。 */
 function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
   return (
     <textarea

@@ -25,26 +25,47 @@ import {
 } from "@/components/ui/tooltip"
 import { PanelLeftIcon } from "lucide-react"
 
+/** SIDEBAR_COOKIE_NAME 保存模块使用的固定配置或共享状态。 */
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
+
+/** SIDEBAR_COOKIE_MAX_AGE 保存模块使用的固定配置或共享状态。 */
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
+
+/** SIDEBAR_WIDTH 保存模块使用的固定配置或共享状态。 */
 const SIDEBAR_WIDTH = "16rem"
+
+/** SIDEBAR_WIDTH_MOBILE 保存模块使用的固定配置或共享状态。 */
 const SIDEBAR_WIDTH_MOBILE = "18rem"
+
+/** SIDEBAR_WIDTH_ICON 保存模块使用的固定配置或共享状态。 */
 const SIDEBAR_WIDTH_ICON = "3rem"
+
+/** SIDEBAR_KEYBOARD_SHORTCUT 保存模块使用的固定配置或共享状态。 */
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
 type SidebarContextProps = {
+  /** state 表示状态对象。 */
   state: "expanded" | "collapsed"
+  /** open 表示打开状态。 */
   open: boolean
+  /** setOpen 表示打开状态。 */
   setOpen: (open: boolean) => void
+  /** openMobile 表示移动端。 */
   openMobile: boolean
+  /** setOpenMobile 表示移动端。 */
   setOpenMobile: (open: boolean) => void
+  /** isMobile 表示移动端。 */
   isMobile: boolean
+  /** toggleSidebar 表示侧栏。 */
   toggleSidebar: () => void
 }
 
+/** SidebarContext 保存模块使用的固定配置或共享状态。 */
 const SidebarContext = React.createContext<SidebarContextProps | null>(null)
 
+/** useSidebar 实现对应业务逻辑。 */
 function useSidebar() {
+  /** context 保存上下文。 */
   const context = React.useContext(SidebarContext)
   if (!context) {
     throw new Error("useSidebar must be used within a SidebarProvider.")
@@ -53,6 +74,7 @@ function useSidebar() {
   return context
 }
 
+/** SidebarProvider 实现对应业务逻辑。 */
 function SidebarProvider({
   defaultOpen = true,
   open: openProp,
@@ -66,15 +88,19 @@ function SidebarProvider({
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }) {
+  /** isMobile 保存移动端。 */
   const isMobile = useIsMobile()
+  /** openMobile、setOpenMobile 分别保存移动端状态及其更新函数。 */
   const [openMobile, setOpenMobile] = React.useState(false)
 
-  // This is the internal state of the sidebar.
-  // We use openProp and setOpenProp for control from outside the component.
+  // 这是侧栏的内部状态；openProp 和 setOpenProp 用于从组件外部控制状态。
   const [_open, _setOpen] = React.useState(defaultOpen)
+  /** open 保存打开状态。 */
   const open = openProp ?? _open
+  /** setOpen 负责更新并保存对应业务状态。 */
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
+      /** openState 保存打开状态状态对象。 */
       const openState = typeof value === "function" ? value(open) : value
       if (setOpenProp) {
         setOpenProp(openState)
@@ -82,19 +108,20 @@ function SidebarProvider({
         _setOpen(openState)
       }
 
-      // This sets the cookie to keep the sidebar state.
+      // 写入 Cookie 以持久化侧栏状态。
       document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
     },
     [setOpenProp, open]
   )
 
-  // Helper to toggle the sidebar.
+  // 切换侧栏展开状态的辅助方法。
   const toggleSidebar = React.useCallback(() => {
     return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)
   }, [isMobile, setOpen, setOpenMobile])
 
-  // Adds a keyboard shortcut to toggle the sidebar.
+  // 注册切换侧栏的键盘快捷键。
   React.useEffect(() => {
+    /** handleKeyDown 负责处理对应的界面事件和状态变化。 */
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
         event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
@@ -109,10 +136,10 @@ function SidebarProvider({
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [toggleSidebar])
 
-  // We add a state so that we can do data-state="expanded" or "collapsed".
-  // This makes it easier to style the sidebar with Tailwind classes.
+  // 添加 data-state="expanded" 或 "collapsed" 状态，便于使用 Tailwind 类设置侧栏样式。
   const state = open ? "expanded" : "collapsed"
 
+  /** contextValue 保存上下文值。 */
   const contextValue = React.useMemo<SidebarContextProps>(
     () => ({
       state,
@@ -149,6 +176,7 @@ function SidebarProvider({
   )
 }
 
+/** Sidebar 实现对应业务逻辑。 */
 function Sidebar({
   side = "left",
   variant = "sidebar",
@@ -162,6 +190,7 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset"
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
+  /** isMobile、state、openMobile、setOpenMobile 保存移动端、状态对象、移动端等关联值。 */
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
 
   if (collapsible === "none") {
@@ -231,7 +260,7 @@ function Sidebar({
         data-side={side}
         className={cn(
           "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex",
-          // Adjust the padding for floating and inset variants.
+          // 调整 floating 和 inset 变体的内边距。
           variant === "floating" || variant === "inset"
             ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
             : "group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l",
@@ -251,11 +280,13 @@ function Sidebar({
   )
 }
 
+/** SidebarTrigger 实现对应业务逻辑。 */
 function SidebarTrigger({
   className,
   onClick,
   ...props
 }: React.ComponentProps<typeof Button>) {
+  /** toggleSidebar 保存侧栏。 */
   const { toggleSidebar } = useSidebar()
 
   return (
@@ -277,7 +308,9 @@ function SidebarTrigger({
   )
 }
 
+/** SidebarRail 定义对应业务的数据结构与调用契约。 */
 function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
+  /** toggleSidebar 保存侧栏。 */
   const { toggleSidebar } = useSidebar()
 
   return (
@@ -302,6 +335,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
   )
 }
 
+/** SidebarInset 定义对应业务的数据结构与调用契约。 */
 function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
   return (
     <main
@@ -315,6 +349,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
   )
 }
 
+/** SidebarInput 实现对应业务逻辑。 */
 function SidebarInput({
   className,
   ...props
@@ -329,6 +364,7 @@ function SidebarInput({
   )
 }
 
+/** SidebarHeader 定义对应业务的数据结构与调用契约。 */
 function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -340,6 +376,7 @@ function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** SidebarFooter 定义对应业务的数据结构与调用契约。 */
 function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -351,6 +388,7 @@ function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** SidebarSeparator 实现对应业务逻辑。 */
 function SidebarSeparator({
   className,
   ...props
@@ -365,6 +403,7 @@ function SidebarSeparator({
   )
 }
 
+/** SidebarContent 定义对应业务的数据结构与调用契约。 */
 function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -379,6 +418,7 @@ function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** SidebarGroup 定义对应业务的数据结构与调用契约。 */
 function SidebarGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -390,6 +430,7 @@ function SidebarGroup({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** SidebarGroupLabel 实现对应业务逻辑。 */
 function SidebarGroupLabel({
   className,
   render,
@@ -414,6 +455,7 @@ function SidebarGroupLabel({
   })
 }
 
+/** SidebarGroupAction 实现对应业务逻辑。 */
 function SidebarGroupAction({
   className,
   render,
@@ -438,6 +480,7 @@ function SidebarGroupAction({
   })
 }
 
+/** SidebarGroupContent 实现对应业务逻辑。 */
 function SidebarGroupContent({
   className,
   ...props
@@ -452,6 +495,7 @@ function SidebarGroupContent({
   )
 }
 
+/** SidebarMenu 定义对应业务的数据结构与调用契约。 */
 function SidebarMenu({ className, ...props }: React.ComponentProps<"ul">) {
   return (
     <ul
@@ -463,6 +507,7 @@ function SidebarMenu({ className, ...props }: React.ComponentProps<"ul">) {
   )
 }
 
+/** SidebarMenuItem 定义对应业务的数据结构与调用契约。 */
 function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
   return (
     <li
@@ -474,6 +519,7 @@ function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
   )
 }
 
+/** sidebarMenuButtonVariants 保存模块使用的固定配置或共享状态。 */
 const sidebarMenuButtonVariants = cva(
   "peer/menu-button group/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm ring-sidebar-ring outline-hidden transition-[width,height,padding] group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-open:hover:bg-sidebar-accent data-open:hover:text-sidebar-accent-foreground data-active:bg-sidebar-accent data-active:font-medium data-active:text-sidebar-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0 [&>span:last-child]:truncate",
   {
@@ -496,6 +542,7 @@ const sidebarMenuButtonVariants = cva(
   }
 )
 
+/** SidebarMenuButton 实现对应业务逻辑。 */
 function SidebarMenuButton({
   render,
   isActive = false,
@@ -509,7 +556,9 @@ function SidebarMenuButton({
     isActive?: boolean
     tooltip?: string | React.ComponentProps<typeof TooltipContent>
   } & VariantProps<typeof sidebarMenuButtonVariants>) {
+  /** isMobile、state 保存移动端、状态对象。 */
   const { isMobile, state } = useSidebar()
+  /** comp 保存变量 comp。 */
   const comp = useRender({
     defaultTagName: "button",
     props: mergeProps<"button">(
@@ -550,6 +599,7 @@ function SidebarMenuButton({
   )
 }
 
+/** SidebarMenuAction 实现对应业务逻辑。 */
 function SidebarMenuAction({
   className,
   render,
@@ -580,6 +630,7 @@ function SidebarMenuAction({
   })
 }
 
+/** SidebarMenuBadge 实现对应业务逻辑。 */
 function SidebarMenuBadge({
   className,
   ...props
@@ -597,6 +648,7 @@ function SidebarMenuBadge({
   )
 }
 
+/** SidebarMenuSkeleton 保存模块使用的固定配置或共享状态。 */
 function SidebarMenuSkeleton({
   className,
   showIcon = false,
@@ -604,7 +656,7 @@ function SidebarMenuSkeleton({
 }: React.ComponentProps<"div"> & {
   showIcon?: boolean
 }) {
-  // Random width between 50 to 90%.
+  // 在 50% 到 90% 之间生成随机宽度。
   const [width] = React.useState(() => {
     return `${Math.floor(Math.random() * 40) + 50}%`
   })
@@ -635,6 +687,7 @@ function SidebarMenuSkeleton({
   )
 }
 
+/** SidebarMenuSub 定义对应业务的数据结构与调用契约。 */
 function SidebarMenuSub({ className, ...props }: React.ComponentProps<"ul">) {
   return (
     <ul
@@ -649,6 +702,7 @@ function SidebarMenuSub({ className, ...props }: React.ComponentProps<"ul">) {
   )
 }
 
+/** SidebarMenuSubItem 实现对应业务逻辑。 */
 function SidebarMenuSubItem({
   className,
   ...props
@@ -663,6 +717,7 @@ function SidebarMenuSubItem({
   )
 }
 
+/** SidebarMenuSubButton 实现对应业务逻辑。 */
 function SidebarMenuSubButton({
   render,
   size = "md",

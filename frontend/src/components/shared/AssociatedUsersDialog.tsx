@@ -6,14 +6,21 @@ import type { User } from '@/src/types/admin';
 import styles from './AssociatedUsersDialog.module.css';
 
 type AssociatedUsersDialogProps = {
+  /** open 表示打开状态。 */
   open: boolean;
+  /** title 表示标题。 */
   title: string;
+  /** users 表示用户。 */
   users: User[];
+  /** isLoading 表示加载状态。 */
   isLoading: boolean;
+  /** error 表示错误状态。 */
   error: string;
+  /** onClose 表示变量 onClose。 */
   onClose: () => void;
 };
 
+/** columns 保存模块使用的固定配置或共享状态。 */
 const columns: ColumnsType<User> = [
   {
     title: '用户',
@@ -53,6 +60,7 @@ const columns: ColumnsType<User> = [
   },
 ];
 
+/** AssociatedUsersDialog 实现对应业务逻辑。 */
 export function AssociatedUsersDialog({ open, title, users, isLoading, error, onClose }: AssociatedUsersDialogProps) {
   return (
     <Modal

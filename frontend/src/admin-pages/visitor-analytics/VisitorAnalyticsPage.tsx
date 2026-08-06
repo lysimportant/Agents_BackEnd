@@ -11,18 +11,27 @@ import type { VisitorAccessRecord, VisitorAnalyticsRange, VisitorAnalyticsRespon
 import { ADMIN_THEME_EVENT, DEFAULT_THEME_ID, getAdminTheme, resolveThemeId, type AdminTheme } from '@/src/theme/themes';
 import styles from './VisitorAnalyticsPage.module.css';
 
+/** ReactECharts 保存模块使用的固定配置或共享状态。 */
 const ReactECharts = dynamic(() => import('echarts-for-react'), { ssr: false });
 
 type VisitorAnalyticsPageProps = {
+  /** data 表示业务数据。 */
   data: VisitorAnalyticsResponse | null;
+  /** isLoading 表示加载状态。 */
   isLoading: boolean;
+  /** range 表示时间范围。 */
   range: VisitorAnalyticsRange;
+  /** keyword 表示搜索关键词。 */
   keyword: string;
+  /** onRangeChange 表示时间范围变更回调。 */
   onRangeChange: (range: VisitorAnalyticsRange) => void;
+  /** onKeywordChange 表示搜索关键词。 */
   onKeywordChange: (keyword: string) => void;
+  /** onRefresh 表示刷新回调。 */
   onRefresh: (page?: number, pageSize?: number) => void;
 };
 
+/** VisitorAnalyticsPage 实现对应业务逻辑。 */
 export function VisitorAnalyticsPage({
   data,
   isLoading,
@@ -32,13 +41,20 @@ export function VisitorAnalyticsPage({
   onKeywordChange,
   onRefresh,
 }: VisitorAnalyticsPageProps) {
+  /** theme 保存主题。 */
   const theme = useVisitorAnalyticsTheme();
+  /** summary 保存摘要。 */
   const summary = data?.summary;
+  /** hasVisitorData 保存访问者业务数据。 */
   const hasVisitorData = (summary?.totalRequests ?? 0) > 0;
+  /** timelineOption 缓存计算得到的选项。 */
   const timelineOption = useMemo(() => createTimelineOption(theme, summary?.timeline ?? []), [summary?.timeline, theme]);
+  /** countryOption 缓存计算得到的国家或地区选项。 */
   const countryOption = useMemo(() => createDimensionOption(theme, summary?.countries ?? [], '国家/地区访问量'), [summary?.countries, theme]);
+  /** pathOption 缓存计算得到的路径选项。 */
   const pathOption = useMemo(() => createDimensionOption(theme, summary?.paths ?? [], '访问路径 Top 8'), [summary?.paths, theme]);
 
+  /** columns 负责计算或维护列。 */
   const columns = useMemo<ColumnsType<VisitorAccessRecord>>(() => [
     {
       title: '访问时间', dataIndex: 'createdAt', width: 174,
@@ -75,6 +91,7 @@ export function VisitorAnalyticsPage({
     },
   ], []);
 
+  /** handleTableChange 负责处理对应的界面事件和状态变化。 */
   const handleTableChange = (pagination: TablePaginationConfig) => {
     onRefresh(pagination.current || 1, pagination.pageSize);
   };
@@ -117,17 +134,22 @@ export function VisitorAnalyticsPage({
   );
 }
 
+/** Stat 实现对应业务逻辑。 */
 function Stat({ label, value, note }: { label: string; value: number; note: ReactNode }) {
   return <article className={styles.stat} data-tilt-card="true"><span>{label}</span><strong><CountUp end={value} duration={1.05} preserveValue separator="," /></strong><small>{note}</small></article>;
 }
 
+/** PanelHeading 实现对应业务逻辑。 */
 function PanelHeading({ eyebrow, title }: { eyebrow: string; title: string }) {
   return <div className={styles.panelHeading}><div><p>{eyebrow}</p><h2>{title}</h2></div></div>;
 }
 
+/** useVisitorAnalyticsTheme 实现对应业务逻辑。 */
 function useVisitorAnalyticsTheme() {
+  /** themeId、setThemeId 分别保存主题标识状态及其更新函数。 */
   const [themeId, setThemeId] = useState(DEFAULT_THEME_ID);
   useEffect(() => {
+    /** sync 负责更新并保存对应业务状态。 */
     const sync = () => setThemeId(resolveThemeId(document.documentElement.dataset.theme));
     sync();
     window.addEventListener(ADMIN_THEME_EVENT, sync);
@@ -136,29 +158,37 @@ function useVisitorAnalyticsTheme() {
   return useMemo(() => getAdminTheme(themeId), [themeId]);
 }
 
+/** createTimelineOption 创建或追加对应业务记录。 */
 function createTimelineOption(theme: AdminTheme, points: Array<{ label: string; value: number }>): EChartsOption {
   return { animationDuration: 650, color: [theme.palette.charts[0]], tooltip: { trigger: 'axis', confine: true }, grid: { top: 22, right: 20, bottom: 34, left: 42, containLabel: true }, xAxis: { type: 'category', boundaryGap: false, data: points.map((point) => formatBucket(point.label)), axisLabel: { color: theme.palette.textSecondary, hideOverlap: true }, axisLine: { lineStyle: { color: theme.palette.border } } }, yAxis: { type: 'value', minInterval: 1, axisLabel: { color: theme.palette.textSecondary }, splitLine: { lineStyle: { color: theme.palette.border, type: 'dashed' } } }, series: [{ type: 'line', smooth: true, symbol: 'circle', symbolSize: 6, areaStyle: { color: `${theme.palette.charts[0]}22` }, data: points.map((point) => point.value) }] };
 }
 
+/** createDimensionOption 创建或追加对应业务记录。 */
 function createDimensionOption(theme: AdminTheme, items: Array<{ name: string; value: number }>, seriesName: string): EChartsOption {
+  /** sorted 保存排序结果。 */
   const sorted = [...items].reverse();
   return { animationDuration: 650, color: [theme.palette.charts[1]], tooltip: { trigger: 'axis', confine: true }, grid: { top: 12, right: 18, bottom: 24, left: 86, containLabel: true }, xAxis: { type: 'value', minInterval: 1, axisLabel: { color: theme.palette.textSecondary }, splitLine: { lineStyle: { color: theme.palette.border, type: 'dashed' } } }, yAxis: { type: 'category', data: sorted.map((item) => item.name), axisLabel: { color: theme.palette.textSecondary, width: 100, overflow: 'truncate' }, axisLine: { show: false } }, series: [{ name: seriesName, type: 'bar', barMaxWidth: 22, data: sorted.map((item) => item.value), itemStyle: { borderRadius: [0, 5, 5, 0] } }] };
 }
 
+/** rangeLabel 实现对应业务逻辑。 */
 function rangeLabel(range: VisitorAnalyticsRange) {
   return range === '24h' ? '最近 24 小时' : range === '30d' ? '最近 30 天' : '最近 7 天';
 }
 
+/** formatBucket 转换并生成对应业务结果。 */
 function formatBucket(value: string) {
   if (value.length >= 13) return `${value.slice(5, 10)} ${value.slice(11, 13)}时`;
   return value.slice(5, 10);
 }
 
+/** formatDateTime 转换并生成对应业务结果。 */
 function formatDateTime(value: string) {
+  /** date 保存日期。 */
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '--' : new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(date);
 }
 
+/** methodColor 实现对应业务逻辑。 */
 function methodColor(method: string) {
   return method === 'GET' ? 'blue' : method === 'POST' ? 'green' : method === 'DELETE' ? 'red' : 'gold';
 }

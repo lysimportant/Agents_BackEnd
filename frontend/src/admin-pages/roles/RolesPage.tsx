@@ -12,22 +12,37 @@ import { isAdministratorRoleCode, isSuperAdminRoleCode } from '@/src/utils/roleA
 import styles from './RolesPage.module.css';
 
 type RolesPageProps = {
+  /** actions 表示操作权限。 */
   actions: ResourceActionAccess;
+  /** actorRoleCode 表示角色编码。 */
   actorRoleCode: string;
+  /** roles 表示角色。 */
   roles: Role[];
+  /** users 表示用户。 */
   users: User[];
+  /** menus 表示菜单。 */
   menus: Menu[];
+  /** isLoading 表示加载状态。 */
   isLoading: boolean;
+  /** isSaving 表示保存状态。 */
   isSaving: boolean;
+  /** isSavingPermissions 表示权限。 */
   isSavingPermissions: boolean;
+  /** onRefresh 表示刷新回调。 */
   onRefresh: () => void;
+  /** onSave 表示保存状态。 */
   onSave: (roleId: number | null, form: RoleForm) => Promise<boolean>;
+  /** onDelete 表示删除回调。 */
   onDelete: (roleId: number) => Promise<boolean>;
+  /** onLoadPermissions 表示权限。 */
   onLoadPermissions: (roleId: number) => Promise<number[] | null>;
+  /** onLoadUsers 表示用户。 */
   onLoadUsers: (roleId: number) => Promise<User[] | null>;
+  /** onSavePermissions 表示保存状态。 */
   onSavePermissions: (roleId: number, menuIds: number[]) => Promise<boolean>;
 };
 
+/** RolesPage 实现对应业务逻辑。 */
 export function RolesPage({
   actions,
   actorRoleCode,
@@ -44,28 +59,45 @@ export function RolesPage({
   onLoadUsers,
   onSavePermissions,
 }: RolesPageProps) {
+  /** keyword、setKeyword 分别保存搜索关键词状态及其更新函数。 */
   const [keyword, setKeyword] = useState('');
+  /** editorOpen、setEditorOpen 分别保存编辑器打开状态状态及其更新函数。 */
   const [editorOpen, setEditorOpen] = useState(false);
+  /** permissionOpen、setPermissionOpen 分别保存权限状态及其更新函数。 */
   const [permissionOpen, setPermissionOpen] = useState(false);
+  /** editingRole、setEditingRole 保存角色、角色。 */
   const [editingRole, setEditingRole] = useState<Role | null>(null);
+  /** permissionRole、setPermissionRole 保存权限角色、权限角色。 */
   const [permissionRole, setPermissionRole] = useState<Role | null>(null);
+  /** form、setForm 保存表单、表单。 */
   const [form, setForm] = useState<RoleForm>(emptyRoleForm);
+  /** permissionIds、setPermissionIds 保存权限标识列表、权限标识列表。 */
   const [permissionIds, setPermissionIds] = useState<number[]>([]);
+  /** isLoadingPermissions、setIsLoadingPermissions 分别保存加载状态状态及其更新函数。 */
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(false);
+  /** deletingRoleId、setDeletingRoleId 保存角色标识、角色标识。 */
   const [deletingRoleId, setDeletingRoleId] = useState<number | null>(null);
+  /** usersRole、setUsersRole 保存角色、角色。 */
   const [usersRole, setUsersRole] = useState<Role | null>(null);
+  /** associatedUsers、setAssociatedUsers 保存用户、用户。 */
   const [associatedUsers, setAssociatedUsers] = useState<User[]>([]);
+  /** isLoadingUsers、setIsLoadingUsers 分别保存加载状态状态及其更新函数。 */
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  /** usersError、setUsersError 分别保存错误状态状态及其更新函数。 */
   const [usersError, setUsersError] = useState('');
 
+  /** filteredRoles 缓存计算得到的筛选后。 */
   const filteredRoles = useMemo(() => {
+    /** query 保存查询条件。 */
     const query = keyword.trim().toLowerCase();
     return [...roles]
       .sort((first, second) => first.sort - second.sort || first.id - second.id)
       .filter((role) => !query || [role.name, role.code, role.description].some((value) => value.toLowerCase().includes(query)));
   }, [keyword, roles]);
 
+  /** userCounts 缓存计算得到的用户。 */
   const userCounts = useMemo(() => {
+    /** counts 保存数量。 */
     const counts = new Map<number, number>();
     users.forEach((user) => {
       if (user.roleId != null) counts.set(user.roleId, (counts.get(user.roleId) ?? 0) + 1);
@@ -73,13 +105,18 @@ export function RolesPage({
     return counts;
   }, [users]);
 
+  /** menuTree 负责计算或维护菜单树形数据。 */
   const menuTree = useMemo<DataNode[]>(() => {
+    /** sorted 负责计算或维护排序结果。 */
     const sorted = [...menus].filter((menu) => menu.status === '启用').sort((first, second) => first.sort - second.sort || first.id - second.id);
+    /** childrenByParent 保存父级。 */
     const childrenByParent = new Map<number | null, Menu[]>();
     sorted.forEach((menu) => {
+      /** parentId 负责计算或维护标识。 */
       const parentId = menu.parentId != null && sorted.some((candidate) => candidate.id === menu.parentId) ? menu.parentId : null;
       childrenByParent.set(parentId, [...(childrenByParent.get(parentId) ?? []), menu]);
     });
+    /** mapNodes 负责计算或维护节点。 */
     const mapNodes = (parentId: number | null): DataNode[] => (childrenByParent.get(parentId) ?? []).map((menu) => ({
       key: menu.id,
       title: menu.name,
@@ -88,12 +125,14 @@ export function RolesPage({
     return mapNodes(null);
   }, [menus]);
 
+  /** openCreate 负责计算或维护打开状态。 */
   const openCreate = () => {
     setEditingRole(null);
     setForm({ ...emptyRoleForm });
     setEditorOpen(true);
   };
 
+  /** openEdit 负责计算或维护打开状态。 */
   const openEdit = (role: Role) => {
     setEditingRole(role);
     setForm({
@@ -106,14 +145,17 @@ export function RolesPage({
     setEditorOpen(true);
   };
 
+  /** submitEditor 负责执行对应业务操作。 */
   const submitEditor = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (editingRole ? !actions.update : !actions.create) return;
     if (await onSave(editingRole?.id ?? null, form)) setEditorOpen(false);
   };
 
+  /** openPermissions 负责计算或维护打开状态权限。 */
   const openPermissions = async (role: Role) => {
     setIsLoadingPermissions(true);
+    /** ids 保存标识列表。 */
     const ids = await onLoadPermissions(role.id);
     setIsLoadingPermissions(false);
     if (ids === null) return;
@@ -122,6 +164,7 @@ export function RolesPage({
     setPermissionOpen(true);
   };
 
+  /** deleteRole 负责删除或清理对应业务状态。 */
   const deleteRole = async (roleId: number) => {
     setDeletingRoleId(roleId);
     try {
@@ -131,11 +174,13 @@ export function RolesPage({
     }
   };
 
+  /** openUsers 负责计算或维护打开状态用户。 */
   const openUsers = async (role: Role) => {
     setUsersRole(role);
     setAssociatedUsers([]);
     setUsersError('');
     setIsLoadingUsers(true);
+    /** result 保存操作结果。 */
     const result = await onLoadUsers(role.id);
     if (result === null) setUsersError('无法加载该角色的关联用户，请稍后重试。');
     else setAssociatedUsers(result);
@@ -189,7 +234,9 @@ export function RolesPage({
             </thead>
             <tbody>
               {filteredRoles.map((role) => {
+                /** isAdministratorRole 保存角色。 */
                 const isAdministratorRole = isAdministratorRoleCode(role.code);
+                /** actorIsSuperAdmin 保存管理员。 */
                 const actorIsSuperAdmin = isSuperAdminRoleCode(actorRoleCode);
                 return (
                   <tr key={role.id}>

@@ -6,8 +6,10 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
+/** Select 保存模块使用的固定配置或共享状态。 */
 const Select = SelectPrimitive.Root
 
+/** SelectGroup 定义对应业务的数据结构与调用契约。 */
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (
     <SelectPrimitive.Group
@@ -18,6 +20,7 @@ function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   )
 }
 
+/** SelectValue 定义对应业务的数据结构与调用契约。 */
 function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
   return (
     <SelectPrimitive.Value
@@ -28,6 +31,7 @@ function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
   )
 }
 
+/** SelectTrigger 实现对应业务逻辑。 */
 function SelectTrigger({
   className,
   size = "default",
@@ -56,6 +60,7 @@ function SelectTrigger({
   )
 }
 
+/** SelectContent 实现对应业务逻辑。 */
 function SelectContent({
   className,
   children,
@@ -95,6 +100,7 @@ function SelectContent({
   )
 }
 
+/** SelectLabel 实现对应业务逻辑。 */
 function SelectLabel({
   className,
   ...props
@@ -108,6 +114,7 @@ function SelectLabel({
   )
 }
 
+/** SelectItem 实现对应业务逻辑。 */
 function SelectItem({
   className,
   children,
@@ -136,6 +143,7 @@ function SelectItem({
   )
 }
 
+/** SelectSeparator 实现对应业务逻辑。 */
 function SelectSeparator({
   className,
   ...props
@@ -149,6 +157,7 @@ function SelectSeparator({
   )
 }
 
+/** SelectScrollUpButton 实现对应业务逻辑。 */
 function SelectScrollUpButton({
   className,
   ...props
@@ -168,6 +177,7 @@ function SelectScrollUpButton({
   )
 }
 
+/** SelectScrollDownButton 实现对应业务逻辑。 */
 function SelectScrollDownButton({
   className,
   ...props

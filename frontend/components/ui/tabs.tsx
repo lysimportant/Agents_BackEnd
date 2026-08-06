@@ -5,6 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
+/** Tabs 实现对应业务逻辑。 */
 function Tabs({
   className,
   orientation = "horizontal",
@@ -23,6 +24,7 @@ function Tabs({
   )
 }
 
+/** tabsListVariants 保存模块使用的固定配置或共享状态。 */
 const tabsListVariants = cva(
   "group/tabs-list inline-flex w-fit items-center justify-center rounded-lg p-[3px] text-muted-foreground group-data-horizontal/tabs:h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col data-[variant=line]:rounded-none",
   {
@@ -38,6 +40,7 @@ const tabsListVariants = cva(
   }
 )
 
+/** TabsList 实现对应业务逻辑。 */
 function TabsList({
   className,
   variant = "default",
@@ -53,6 +56,7 @@ function TabsList({
   )
 }
 
+/** TabsTrigger 定义对应业务的数据结构与调用契约。 */
 function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
   return (
     <TabsPrimitive.Tab
@@ -69,6 +73,7 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
   )
 }
 
+/** TabsContent 定义对应业务的数据结构与调用契约。 */
 function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   return (
     <TabsPrimitive.Panel

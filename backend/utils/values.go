@@ -7,6 +7,7 @@ import (
 	"collector-backend/permissions"
 )
 
+// ParseBool 解析对应业务数据。
 func ParseBool(value string) bool {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "1", "true", "yes", "on":
@@ -16,6 +17,7 @@ func ParseBool(value string) bool {
 	}
 }
 
+// SanitizeFileName 实现对应业务逻辑。
 func SanitizeFileName(name string) string {
 	name = strings.Map(func(r rune) rune {
 		switch {
@@ -40,10 +42,12 @@ func SanitizeFileName(name string) string {
 	return name
 }
 
+// IsAdmin 校验对应业务条件。
 func IsAdmin(user models.User) bool {
 	return permissions.IsAdministratorRoleCode(user.RoleCode)
 }
 
+// IsSuperAdmin 校验对应业务条件。
 func IsSuperAdmin(user models.User) bool {
 	return permissions.IsSuperAdminRoleCode(user.RoleCode)
 }

@@ -9,17 +9,24 @@ import type { AuthUser, ProfileForm, User } from '@/src/types/admin';
 import styles from './ProfileDialog.module.css';
 
 type ProfilePageProps = {
+  /** authUser 表示认证用户。 */
   authUser: AuthUser;
+  /** onUpdated 表示更新时间。 */
   onUpdated: (user: User) => void;
+  /** onPasswordChanged 表示密码。 */
   onPasswordChanged: () => void;
 };
 
 type PasswordForm = {
+  /** code 表示编码。 */
   code: string;
+  /** newPassword 表示密码。 */
   newPassword: string;
+  /** confirmPassword 表示密码。 */
   confirmPassword: string;
 };
 
+/** toProfileForm 实现对应业务逻辑。 */
 function toProfileForm(user: AuthUser | User): ProfileForm {
   return {
     name: user.name ?? '',
@@ -31,8 +38,10 @@ function toProfileForm(user: AuthUser | User): ProfileForm {
   };
 }
 
+/** parseProfileError 解析对应业务数据。 */
 async function parseProfileError(response: Response, fallback: string) {
   try {
+    /** payload 保存请求载荷。 */
     const payload = await response.json() as { error?: string };
     return payload.error || fallback;
   } catch {
@@ -40,9 +49,12 @@ async function parseProfileError(response: Response, fallback: string) {
   }
 }
 
+/** requestProfile 实现对应业务逻辑。 */
 async function requestProfile(userId: number, init: RequestInit = {}) {
+  /** paths 保存路径。 */
   const paths = ['/api/profile', `/api/users/${userId}/profile`];
   for (let index = 0; index < paths.length; index += 1) {
+    /** response 保存接口响应及其关联状态。 */
     const response = await requestWithSession(`${API_BASE_URL}${paths[index]}`, init);
     if (index === 0 && (response.status === 404 || response.status === 405)) continue;
     return response;
@@ -50,21 +62,35 @@ async function requestProfile(userId: number, init: RequestInit = {}) {
   throw new Error('个人资料接口不可用');
 }
 
+/** ProfilePage 实现对应业务逻辑。 */
 export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfilePageProps) {
+  /** message 保存消息。 */
   const { message } = App.useApp();
+  /** profile、setProfile 保存个人资料、个人资料。 */
   const [profile, setProfile] = useState<User | null>(null);
+  /** form、setForm 负责计算或维护表单。 */
   const [form, setForm] = useState<ProfileForm>(() => toProfileForm(authUser));
+  /** passwordForm、setPasswordForm 保存密码表单、密码表单。 */
   const [passwordForm, setPasswordForm] = useState<PasswordForm>({ code: '', newPassword: '', confirmPassword: '' });
+  /** isLoading、setIsLoading 分别保存加载状态状态及其更新函数。 */
   const [isLoading, setIsLoading] = useState(false);
+  /** isSaving、setIsSaving 分别保存保存状态状态及其更新函数。 */
   const [isSaving, setIsSaving] = useState(false);
+  /** isSendingCode、setIsSendingCode 分别保存编码状态及其更新函数。 */
   const [isSendingCode, setIsSendingCode] = useState(false);
+  /** isChangingPassword、setIsChangingPassword 分别保存密码状态及其更新函数。 */
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  /** passwordDialogOpen、setPasswordDialogOpen 分别保存密码对话框状态及其更新函数。 */
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  /** error、setError 分别保存错误状态状态及其更新函数。 */
   const [error, setError] = useState('');
+  /** passwordError、setPasswordError 分别保存密码错误状态状态及其更新函数。 */
   const [passwordError, setPasswordError] = useState('');
+  /** passwordMessage、setPasswordMessage 分别保存密码消息状态及其更新函数。 */
   const [passwordMessage, setPasswordMessage] = useState('');
 
   useEffect(() => {
+    /** controller 保存请求控制器。 */
     const controller = new AbortController();
     setForm(toProfileForm(authUser));
     setProfile(null);
@@ -73,12 +99,15 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
 
     void (async () => {
       try {
+        /** response 保存接口响应及其关联状态。 */
         const response = await requestProfile(authUser.id, { cache: 'no-store', signal: controller.signal });
         if (!response.ok) throw new Error(await parseProfileError(response, '加载个人资料失败'));
+        /** user 保存用户。 */
         const user = await response.json() as User;
         setProfile(user);
         setForm(toProfileForm(user));
         onUpdated(user);
+      /** loadError 保存错误状态。 */
       } catch (loadError) {
         if (!controller.signal.aborted) {
           setError(loadError instanceof Error ? loadError.message : '加载个人资料失败');
@@ -91,11 +120,13 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
     return () => controller.abort();
   }, [authUser.id]);
 
+  /** submitProfile 负责执行对应业务操作。 */
   const submitProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
     setIsSaving(true);
     try {
+      /** response 保存接口响应及其关联状态。 */
       const response = await requestProfile(authUser.id, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -109,12 +140,15 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
         }),
       });
       if (!response.ok) throw new Error(await parseProfileError(response, '保存个人资料失败'));
+      /** user 保存用户。 */
       const user = await response.json() as User;
       setProfile(user);
       setForm(toProfileForm(user));
       onUpdated(user);
       void message.success('个人资料保存完成');
+    /** saveError 保存保存状态错误状态。 */
     } catch (saveError) {
+      /** errorMessage 保存错误状态消息。 */
       const errorMessage = saveError instanceof Error ? saveError.message : '保存个人资料失败';
       setError(errorMessage);
       void message.error(errorMessage);
@@ -123,11 +157,13 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
     }
   };
 
+  /** sendCode 负责执行对应业务操作。 */
   const sendCode = async () => {
     setPasswordError('');
     setPasswordMessage('');
     setIsSendingCode(true);
     try {
+      /** response 保存接口响应及其关联状态。 */
       const response = await requestWithSession(`${API_BASE_URL}/api/profile/password-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -136,7 +172,9 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
       if (!response.ok) throw new Error(await parseProfileError(response, '发送验证码失败'));
       setPasswordMessage('验证码已发送到当前绑定邮箱，3 分钟内有效。');
       void message.success('验证码发送完成');
+    /** sendError 保存错误状态。 */
     } catch (sendError) {
+      /** errorMessage 保存错误状态消息。 */
       const errorMessage = sendError instanceof Error ? sendError.message : '发送验证码失败';
       setPasswordError(errorMessage);
       void message.error(errorMessage);
@@ -145,6 +183,7 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
     }
   };
 
+  /** changePassword 负责计算或维护密码。 */
   const changePassword = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setPasswordError('');
@@ -159,6 +198,7 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
     }
     setIsChangingPassword(true);
     try {
+      /** response 保存接口响应及其关联状态。 */
       const response = await requestWithSession(`${API_BASE_URL}/api/profile/password`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -170,7 +210,9 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
       setPasswordDialogOpen(false);
       void message.success('密码修改完成');
       onPasswordChanged();
+    /** changeError 保存错误状态。 */
     } catch (changeError) {
+      /** errorMessage 保存错误状态消息。 */
       const errorMessage = changeError instanceof Error ? changeError.message : '修改密码失败';
       setPasswordError(errorMessage);
       void message.error(errorMessage);
@@ -179,7 +221,9 @@ export function ProfilePage({ authUser, onUpdated, onPasswordChanged }: ProfileP
     }
   };
 
+  /** visibleUser 保存可见状态用户。 */
   const visibleUser = profile ?? authUser;
+  /** avatarFallback 保存头像。 */
   const avatarFallback = Array.from(form.name.trim() || visibleUser.username || '?')[0]?.toUpperCase();
 
   return (
