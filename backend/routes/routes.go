@@ -26,6 +26,7 @@ type Store interface {
 	handlers.SocketStore
 	handlers.InternalChatStore
 	handlers.VisitorAnalyticsStore
+	handlers.PublicStore
 	middleware.VisitorAccessStore
 }
 
@@ -44,6 +45,7 @@ func Setup(router *gin.Engine, appStore Store, authService *auth.Service, passwo
 	socketHandler := handlers.NewSocketHandler(appStore, cfg.UploadDir)
 	registerAuthRoutes(api, handlers.NewAuthHandler(appStore, authService, socketHandler))
 	registerPublicSocketRoutes(api, socketHandler)
+	registerPublicRoutes(api, handlers.NewPublicHandler(appStore, cfg.UploadDir))
 
 	// protected 保存变量 protected。
 	protected := api.Group("")

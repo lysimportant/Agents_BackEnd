@@ -490,6 +490,14 @@ type Article struct {
 	OwnerName string `json:"ownerName"`
 	// IsPrivate 表示变量 IsPrivate。
 	IsPrivate bool `json:"isPrivate"`
+	// PortalVisible 是否允许匿名 C 端公开访问。
+	PortalVisible bool `json:"portalVisible"`
+	// PortalFeatured 是否作为门户首页或分类精选。
+	PortalFeatured bool `json:"portalFeatured"`
+	// PortalPublishedAt 表示首次发布到门户的时间，取消发布后保留。
+	PortalPublishedAt *time.Time `json:"portalPublishedAt,omitempty"`
+	// ContentLocale 表示正文实际语言，用于 SEO 的 lang 与结构化数据。
+	ContentLocale string `json:"contentLocale"`
 	// CreatedAt 表示创建时间。
 	CreatedAt time.Time `json:"createdAt"`
 	// UpdatedAt 表示更新时间。
@@ -514,6 +522,12 @@ type ArticleRequest struct {
 	Views int `json:"views"`
 	// IsPrivate 表示变量 IsPrivate。
 	IsPrivate bool `json:"isPrivate"`
+	// PortalVisible 是否允许匿名 C 端公开访问。
+	PortalVisible bool `json:"portalVisible"`
+	// PortalFeatured 是否作为门户首页或分类精选。
+	PortalFeatured bool `json:"portalFeatured"`
+	// ContentLocale 表示正文实际语言，受支持语言白名单校验。
+	ContentLocale string `json:"contentLocale"`
 }
 
 // ManagedFile 描述文件管理页面中的受管文件。
@@ -542,6 +556,16 @@ type ManagedFile struct {
 	OwnerName string `json:"ownerName"`
 	// IsPrivate 表示变量 IsPrivate。
 	IsPrivate bool `json:"isPrivate"`
+	// PortalVisible 是否允许匿名 C 端公开访问。
+	PortalVisible bool `json:"portalVisible"`
+	// PortalFeatured 是否作为门户首页或分类精选。
+	PortalFeatured bool `json:"portalFeatured"`
+	// PortalPublishedAt 表示首次发布到门户的时间，取消发布后保留。
+	PortalPublishedAt *time.Time `json:"portalPublishedAt,omitempty"`
+	// ImageWidth 表示公开图片原始宽度，首期用于瀑布流占位。
+	ImageWidth int `json:"imageWidth,omitempty"`
+	// ImageHeight 表示公开图片原始高度，首期用于瀑布流占位。
+	ImageHeight int `json:"imageHeight,omitempty"`
 	// ReadOnly 表示只读状态。
 	ReadOnly bool `json:"readOnly"`
 	// PreviewURL 表示预览地址。
@@ -568,6 +592,10 @@ type FileMetadataRequest struct {
 	Description string `json:"description"`
 	// IsPrivate 表示变量 IsPrivate。
 	IsPrivate bool `json:"isPrivate"`
+	// PortalVisible 是否允许匿名 C 端公开访问。
+	PortalVisible bool `json:"portalVisible"`
+	// PortalFeatured 是否作为门户首页或分类精选。
+	PortalFeatured bool `json:"portalFeatured"`
 }
 
 // FileContentRequest 用于替换可编辑文件的文本内容。

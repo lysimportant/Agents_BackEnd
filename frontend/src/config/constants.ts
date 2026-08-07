@@ -96,6 +96,9 @@ export const emptyArticleForm = {
   summary: '',
   content: '',
   isPrivate: false,
+  portalVisible: false,
+  portalFeatured: false,
+  contentLocale: 'zh-CN',
 };
 
 /** emptyFileForm 保存模块使用的固定配置或共享状态。 */
@@ -104,4 +107,6 @@ export const emptyFileForm = {
   category: '',
   description: '',
   isPrivate: false,
+  portalVisible: false,
+  portalFeatured: false,
 };

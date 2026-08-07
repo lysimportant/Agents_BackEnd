@@ -1,0 +1,430 @@
+package repository
+
+import (
+	"database/sql"
+	"strconv"
+	"strings"
+
+	"collector-backend/models"
+)
+
+// isPublishedArticleSQL 保存公开文章的过滤条件。
+// 文章需同时满足 portal_visible=true、is_private=false、status=已发布。
+const isPublishedArticleSQL = "portal_visible=1 AND is_private=0 AND status='已发布'"
+
+// scanPublicArticle 从查询行扫描公开文章列表项，并校验公开条件。
+func scanPublicArticle(row scanner, coverImage string) (models.PublicArticleListItem, bool) {
+	// item 保存扫描得到的公开文章列表项。
+	var item models.PublicArticleListItem
+	// isPrivate、portalVisible、portalFeatured 保存文章的可见与精选标记。
+	var isPrivate, portalVisible, portalFeatured int
+	// contentLocale 保存正文实际语言。
+	// status 保存文章状态。
+	var status string
+	var contentLocale string
+	// publishedAt 保存首次发布到门户的时间。
+	var publishedAt sql.NullString
+	// c、up 保存创建与更新时间。
+	var c, up string
+	// err 保存扫描过程的错误。
+	err := row.Scan(&item.ID, &item.Title, &item.Category, &item.Author, &status, &item.Summary, &isPrivate, &portalVisible, &portalFeatured, &publishedAt, &contentLocale, &item.Views, &c, &up)
+	if err != nil {
+		return models.PublicArticleListItem{}, false
+	}
+	// 校验文章确实满足公开条件，否则不作为公开内容返回。
+	if !intToBool(portalVisible) || intToBool(isPrivate) || status != "已发布" {
+		return models.PublicArticleListItem{}, false
+	}
+	item.Slug = slugify(item.Title)
+	item.CoverImage = coverImage
+	item.ContentLocale = contentLocale
+	if contentLocale == "" {
+		item.ContentLocale = "zh-CN"
+	}
+	if publishedAt.Valid {
+		item.PublishedAt = parseTime(publishedAt.String)
+	}
+	item.UpdatedAt = parseTime(up)
+	// 返回校验通过的文章列表项。
+	return item, true
+}
+
+// articlePublicSelect 保存公开文章列表查询需要扫描的列。
+const articlePublicSelect = "a.id,a.title,a.category,a.author,a.status,a.summary,a.is_private,a.portal_visible,a.portal_featured,a.portal_published_at,a.content_locale,a.views,a.created_at,a.updated_at"
+
+// ListPublicArticles 返回公开文章列表及分页信息。
+func (s *SQLiteStore) ListPublicArticles(keyword, category string, page, pageSize int) ([]models.PublicArticleListItem, int, int) {
+	// where 保存动态拼接的查询条件。
+	where := []string{isPublishedArticleSQL}
+	// args 保存查询条件对应的参数。
+	args := []interface{}{}
+	if keyword != "" {
+		where = append(where, "(a.title LIKE ? OR a.summary LIKE ?)")
+		args = append(args, "%"+keyword+"%", "%"+keyword+"%")
+	}
+	if category != "" {
+		where = append(where, "a.category=?")
+		args = append(args, category)
+	}
+	// whereSQL 保存 WHERE 子句的最终文本。
+	whereSQL := strings.Join(where, " AND ")
+	// total 保存符合条件的总条数。
+	var total int
+	// err 保存计数查询的错误。
+	if err := s.db.QueryRow("SELECT COUNT(1) FROM articles a WHERE "+whereSQL, args...).Scan(&total); err != nil {
+		return []models.PublicArticleListItem{}, 0, 0
+	}
+	// offset 保存分页偏移量。
+	offset := (page - 1) * pageSize
+	// rows、err 保存分页查询结果与查询错误。
+	rows, err := s.db.Query("SELECT "+articlePublicSelect+" FROM articles a WHERE "+whereSQL+" ORDER BY a.portal_published_at DESC, a.id DESC LIMIT ? OFFSET ?", append(args, pageSize, offset)...)
+	if err != nil {
+		return []models.PublicArticleListItem{}, 0, 0
+	}
+	defer rows.Close()
+	// items 保存当前页的文章列表。
+	items := []models.PublicArticleListItem{}
+	for rows.Next() {
+		// item 保存扫描得到的单篇文章。
+		item, ok := scanPublicArticle(rows, "")
+		if ok {
+			items = append(items, item)
+		}
+	}
+	// totalPages 保存总页数。
+	totalPages := (total + pageSize - 1) / pageSize
+	return items, total, totalPages
+}
+
+// FindPublicArticleDetail 返回公开文章详情，并校验公开条件。
+func (s *SQLiteStore) FindPublicArticleDetail(id int) (models.PublicArticleDetail, bool) {
+	// row 保存查询结果行。
+	row := s.db.QueryRow("SELECT a.id,a.title,a.category,a.author,a.status,a.summary,a.content,a.is_private,a.portal_visible,a.portal_featured,a.portal_published_at,a.content_locale,a.views,a.created_at,a.updated_at FROM articles a WHERE a.id=?", id)
+	// item 保存扫描得到的公开文章详情。
+	var item models.PublicArticleDetail
+	// isPrivate、portalVisible、portalFeatured 保存文章的可见与精选标记。
+	var isPrivate, portalVisible, portalFeatured int
+	// contentLocale 保存正文实际语言。
+	var contentLocale string
+	// status 保存文章状态。
+	var status string
+	// publishedAt 保存首次发布到门户的时间。
+	var publishedAt sql.NullString
+	// c、up 保存创建与更新时间。
+	var c, up string
+	// err 保存扫描过程的错误。
+	err := row.Scan(&item.ID, &item.Title, &item.Category, &item.Author, &status, &item.Summary, &item.Content, &isPrivate, &portalVisible, &portalFeatured, &publishedAt, &contentLocale, &item.Views, &c, &up)
+	if err != nil {
+		return models.PublicArticleDetail{}, false
+	}
+	// 校验公开条件，未发布或私密文章不返回。
+	if !intToBool(portalVisible) || intToBool(isPrivate) || status != "已发布" {
+		return models.PublicArticleDetail{}, false
+	}
+	item.Slug = slugify(item.Title)
+	item.ContentLocale = contentLocale
+	if contentLocale == "" {
+		item.ContentLocale = "zh-CN"
+	}
+	if publishedAt.Valid {
+		item.PublishedAt = parseTime(publishedAt.String)
+	}
+	item.UpdatedAt = parseTime(up)
+	return item, true
+}
+
+// ListRelatedPublicArticles 返回同分类下的关联文章列表。
+func (s *SQLiteStore) ListRelatedPublicArticles(articleID int, category string, limit int) []models.PublicArticleListItem {
+	// rows、err 保存关联文章查询结果与查询错误。
+	rows, err := s.db.Query("SELECT "+articlePublicSelect+" FROM articles a WHERE "+isPublishedArticleSQL+" AND a.id<>? AND a.category=? ORDER BY a.portal_published_at DESC, a.id DESC LIMIT ?", articleID, category, limit)
+	if err != nil {
+		return []models.PublicArticleListItem{}
+	}
+	defer rows.Close()
+	// items 保存关联文章列表。
+	items := []models.PublicArticleListItem{}
+	for rows.Next() {
+		// item 保存扫描得到的单篇关联文章。
+		item, ok := scanPublicArticle(rows, "")
+		if ok {
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
+// listPublicCategoriesFallback 通过聚合统计构造公开分类列表。
+func (s *SQLiteStore) listPublicCategoriesFallback() []models.PublicCategory {
+	// rows、err 保存分类聚合查询结果与查询错误。
+	rows, err := s.db.Query("SELECT article_counts.category, COALESCE(article_counts.cnt,0), COALESCE(image_counts.cnt,0), COALESCE(resource_counts.cnt,0) FROM (" +
+		"SELECT category, COUNT(1) AS cnt FROM articles WHERE " + isPublishedArticleSQL + " GROUP BY category" +
+		") article_counts LEFT JOIN (" +
+		"SELECT category, COUNT(1) AS cnt FROM files WHERE portal_visible=1 AND is_private=0 AND deleted_at IS NULL AND content_type LIKE 'image/%' GROUP BY category" +
+		") image_counts ON image_counts.category=article_counts.category LEFT JOIN (" +
+		"SELECT category, COUNT(1) AS cnt FROM files WHERE portal_visible=1 AND is_private=0 AND deleted_at IS NULL AND content_type NOT LIKE 'image/%' GROUP BY category" +
+		") resource_counts ON resource_counts.category=article_counts.category ORDER BY (article_counts.cnt+COALESCE(image_counts.cnt,0)+COALESCE(resource_counts.cnt,0)) DESC, article_counts.category ASC")
+	if err != nil {
+		return []models.PublicCategory{}
+	}
+	defer rows.Close()
+	// categories 保存聚合得到的分类列表。
+	categories := []models.PublicCategory{}
+	for rows.Next() {
+		// category 保存当前分类。
+		var category models.PublicCategory
+		// articleCount、imageCount、resourceCount 保存分类下的各类数量。
+		var articleCount, imageCount, resourceCount int
+		if err := rows.Scan(&category.Name, &articleCount, &imageCount, &resourceCount); err != nil {
+			continue
+		}
+		category.ArticleCount = articleCount
+		category.ImageCount = imageCount
+		category.ResourceCount = resourceCount
+		categories = append(categories, category)
+	}
+	return categories
+}
+
+// ListPublicCategories 返回公开分类列表。
+func (s *SQLiteStore) ListPublicCategories() []models.PublicCategory {
+	return s.listPublicCategoriesFallback()
+}
+
+// slugify 将文章标题转换为 URL 友好的 slug，保留非 ASCII 字符。
+func slugify(title string) string {
+	// trimmed 保存去除首尾空白后的标题。
+	trimmed := strings.TrimSpace(title)
+	if trimmed == "" {
+		return "article"
+	}
+	// builder 保存拼接的 slug 结果。
+	var builder strings.Builder
+	// lastWasDash 记录是否刚写入连接符，避免连续短横线。
+	lastWasDash := false
+	// r 保存当前遍历的标题字符。
+	for _, r := range trimmed {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'):
+			builder.WriteRune(r)
+			lastWasDash = false
+		case r == ' ' || r == '-' || r == '_':
+			if !lastWasDash && builder.Len() > 0 {
+				builder.WriteByte('-')
+				lastWasDash = true
+			}
+		default:
+			// 非 ASCII 字符保留原样，交由 URL 编码处理。
+			builder.WriteRune(r)
+			lastWasDash = false
+		}
+	}
+	// slug 保存去除首尾连接符后的最终结果。
+	slug := strings.Trim(builder.String(), "-")
+	if slug == "" {
+		return "article"
+	}
+	return slug
+}
+
+// isPublicFileSQL 保存公开文件的过滤条件，要求已发布到门户且未删除。
+const isPublicFileSQL = "portal_visible=1 AND is_private=0 AND deleted_at IS NULL"
+
+// scanPublicFile 从查询行扫描公开文件列表项，并校验公开条件。
+func scanPublicFile(row scanner) (models.PublicFileListItem, bool) {
+	// item 保存扫描得到的公开文件列表项。
+	var item models.PublicFileListItem
+	// isPrivate、portalVisible、portalFeatured 保存文件的可见与精选标记。
+	var isPrivate, portalVisible, portalFeatured int
+	// publishedAt 保存首次发布到门户的时间。
+	var publishedAt sql.NullString
+	// c、up 保存创建与更新时间。
+	var c, up string
+	// deleted 保存软删除时间，非空表示已删除。
+	var deleted sql.NullString
+	// err 保存扫描过程的错误。
+	err := row.Scan(&item.ID, &item.DisplayName, &item.Category, &item.Description, &item.ContentType, &item.Size, &isPrivate, &portalVisible, &portalFeatured, &publishedAt, &item.ImageWidth, &item.ImageHeight, &c, &up, &deleted)
+	if err != nil {
+		return models.PublicFileListItem{}, false
+	}
+	// 校验公开条件，私密、未发布或已删除的文件不返回。
+	if !intToBool(portalVisible) || intToBool(isPrivate) || deleted.Valid {
+		return models.PublicFileListItem{}, false
+	}
+	if publishedAt.Valid {
+		item.PublishedAt = parseTime(publishedAt.String)
+	}
+	item.UpdatedAt = parseTime(up)
+
+	// 使用相对公开地址，由 C 端结合基础地址拼接，不暴露存储结构。
+	item.PreviewURL = "/api/public/files/" + strconv.Itoa(item.ID) + "/preview"
+	item.DownloadURL = "/api/public/files/" + strconv.Itoa(item.ID) + "/download"
+	// 图片使用文件名作为替代文本。
+	if strings.HasPrefix(item.ContentType, "image/") {
+		item.AltText = item.DisplayName
+	}
+	return item, true
+}
+
+// publicFileSelect 保存公开文件列表查询需要扫描的列。
+const publicFileSelect = "f.id,f.display_name,f.category,f.description,f.content_type,f.size,f.is_private,f.portal_visible,f.portal_featured,f.portal_published_at,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at"
+
+// ListPublicFiles 返回公开文件列表及分页信息，isImageOnly 为 true 时仅返回图片。
+func (s *SQLiteStore) ListPublicFiles(isImageOnly bool, keyword, category string, page, pageSize int) ([]models.PublicFileListItem, int, int) {
+	// where 保存动态拼接的查询条件。
+	where := []string{isPublicFileSQL}
+	// args 保存查询条件对应的参数。
+	args := []interface{}{}
+	if isImageOnly {
+		where = append(where, "f.content_type LIKE 'image/%'")
+	} else {
+		where = append(where, "f.content_type NOT LIKE 'image/%'")
+	}
+	if keyword != "" {
+		where = append(where, "(f.display_name LIKE ? OR f.description LIKE ? OR f.original_name LIKE ?)")
+		args = append(args, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
+	}
+	if category != "" {
+		where = append(where, "f.category=?")
+		args = append(args, category)
+	}
+	// whereSQL 保存 WHERE 子句的最终文本。
+	whereSQL := strings.Join(where, " AND ")
+	// total 保存符合条件的总条数。
+	var total int
+	// err 保存计数查询的错误。
+	if err := s.db.QueryRow("SELECT COUNT(1) FROM files f WHERE "+whereSQL, args...).Scan(&total); err != nil {
+		return []models.PublicFileListItem{}, 0, 0
+	}
+	// offset 保存分页偏移量。
+	offset := (page - 1) * pageSize
+	// rows、err 保存分页查询结果与查询错误。
+	rows, err := s.db.Query("SELECT "+publicFileSelect+" FROM files f WHERE "+whereSQL+" ORDER BY f.portal_published_at DESC, f.id DESC LIMIT ? OFFSET ?", append(args, pageSize, offset)...)
+	if err != nil {
+		return []models.PublicFileListItem{}, 0, 0
+	}
+	defer rows.Close()
+	// items 保存当前页的文件列表。
+	items := []models.PublicFileListItem{}
+	for rows.Next() {
+		// item 保存扫描得到的单个文件。
+		item, ok := scanPublicFile(rows)
+		if ok {
+			items = append(items, item)
+		}
+	}
+	// totalPages 保存总页数。
+	totalPages := (total + pageSize - 1) / pageSize
+	return items, total, totalPages
+}
+
+// FindPublicFile 返回公开文件摘要，并校验公开条件。
+func (s *SQLiteStore) FindPublicFile(id int) (models.PublicFileListItem, bool) {
+	// row 保存查询结果行。
+	row := s.db.QueryRow("SELECT "+publicFileSelect+" FROM files f WHERE f.id=?", id)
+	// item 保存扫描得到的公开文件。
+	item, ok := scanPublicFile(row)
+	return item, ok
+}
+
+// FeaturedPublicImages 返回精选的公开图片，无精选时回退为最新图片。
+func (s *SQLiteStore) FeaturedPublicImages(limit int) []models.PublicFileListItem {
+	// rows、err 保存精选图片查询结果与查询错误。
+	rows, err := s.db.Query("SELECT "+publicFileSelect+" FROM files f WHERE "+isPublicFileSQL+" AND f.content_type LIKE 'image/%' AND f.portal_featured=1 ORDER BY f.portal_published_at DESC, f.id DESC LIMIT ?", limit)
+	if err != nil {
+		return []models.PublicFileListItem{}
+	}
+	defer rows.Close()
+	// items 保存精选图片列表。
+	items := []models.PublicFileListItem{}
+	for rows.Next() {
+		// item 保存扫描得到的精选图片。
+		item, ok := scanPublicFile(rows)
+		if ok {
+			items = append(items, item)
+		}
+	}
+	if len(items) > 0 {
+		return items
+	}
+	// 无精选图片时返回最新公开图片作为回退。
+	rows2, err2 := s.db.Query("SELECT "+publicFileSelect+" FROM files f WHERE "+isPublicFileSQL+" AND f.content_type LIKE 'image/%' ORDER BY f.portal_published_at DESC, f.id DESC LIMIT ?", limit)
+	if err2 != nil {
+		return []models.PublicFileListItem{}
+	}
+	defer rows2.Close()
+	// latest 保存回退的最新图片列表。
+	latest := []models.PublicFileListItem{}
+	for rows2.Next() {
+		// item 保存扫描得到的最新图片。
+		item, ok := scanPublicFile(rows2)
+		if ok {
+			latest = append(latest, item)
+		}
+	}
+	return latest
+}
+
+// LatestPublicImages 返回最新的公开图片列表。
+func (s *SQLiteStore) LatestPublicImages(keyword, category string, page, pageSize int) ([]models.PublicFileListItem, int, int) {
+	return s.ListPublicFiles(true, keyword, category, page, pageSize)
+}
+
+// SiteSummary 返回站点首页聚合概览数据。
+func (s *SQLiteStore) SiteSummary() models.PublicSiteSummary {
+	// summary 保存聚合概览结果。
+	var summary models.PublicSiteSummary
+	// 统计公开文章总数。
+	if err := s.db.QueryRow("SELECT COUNT(1) FROM articles WHERE " + isPublishedArticleSQL).Scan(&summary.ArticleCount); err != nil {
+		return summary
+	}
+	// 统计公开图片总数。
+	if err := s.db.QueryRow("SELECT COUNT(1) FROM files WHERE " + isPublicFileSQL + " AND content_type LIKE 'image/%'").Scan(&summary.ImageCount); err != nil {
+		return summary
+	}
+	// 统计公开资源总数。
+	if err := s.db.QueryRow("SELECT COUNT(1) FROM files WHERE " + isPublicFileSQL + " AND content_type NOT LIKE 'image/%'").Scan(&summary.ResourceCount); err != nil {
+		return summary
+	}
+	// categories 保存热门分类列表。
+	categories := s.ListPublicCategories()
+	summary.CategoryCount = len(categories)
+	// 只保留前 6 个热门分类。
+	if len(categories) > 6 {
+		categories = categories[:6]
+	}
+	summary.PopularCategories = categories
+	// 补充最新 6 篇文章。
+	articles, _, _ := s.ListPublicArticles("", "", 1, 6)
+	summary.LatestArticles = articles
+	// 补充精选 8 张图片。
+	summary.FeaturedImages = s.FeaturedPublicImages(8)
+	return summary
+}
+
+// SearchPublic 返回聚合搜索结果，按文章、图片、资源分组。
+func (s *SQLiteStore) SearchPublic(keyword string, limit int) models.PublicSearchResult {
+	// result 保存聚合搜索结果。
+	var result models.PublicSearchResult
+	// articles 保存匹配的文章列表。
+	articles, _, _ := s.ListPublicArticles(keyword, "", 1, limit)
+	result.Articles = articles
+	// images 保存匹配的图片列表。
+	images, _, _ := s.ListPublicFiles(true, keyword, "", 1, limit)
+	result.Images = images
+	// resources 保存匹配的资源列表。
+	resources, _, _ := s.ListPublicFiles(false, keyword, "", 1, limit)
+	result.Resources = resources
+	return result
+}
+
+// FindPublicFileStorageName 根据公开文件 ID 返回其物理存储文件名。
+func (s *SQLiteStore) FindPublicFileStorageName(id int) (string, bool) {
+	// storageName 保存查询到的物理存储文件名。
+	var storageName string
+	// err 保存查询过程的错误。
+	err := s.db.QueryRow("SELECT f.storage_name FROM files f WHERE f.id=? AND "+isPublicFileSQL, id).Scan(&storageName)
+	if err != nil {
+		return "", false
+	}
+	return storageName, true
+}

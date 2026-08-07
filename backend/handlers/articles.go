@@ -5,6 +5,7 @@ import (
 
 	"collector-backend/middleware"
 	"collector-backend/models"
+	"collector-backend/permissions"
 	"collector-backend/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -21,6 +22,8 @@ type ArticleStore interface {
 	UpdateArticle(id int, request models.ArticleRequest) (models.Article, bool)
 	// DeleteArticle 表示文章。
 	DeleteArticle(id int) bool
+	// ListUserActionPermissions 表示用户动作权限。
+	ListUserActionPermissions(userID int) ([]string, string)
 }
 
 // ArticleHandler 定义对应业务的数据结构与调用契约。
@@ -127,6 +130,11 @@ func (h *ArticleHandler) Update(c *gin.Context) {
 		return
 	}
 	// updated、found 保存业务值及其是否存在或处理成功的标记。
+	// 无门户发布权限的用户不得越权修改门户字段，保留原门户状态。
+	if !canPortalPublishArticle(h.store, user.ID) {
+		request.PortalVisible = false
+		request.PortalFeatured = false
+	}
 	updated, found := h.store.UpdateArticle(id, request)
 	if !found {
 		c.JSON(http.StatusNotFound, gin.H{"error": "文章不存在"})
@@ -169,4 +177,14 @@ func canAccessArticle(user models.User, article models.Article) bool {
 // canMutateArticle 校验对应业务条件。
 func canMutateArticle(user models.User, article models.Article) bool {
 	return article.OwnerID == user.ID || utils.IsAdmin(user)
+}
+
+// canPortalPublishArticle 校验用户是否具有文章门户发布权限。
+func canPortalPublishArticle(store ArticleStore, userID int) bool {
+	// codes、message 保存用户动作权限及查询状态。
+	codes, message := store.ListUserActionPermissions(userID)
+	if message != "" {
+		return false
+	}
+	return permissions.Contains(codes, permissions.ArticlesPortalPublish)
 }

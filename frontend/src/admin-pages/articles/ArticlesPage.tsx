@@ -156,6 +156,27 @@ export function ArticlesPage(props: ArticlesPageProps) {
           </div>
           <Switch checked={Boolean(articleForm.isPrivate)} onChange={(checked) => onArticleFormChange({ ...articleForm, isPrivate: checked })} checkedChildren="私密" unCheckedChildren="公开" />
         </div>
+                <div className="privacy-switch-row">
+          <div>
+            <strong>发布到门户</strong>
+            <small>开启后允许匿名访问者在 C 端查看；需状态为已发布且不设为仅自己可见。</small>
+          </div>
+          <Switch checked={Boolean(articleForm.portalVisible)} disabled={articleForm.status !== '已发布' || articleForm.isPrivate} onChange={(checked) => onArticleFormChange({ ...articleForm, portalVisible: checked })} checkedChildren="开启" unCheckedChildren="关闭" />
+        </div>
+        <div className="privacy-switch-row">
+          <div>
+            <strong>门户精选</strong>
+            <small>开启后优先展示在门户首页与对应分类的精选区域。</small>
+          </div>
+          <Switch checked={Boolean(articleForm.portalFeatured)} disabled={!articleForm.portalVisible} onChange={(checked) => onArticleFormChange({ ...articleForm, portalFeatured: checked })} />
+        </div>
+        <div className="privacy-switch-row">
+          <div>
+            <strong>正文语言</strong>
+            <small>用于门户 SEO 的 lang 与结构化数据标注，正文内容保持录入原语言。</small>
+          </div>
+          <Select value={articleForm.contentLocale} options={[{ value: 'zh-CN', label: '简体中文' }, { value: 'en-US', label: 'English' }, { value: 'ja-JP', label: '日本語' }]} onChange={(value) => onArticleFormChange({ ...articleForm, contentLocale: value })} style={{ width: 160 }} />
+        </div>
         <RichTextEditor value={articleForm.content} onChange={(content) => onArticleFormChange({ ...articleForm, content })} />
         <div className="rich-editor-actions"><Button onClick={closeEditor}>取消</Button><Button htmlType="submit" type="primary" loading={isSavingArticle} icon={<SaveOutlined />}>{isEditing ? '保存修改' : '保存文章'}</Button></div>
       </form>

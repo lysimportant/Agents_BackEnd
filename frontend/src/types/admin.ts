@@ -247,6 +247,14 @@ export type Article = {
   ownerName?: string;
   /** isPrivate 表示私密状态。 */
   isPrivate?: boolean;
+  /** 是否允许匿名 C 端公开访问。 */
+  portalVisible?: boolean;
+  /** 是否作为门户首页或分类精选。 */
+  portalFeatured?: boolean;
+  /** 首次发布到门户的时间，取消发布后保留。 */
+  portalPublishedAt?: string;
+  /** 正文实际语言。 */
+  contentLocale?: string;
   /** createdAt 表示创建时间。 */
   createdAt: string;
   /** updatedAt 表示更新时间。 */
@@ -279,6 +287,16 @@ export type ManagedFile = {
   ownerName?: string;
   /** isPrivate 表示私密状态。 */
   isPrivate?: boolean;
+  /** 是否允许匿名 C 端公开访问。 */
+  portalVisible?: boolean;
+  /** 是否作为门户首页或分类精选。 */
+  portalFeatured?: boolean;
+  /** 首次发布到门户的时间，取消发布后保留。 */
+  portalPublishedAt?: string;
+  /** 公开图片原始宽度。 */
+  imageWidth?: number;
+  /** 公开图片原始高度。 */
+  imageHeight?: number;
   /** readOnly 表示只读状态。 */
   readOnly?: boolean;
   /** previewUrl 表示预览地址。 */
@@ -363,6 +381,12 @@ export type ArticleForm = {
   content: string;
   /** isPrivate 表示私密状态。 */
   isPrivate: boolean;
+  /** 是否允许匿名 C 端公开访问。 */
+  portalVisible: boolean;
+  /** 是否作为门户首页或分类精选。 */
+  portalFeatured: boolean;
+  /** 正文实际语言。 */
+  contentLocale: string;
 };
 
 /** 受管文件元数据表单的可编辑字段值。 */
@@ -375,6 +399,10 @@ export type FileForm = {
   description: string;
   /** isPrivate 表示私密状态。 */
   isPrivate: boolean;
+  /** 是否允许匿名 C 端公开访问。 */
+  portalVisible: boolean;
+  /** 是否作为门户首页或分类精选。 */
+  portalFeatured: boolean;
 };
 
 /** 根据层级缩进菜单树行的 CSS 自定义属性。 */

@@ -1,0 +1,9 @@
+{
+  "entryPoints": [
+    "src"
+  ],
+  "out": ".workspace-temp/p32-portal/typedoc",
+  "tsconfig": "./tsconfig.json",
+  "excludeExternals": true,
+  "excludePrivate": true
+}

@@ -12,6 +12,7 @@ import (
 
 	"collector-backend/middleware"
 	"collector-backend/models"
+	"collector-backend/permissions"
 	"collector-backend/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -43,6 +44,8 @@ type FileStore interface {
 	RestoreFile(id int) (models.ManagedFile, bool)
 	// HardDeleteFile 表示文件。
 	HardDeleteFile(id int, uploadDir string) bool
+	// ListUserActionPermissions 表示用户动作权限。
+	ListUserActionPermissions(userID int) ([]string, string)
 }
 
 // FileHandler 定义对应业务的数据结构与调用契约。
@@ -155,6 +158,15 @@ func (h *FileHandler) Upload(c *gin.Context) {
 	description := strings.TrimSpace(c.PostForm("description"))
 	// isPrivate 保存私密状态。
 	isPrivate := utils.ParseBool(c.PostForm("isPrivate"))
+	// portalVisible 保存门户可见状态。
+	portalVisible := utils.ParseBool(c.PostForm("portalVisible"))
+	// portalFeatured 保存门户精选状态。
+	portalFeatured := utils.ParseBool(c.PostForm("portalFeatured"))
+	// 无门户发布权限的用户不得越权发布门户。
+	if !canPortalPublishFile(h.store, user.ID) {
+		portalVisible = false
+		portalFeatured = false
+	}
 
 	// ext 保存文件扩展名。
 	ext := filepath.Ext(fileHeader.Filename)
@@ -189,18 +201,37 @@ func (h *FileHandler) Upload(c *gin.Context) {
 		contentType = "application/octet-stream"
 	}
 
+	// imageWidth?imageHeight 保存图片尺寸，非图片为 0。
+	imageWidth, imageHeight := 0, 0
+	if strings.HasPrefix(contentType, "image/") {
+		// dimsFile 保存上传文件的可读处理。
+		dimsFile, dimsErr := os.Open(path)
+		if dimsErr == nil {
+			// dims 保存解析出的图片尺寸。
+			dims, ok := utils.DetectImageDimensions(dimsFile)
+			_ = dimsFile.Close()
+			if ok {
+				imageWidth = dims.Width
+				imageHeight = dims.Height
+			}
+		}
+	}
 	// created 保存创建时间。
 	created := h.store.CreateFile(models.ManagedFile{
-		DisplayName:  displayName,
-		OriginalName: fileHeader.Filename,
-		Category:     category,
-		Description:  description,
-		ContentType:  contentType,
-		Size:         size,
-		StorageName:  storageName,
-		OwnerID:      user.ID,
-		OwnerName:    user.Name,
-		IsPrivate:    isPrivate,
+		DisplayName:    displayName,
+		OriginalName:   fileHeader.Filename,
+		Category:       category,
+		Description:    description,
+		ContentType:    contentType,
+		Size:           size,
+		StorageName:    storageName,
+		OwnerID:        user.ID,
+		OwnerName:      user.Name,
+		IsPrivate:      isPrivate,
+		PortalVisible:  portalVisible,
+		PortalFeatured: portalFeatured,
+		ImageWidth:     imageWidth,
+		ImageHeight:    imageHeight,
 	})
 	if created.ID == 0 {
 		_ = os.Remove(path)
@@ -237,6 +268,11 @@ func (h *FileHandler) UpdateMetadata(c *gin.Context) {
 		return
 	}
 	// updated、found 保存业务值及其是否存在或处理成功的标记。
+	// 无门户发布权限的用户不得越权修改门户字段，保留原门户状态。
+	if !canPortalPublishFile(h.store, user.ID) {
+		request.PortalVisible = false
+		request.PortalFeatured = false
+	}
 	updated, found := h.store.UpdateFileMetadata(id, request)
 	if !found {
 		c.JSON(http.StatusNotFound, gin.H{"error": "文件不存在"})
@@ -488,4 +524,14 @@ func canAccessFile(user models.User, file models.ManagedFile) bool {
 // canMutateFile 校验对应业务条件。
 func canMutateFile(user models.User, file models.ManagedFile) bool {
 	return file.OwnerID == user.ID || utils.IsAdmin(user)
+}
+
+// canPortalPublishFile 校验用户是否具有文件门户发布权限。
+func canPortalPublishFile(store FileStore, userID int) bool {
+	// codes、message 保存用户动作权限及查询状态。
+	codes, message := store.ListUserActionPermissions(userID)
+	if message != "" {
+		return false
+	}
+	return permissions.Contains(codes, permissions.FilesPortalPublish)
 }

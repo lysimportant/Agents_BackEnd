@@ -362,6 +362,21 @@ export function FilesPage(props: FilesPageProps) {
         </div>
         <Switch checked={Boolean(fileForm.isPrivate)} onChange={(checked) => onFileFormChange({ ...fileForm, isPrivate: checked })} checkedChildren="私密" unCheckedChildren="公开" />
       </div>
+      <div className="privacy-switch-row">
+        <div>
+          <strong>发布到门户</strong>
+          <small>开启后，满足发布条件的文件可在 C 端内容门户展示</small>
+        </div>
+        <Switch checked={Boolean(fileForm.portalVisible)} disabled={fileForm.isPrivate} onChange={(checked) => onFileFormChange({ ...fileForm, portalVisible: checked })} checkedChildren="已发布" unCheckedChildren="未发布" />
+      </div>
+      <div className="privacy-switch-row">
+        <div>
+          <strong>门户精选</strong>
+          <small>仅门户可见的文件可设为精选，用于首页与分类展示</small>
+        </div>
+        <Switch checked={Boolean(fileForm.portalFeatured)} disabled={!fileForm.portalVisible} onChange={(checked) => onFileFormChange({ ...fileForm, portalFeatured: checked })} />
+      </div>
+
     </>;
     return asForm ? <form className="antd-file-form" id={`file-${mode}-form`} onSubmit={(event) => void submitFileForm(event, mode)}>{fields}</form> : <div className="antd-file-form">{fields}</div>;
   };

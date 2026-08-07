@@ -1,0 +1,246 @@
+@import "tailwindcss";
+
+/* 门户全局样式：将主题纯色映射到 Tailwind 命名的设计令牌，供组件统一取色。 */
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-line: var(--line);
+  --color-glass: var(--glass-bg);
+}
+
+/* 浅色主题基础变量 + 色彩方案 */
+:root,
+:root[data-theme="light"] {
+  --canvas: #f6f7f9;
+  --surface: #ffffff;
+  --ink: #1c2430;
+  --ink-muted: #5b6675;
+  --accent: #147d8c;
+  --accent-soft: rgba(20, 125, 140, 0.12);
+  --line: rgba(28, 36, 48, 0.12);
+  --nav-bg-solid: rgba(246, 247, 249, 0.96);
+  --nav-bg: rgba(246, 247, 249, 0.72);
+  --nav-blur: 16px;
+  --shadow-card: 0 1px 3px rgba(20, 30, 40, 0.06), 0 6px 18px rgba(20, 30, 40, 0.05);
+  --color-scheme: light;
+}
+
+/* 深色主题变量 + 色彩方案 */
+:root[data-theme="dark"] {
+  --canvas: #0f1720;
+  --surface: #182230;
+  --ink: #e8edf4;
+  --ink-muted: #9aa7b5;
+  --accent: #4fc3d6;
+  --accent-soft: rgba(79, 195, 214, 0.16);
+  --line: rgba(232, 237, 244, 0.14);
+  --nav-bg-solid: rgba(15, 23, 32, 0.96);
+  --nav-bg: rgba(15, 23, 32, 0.7);
+  --nav-blur: 16px;
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 22px rgba(0, 0, 0, 0.32);
+  --color-scheme: dark;
+}
+
+/* 海洋主题变量 + 色彩方案 */
+:root[data-theme="ocean"] {
+  --canvas: #edf6f8;
+  --surface: #ffffff;
+  --ink: #10343d;
+  --ink-muted: #4c6a72;
+  --accent: #0b6674;
+  --accent-soft: rgba(11, 102, 116, 0.12);
+  --line: rgba(16, 52, 61, 0.12);
+  --nav-bg-solid: rgba(237, 246, 248, 0.96);
+  --nav-bg: rgba(237, 246, 248, 0.72);
+  --nav-blur: 16px;
+  --shadow-card: 0 1px 3px rgba(10, 40, 48, 0.08), 0 6px 18px rgba(10, 40, 48, 0.06);
+  --color-scheme: light;
+}
+
+/* 根元素统一应用色彩方案与平滑滚动 */
+html {
+  color-scheme: var(--color-scheme);
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--canvas);
+  color: var(--ink);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* 减少动态效果时关闭平滑滚动与动画 */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 键盘焦点可见样式 */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* 玻璃导航栏，支持时叠加 backdrop-filter 模糊 */
+.glass-nav {
+  background-color: var(--nav-bg-solid);
+  border-bottom: 1px solid var(--line);
+}
+@supports (backdrop-filter: blur(1px)) {
+  .glass-nav {
+    background-color: var(--nav-bg);
+    backdrop-filter: blur(var(--nav-blur));
+    -webkit-backdrop-filter: blur(var(--nav-blur));
+  }
+}
+
+/* 通用内容卡片，圆角 8px 并应用卡片阴影 */
+.content-card {
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+/* 上浮渐显动画，仅使用 opacity 与 transform 触发合成层 */
+@keyframes portal-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.fade-up {
+  animation: portal-fade-up 260ms ease-out both;
+}
+
+/* 跳转到主内容链接，仅在聚焦时可见 */
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: -80px;
+  z-index: 100;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background-color: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  transition: top 180ms ease-out;
+}
+.skip-link:focus {
+  top: 12px;
+}
+
+/* 文章正文排版样式，优化长文阅读体验 */
+.portal-prose {
+  max-width: 74ch;
+  line-height: 1.85;
+  font-size: 1.02rem;
+}
+.portal-prose h1,
+.portal-prose h2,
+.portal-prose h3,
+.portal-prose h4 {
+  margin: 1.6em 0 0.6em;
+  line-height: 1.4;
+  scroll-margin-top: 88px;
+}
+.portal-prose p {
+  margin: 0.9em 0;
+}
+.portal-prose a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.portal-prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+.portal-prose blockquote {
+  margin: 1em 0;
+  padding-left: 14px;
+  border-left: 3px solid var(--accent);
+  color: var(--ink-muted);
+}
+.portal-prose pre {
+  overflow-x: auto;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+}
+.portal-prose code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.92em;
+}
+
+/* 触摸目标最小尺寸，保证移动端可点 */
+.tap-target {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* 安全换行，防止长英文或 URL 溢出 */
+.break-safe {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+
+/* 底部安全区域适配 */
+@supports (padding: max(0px, env(safe-area-inset-bottom))) {
+  .safe-bottom {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+}
+html,
+body {
+  overflow-x: hidden;
+}
+img {
+  max-width: 100%;
+}
+
+/* 对话框内焦点轮廓 */
+[role="dialog"]:focus {
+  outline: none;
+}
+
+/* 支持悬停设备时卡片上浮效果 */
+@media (hover: hover) {
+  .hover-lift:hover {
+    transform: translateY(-3px);
+  }
+}
+
+/* 减少动态效果时完全禁用过渡与动画 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
