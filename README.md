@@ -7,6 +7,7 @@
 - `backend`: Go + Gin + SQLite API 服务
 - `frontend`: Next.js + TypeScript 企业后台管理界面
 - `Socket 客服`: WebSocket 实时会话、聊天监控、图片/文件/表情发送，以及可嵌入第三方网站的悬浮客服组件
+- `portal`: Next.js + TypeScript + Tailwind 的 C 端公开内容门户，仅通过后端 `/api/public/*` 只读接口展示已发布内容
 
 ## 启动后端
 
@@ -53,6 +54,19 @@ $env:NEXT_PUBLIC_API_BASE_URL="http://localhost:8080"
 npm run dev
 ```
 
+## 启动门户（C 端）
+
+```powershell
+cd portal
+npm install
+npm run dev
+```
+
+门户默认运行在 `http://localhost:3001`，默认调用后端 `http://localhost:8080`。
+面向普通访问者，展示经 B 端明确发布到门户的文章、图片与资源，支持简体中文 / English / 日本語、三套主题与移动端适配。
+门户页面只通过后端 `/api/public/*` 只读接口取数，不携带后台登录 Cookie，也不提供任何写能力。
+
+如需覆盖后端地址或站点地址，可设置 `NEXT_PUBLIC_API_BASE_URL` 与 `NEXT_PUBLIC_SITE_URL`；详见 `portal/README.md`。
 ## API
 
 除 `GET /health`、`/api/auth/*` 和访客客服入口 `/api/socket/customer*` 外，`/api` 下接口都需要先登录并携带后端写入的 HttpOnly Cookie。访客客服使用服务端生成的随机会话 ID 与访客令牌，令牌只以哈希形式持久化。前端管理请求默认使用 `credentials: 'include'`。

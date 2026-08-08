@@ -8,6 +8,7 @@ servers:
     description: 本地后端服务
 tags:
   - name: 认证
+  - name: 公开门户
   - name: 用户
   - name: 管理
   - name: 内容
@@ -16,6 +17,86 @@ tags:
   - name: 客服聊天
   - name: 访问分析
 paths:
+  /api/public/articles:
+    get:
+      tags: [公开门户]
+      summary: 获取公开文章列表
+      parameters:
+        - { name: keyword, in: query, schema: { type: string }, description: 按标题与摘要模糊搜索 }
+        - { name: category, in: query, schema: { type: string }, description: 按分类名称筛选 }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 24 } }
+      responses:
+        '200': { description: 公开文章分页列表 }
+  /api/public/articles/{id}:
+    get:
+      tags: [公开门户]
+      summary: 获取公开文章详情
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: 文章正文、目录与相关文章 }
+        '404': { description: 文章不存在或未公开 }
+  /api/public/images:
+    get:
+      tags: [公开门户]
+      summary: 获取公开图片列表
+      parameters:
+        - { name: keyword, in: query, schema: { type: string } }
+        - { name: category, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 24 } }
+      responses:
+        '200': { description: 公开图片分页列表 }
+  /api/public/resources:
+    get:
+      tags: [公开门户]
+      summary: 获取公开资源文件列表
+      parameters:
+        - { name: keyword, in: query, schema: { type: string } }
+        - { name: category, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 24 } }
+      responses:
+        '200': { description: 公开资源分页列表 }
+  /api/public/files/{id}/preview:
+    get:
+      tags: [公开门户]
+      summary: 获取公开文件预览
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: 预览媒体内容 }
+        '404': { description: 文件不存在或未公开 }
+  /api/public/files/{id}/download:
+    get:
+      tags: [公开门户]
+      summary: 下载公开文件
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: 文件下载流 }
+        '404': { description: 文件不存在或未公开 }
+  /api/public/categories:
+    get:
+      tags: [公开门户]
+      summary: 获取公开分类聚合信息
+      responses:
+        '200': { description: 各分类下的文章、图片与资源数量 }
+  /api/public/site-summary:
+    get:
+      tags: [公开门户]
+      summary: 获取站点聚合概览
+      responses:
+        '200': { description: 文章、图片与资源总数 }
+  /api/public/search:
+    get:
+      tags: [公开门户]
+      summary: 聚合搜索公开内容
+      parameters:
+        - { name: keyword, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 聚合搜索结果（文章、图片、资源） }
   /health:
     get:
       summary: 检查后端健康状态
