@@ -1,0 +1,5 @@
+.git
+data
+uploads
+*.exe
+*.log

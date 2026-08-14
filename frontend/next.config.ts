@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
       },
       {
         source: '/api/backend/:path*',
-        destination: 'http://localhost:8080/api/:path*',
+        destination: `${process.env.BACKEND_INTERNAL_URL ?? 'http://localhost:8080'}/api/:path*`,
       },
     ];
   },
