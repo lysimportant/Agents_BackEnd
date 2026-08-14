@@ -1,6 +1,0 @@
-/* 门户根主题样式，声明默认配色并交由数据集在各主题下覆盖。 */
-
-:root {
-  --color-scheme: light;
-  color-scheme: var(--color-scheme);
-}
