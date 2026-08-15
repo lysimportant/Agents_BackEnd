@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, Modal, Tooltip } from 'antd';
-import { Plus, SquareTerminal, X } from 'lucide-react';
+import { Minimize2, Plus, SquareTerminal, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import {
   SshTerminalSession,
@@ -12,11 +12,11 @@ import {
 /** MAX_TERMINAL_SESSIONS 限制一个浏览器弹窗同时保持的远端 SSH 会话数量。 */
 const MAX_TERMINAL_SESSIONS = 8;
 
-/** SshTerminalModalProps 定义超级管理员 SSH 终端弹窗参数。 */
+/** SshTerminalModalProps 定义登录用户 SSH 终端弹窗参数。 */
 type SshTerminalModalProps = {
   /** open 表示终端弹窗是否可见。 */
   open: boolean;
-  /** onClose 在用户关闭终端时释放全部连接并收起弹窗。 */
+  /** onClose 在用户最小化终端时仅收起弹窗并保留全部连接。 */
   onClose: () => void;
 };
 
@@ -52,15 +52,6 @@ export function SshTerminalModal({ open, onClose }: SshTerminalModalProps) {
     setSessions([firstSession]);
     setActiveSessionID(firstSession.id);
   }, [open, sessions.length]);
-
-  useEffect(() => {
-    if (open) return;
-    // 无论通过关闭按钮还是退出登录收起弹窗，都立即销毁全部连接和敏感凭据。
-    setSessions([]);
-    setActiveSessionID(null);
-    setRememberedConnection(null);
-    nextSessionIDRef.current = 1;
-  }, [open]);
 
   /** addSession 新增一个终端；已有成功连接时直接复用当前弹窗凭据。 */
   const addSession = () => {
@@ -106,24 +97,20 @@ export function SshTerminalModal({ open, onClose }: SshTerminalModalProps) {
     updateSessionStatus(sessionID, 'connected', `${connection.username}@${connection.host}`);
   };
 
-  /** closeAllSessions 清空凭据、卸载全部子会话并关闭弹窗。 */
-  const closeAllSessions = () => {
-    setSessions([]);
-    setActiveSessionID(null);
-    setRememberedConnection(null);
-    nextSessionIDRef.current = 1;
-    onClose();
-  };
-
   return (
     <Modal
-      title={<span className="ssh-terminal-title"><SquareTerminal size={18} />SSH 服务器终端</span>}
+      title={(
+        <div className="ssh-terminal-title">
+          <span><SquareTerminal size={18} />SSH 服务器终端</span>
+          <Tooltip title="最小化终端"><Button type="text" size="small" icon={<Minimize2 size={17} />} onClick={onClose} aria-label="最小化 SSH 服务器终端" /></Tooltip>
+        </div>
+      )}
       open={open}
-      onCancel={closeAllSessions}
+      onCancel={onClose}
+      closable={false}
       footer={null}
       width={1240}
       mask={{ closable: false }}
-      destroyOnHidden
       className="ssh-terminal-modal"
     >
       <div className="ssh-terminal-tabs" role="tablist" aria-label="SSH 终端会话">

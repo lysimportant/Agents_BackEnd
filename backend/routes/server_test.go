@@ -11,7 +11,7 @@ import (
 	"collector-backend/permissions"
 )
 
-// TestServerMetricsAndTerminalAuthorization 验证资源快照沿用工作台权限且 SSH 终端只允许超级管理员。
+// TestServerMetricsAndTerminalAuthorization 验证资源快照沿用工作台权限且 SSH 终端允许全部登录用户。
 func TestServerMetricsAndTerminalAuthorization(t *testing.T) {
 	// router、store 表示隔离数据库上的测试路由和数据存储。
 	router, store, _ := setupTestRouter(t)
@@ -22,6 +22,14 @@ func TestServerMetricsAndTerminalAuthorization(t *testing.T) {
 	router.ServeHTTP(anonymousMetricsResponse, anonymousMetricsRequest)
 	if anonymousMetricsResponse.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous metrics status=%d", anonymousMetricsResponse.Code)
+	}
+	// anonymousTerminalRequest 表示未登录用户尝试打开 SSH 终端。
+	anonymousTerminalRequest := httptest.NewRequest(http.MethodGet, "/api/server/terminal", nil)
+	// anonymousTerminalResponse 记录未登录终端请求响应。
+	anonymousTerminalResponse := httptest.NewRecorder()
+	router.ServeHTTP(anonymousTerminalResponse, anonymousTerminalRequest)
+	if anonymousTerminalResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous terminal status=%d", anonymousTerminalResponse.Code)
 	}
 
 	// systemRole 保存系统管理员角色种子。
@@ -66,14 +74,14 @@ func TestServerMetricsAndTerminalAuthorization(t *testing.T) {
 		t.Fatalf("decode server metrics: metrics=%+v err=%v", metrics, err)
 	}
 
-	// systemTerminalRequest 表示系统管理员尝试打开 SSH 终端的越权请求。
+	// systemTerminalRequest 表示系统管理员到达 WebSocket 升级处理器的普通 HTTP 请求。
 	systemTerminalRequest := httptest.NewRequest(http.MethodGet, "/api/server/terminal", nil)
 	systemTerminalRequest.AddCookie(&http.Cookie{Name: "sessionId", Value: systemCookie})
 	// systemTerminalResponse 记录系统管理员终端请求响应。
 	systemTerminalResponse := httptest.NewRecorder()
 	router.ServeHTTP(systemTerminalResponse, systemTerminalRequest)
-	if systemTerminalResponse.Code != http.StatusForbidden {
-		t.Fatalf("system administrator terminal status=%d body=%s", systemTerminalResponse.Code, systemTerminalResponse.Body.String())
+	if systemTerminalResponse.Code != http.StatusBadRequest {
+		t.Fatalf("system administrator did not reach terminal upgrader: status=%d body=%s", systemTerminalResponse.Code, systemTerminalResponse.Body.String())
 	}
 
 	// superCookie 保存初始化超级管理员会话 Cookie。

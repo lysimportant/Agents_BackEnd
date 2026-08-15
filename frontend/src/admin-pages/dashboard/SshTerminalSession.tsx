@@ -2,11 +2,12 @@
 
 import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal as XtermTerminal } from '@xterm/xterm';
-import type { DataNode } from 'antd/es/tree';
-import { Alert, Button, Empty, Form, Input, InputNumber, Modal, Segmented, Spin, Tag, Tooltip, Tree } from 'antd';
+import { Alert, App, Button, Empty, Form, Input, InputNumber, Segmented, Spin, Tag, Tooltip } from 'antd';
 import {
+  ArrowUp,
   File,
   FileCode2,
+  FileImage,
   FileWarning,
   Folder,
   FolderOpen,
@@ -20,8 +21,11 @@ import {
   Unplug,
   X,
 } from 'lucide-react';
-import { useEffect, useRef, useState, type Key } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { serverTerminalWebSocketURL } from '@/src/services/serverApi';
+
+/** DEFAULT_SSH_HOST 表示首次打开终端时默认选中的服务器地址。 */
+const DEFAULT_SSH_HOST = 'lolicon.beer';
 
 /** SSHAuthenticationMode 表示当前 SSH 凭据类型。 */
 type SSHAuthenticationMode = 'password' | 'privateKey';
@@ -58,14 +62,6 @@ type SSHFileEntry = {
   modifiedAt: string;
 };
 
-/** SSHBrowserNode 扩展 Ant Design 树节点并携带远端文件元数据。 */
-type SSHBrowserNode = DataNode & {
-  /** entry 保存当前树节点对应的远端文件信息。 */
-  entry: SSHFileEntry;
-  /** children 保存已加载的下级远端节点。 */
-  children?: SSHBrowserNode[];
-};
-
 /** SSHFilePreview 表示一个远端文件的编辑状态。 */
 type SSHFilePreview = {
   /** path 表示远端绝对文件路径。 */
@@ -79,6 +75,9 @@ type SSHFilePreview = {
   truncated: boolean;
   /** binary 表示文件是否为不可直接显示的二进制内容。 */
   binary: boolean;
+  /** mimeType、base64Content 表示图片或 PDF 的只读预览内容。 */
+  mimeType: string;
+  base64Content: string;
 };
 
 /** TerminalServerMessage 表示后端 SSH WebSocket 返回的状态、目录或文件消息。 */
@@ -103,6 +102,9 @@ type TerminalServerMessage = {
   size?: number;
   truncated?: boolean;
   binary?: boolean;
+  /** mimeType、base64Content 表示图片或 PDF 的只读预览内容。 */
+  mimeType?: string;
+  base64Content?: string;
   /** query 表示搜索响应对应的关键词。 */
   query?: string;
 };
@@ -125,12 +127,14 @@ type SshTerminalSessionProps = {
 
 /** SshTerminalSession 管理一个独立 WebSocket、PTY、文件树和文件预览。 */
 export function SshTerminalSession({ visible, initialConnection, autoConnect, onConnected, onStatusChange, onRequestClose }: SshTerminalSessionProps) {
+  /** feedbackMessage、feedbackModal 提供继承当前主题的全局反馈与确认弹窗。 */
+  const { message: feedbackMessage, modal: feedbackModal } = App.useApp();
   /** host、setHost 保存用户本次输入的 SSH 主机。 */
-  const [host, setHost] = useState(initialConnection?.host ?? '');
+  const [host, setHost] = useState(initialConnection?.host ?? DEFAULT_SSH_HOST);
   /** port、setPort 保存用户本次输入的 SSH 端口。 */
   const [port, setPort] = useState(initialConnection?.port ?? 22);
   /** username、setUsername 保存用户本次输入的 SSH 用户名。 */
-  const [username, setUsername] = useState(initialConnection?.username ?? '');
+  const [username, setUsername] = useState(initialConnection?.username ?? 'root');
   /** authenticationMode、setAuthenticationMode 保存当前选择的 SSH 认证方式。 */
   const [authenticationMode, setAuthenticationMode] = useState<SSHAuthenticationMode>(initialConnection?.authenticationMode ?? 'password');
   /** password、setPassword 保存当前弹窗使用的临时密码。 */
@@ -151,12 +155,12 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
   const [fileBrowserAvailable, setFileBrowserAvailable] = useState(false);
   /** fileBrowserLoading、setFileBrowserLoading 表示 SFTP 子系统是否仍在后台初始化。 */
   const [fileBrowserLoading, setFileBrowserLoading] = useState(false);
-  /** treeNodes、setTreeNodes 保存从远端根目录开始的懒加载目录树。 */
-  const [treeNodes, setTreeNodes] = useState<SSHBrowserNode[]>([createRootNode()]);
-  /** expandedKeys、setExpandedKeys 保存用户已经展开的目录路径。 */
-  const [expandedKeys, setExpandedKeys] = useState<Key[]>(['/']);
-  /** selectedKeys、setSelectedKeys 保存当前选中的远端路径。 */
-  const [selectedKeys, setSelectedKeys] = useState<Key[]>(['/']);
+  /** currentDirectory、setCurrentDirectory 保存左侧步进浏览器当前所在目录。 */
+  const [currentDirectory, setCurrentDirectory] = useState('/');
+  /** directoryEntries、setDirectoryEntries 保存当前目录的直接子节点。 */
+  const [directoryEntries, setDirectoryEntries] = useState<SSHFileEntry[]>([]);
+  /** directoryLoading、setDirectoryLoading 表示当前目录是否正在读取。 */
+  const [directoryLoading, setDirectoryLoading] = useState(false);
   /** treeError、setTreeError 保存目录或文件读取错误。 */
   const [treeError, setTreeError] = useState('');
   /** filePreview、setFilePreview 保存当前远端文件预览。 */
@@ -167,14 +171,8 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
   const [fileSaving, setFileSaving] = useState(false);
   /** fileSaveSucceeded、setFileSaveSucceeded 表示最近一次远端写入已经成功。 */
   const [fileSaveSucceeded, setFileSaveSucceeded] = useState(false);
-  /** searchQuery、setSearchQuery 保存远端根目录递归搜索关键词。 */
+  /** searchQuery、setSearchQuery 保存当前目录本地过滤关键词。 */
   const [searchQuery, setSearchQuery] = useState('');
-  /** searchResults、setSearchResults 保存当前关键词匹配的远端节点。 */
-  const [searchResults, setSearchResults] = useState<SSHFileEntry[]>([]);
-  /** searchLoading、setSearchLoading 表示远端递归搜索是否仍在执行。 */
-  const [searchLoading, setSearchLoading] = useState(false);
-  /** searchTruncated、setSearchTruncated 表示搜索是否达到扫描或结果上限。 */
-  const [searchTruncated, setSearchTruncated] = useState(false);
   /** activeView、setActiveView 表示右侧当前显示终端或文件。 */
   const [activeView, setActiveView] = useState<'terminal' | 'file'>('terminal');
   /** terminalContainerRef 指向 xterm 挂载容器。 */
@@ -183,10 +181,18 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
   const terminalRef = useRef<XtermTerminal | null>(null);
   /** fitAddonRef 保存根据容器计算行列数的插件实例。 */
   const fitAddonRef = useRef<FitAddon | null>(null);
-  /** socketRef 保存当前超级管理员终端 WebSocket。 */
+  /** socketRef 保存当前登录用户终端 WebSocket。 */
   const socketRef = useRef<WebSocket | null>(null);
   /** connectedRef 为终端输入和尺寸监听提供最新连接状态。 */
   const connectedRef = useRef(false);
+  /** fileBrowserAvailableRef 为终端工作目录报告提供最新 SFTP 可用状态。 */
+  const fileBrowserAvailableRef = useRef(false);
+  /** currentDirectoryRef 保存左侧已成功加载的最新目录，避免重复刷新。 */
+  const currentDirectoryRef = useRef('/');
+  /** terminalCommandSubmittedRef 表示用户是否刚向交互 shell 提交了一条命令。 */
+  const terminalCommandSubmittedRef = useRef(false);
+  /** pendingTerminalDirectoryRef 保存 SFTP 初始化前收到的实际终端目录。 */
+  const pendingTerminalDirectoryRef = useRef('');
   /** confirmedFingerprintRef 保存本次实际发送的已确认指纹。 */
   const confirmedFingerprintRef = useRef(initialConnection?.hostKeyFingerprint ?? '');
   /** connectionFormRef 为 WebSocket 首次事件提供最新表单值，避免读取挂载时旧闭包。 */
@@ -197,14 +203,13 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
   const autoConnectStartedRef = useRef(false);
   /** pendingOutputRef 缓存 xterm 模块加载完成前收到的远端输出。 */
   const pendingOutputRef = useRef('');
-  /** directoryResolversRef 保存 Ant Design 懒加载目录的完成回调。 */
-  const directoryResolversRef = useRef(new Map<string, () => void>());
-  /** activeSearchQueryRef 保存最后一次发出的搜索关键词，用于忽略过期响应。 */
-  const activeSearchQueryRef = useRef('');
   /** savingContentRef 保存当前写入请求的内容，避免保存期间继续编辑被误判为已保存。 */
   const savingContentRef = useRef('');
 
   connectionFormRef.current = { host, port, username, authenticationMode, password, privateKey, passphrase };
+
+  /** visibleDirectoryEntries 保存按当前关键词过滤后的本层目录节点。 */
+  const visibleDirectoryEntries = directoryEntries.filter((entry) => entry.name.toLocaleLowerCase().includes(searchQuery.trim().toLocaleLowerCase()));
 
   useEffect(() => {
     connectedRef.current = connected;
@@ -218,6 +223,8 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
     let resizeObserver: ResizeObserver | null = null;
     /** inputDisposable 保存 xterm 输入事件订阅。 */
     let inputDisposable: { dispose: () => void } | null = null;
+    /** directoryDisposable 保存远端 shell 工作目录报告订阅。 */
+    let directoryDisposable: { dispose: () => void } | null = null;
 
     /** initializeTerminal 创建终端实例并绑定输入与自适应尺寸。 */
     async function initializeTerminal() {
@@ -251,10 +258,23 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
         terminal.write(pendingOutputRef.current);
         pendingOutputRef.current = '';
       }
+      directoryDisposable = terminal.parser.registerOscHandler(7, (directoryURI) => {
+        /** reportedDirectory 表示远端 shell 通过 OSC 7 报告的实际工作目录。 */
+        const reportedDirectory = parseTerminalDirectoryReport(directoryURI);
+        if (!reportedDirectory || !terminalCommandSubmittedRef.current) return true;
+        terminalCommandSubmittedRef.current = false;
+        pendingTerminalDirectoryRef.current = reportedDirectory;
+        if (!fileBrowserAvailableRef.current || reportedDirectory === currentDirectoryRef.current) return true;
+        pendingTerminalDirectoryRef.current = '';
+        setSearchQuery('');
+        requestDirectory(reportedDirectory);
+        return true;
+      });
       inputDisposable = terminal.onData((terminalInput) => {
         /** socket 保存接收当前输入的活动 WebSocket。 */
         const socket = socketRef.current;
         if (!connectedRef.current || socket?.readyState !== WebSocket.OPEN) return;
+        if (terminalInput.includes('\r') || terminalInput.includes('\n')) terminalCommandSubmittedRef.current = true;
         socket.send(JSON.stringify({ type: 'input', data: terminalInput }));
       });
       resizeObserver = new ResizeObserver(() => {
@@ -272,6 +292,7 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
       disposed = true;
       resizeObserver?.disconnect();
       inputDisposable?.dispose();
+      directoryDisposable?.dispose();
       terminalRef.current?.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
@@ -320,8 +341,6 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
     };
     return () => {
       disposed = true;
-      directoryResolversRef.current.forEach((resolve) => resolve());
-      directoryResolversRef.current.clear();
       if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'disconnect' }));
       socket.close();
       if (socketRef.current === socket) socketRef.current = null;
@@ -345,6 +364,9 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
       setConnected(true);
       connectedRef.current = true;
       setFileBrowserAvailable(false);
+      fileBrowserAvailableRef.current = false;
+      terminalCommandSubmittedRef.current = false;
+      pendingTerminalDirectoryRef.current = '';
       setFileBrowserLoading(true);
       setPendingFingerprint('');
       setConnectionError('');
@@ -359,9 +381,14 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
     if (message.type === 'file_browser') {
       setFileBrowserLoading(false);
       setFileBrowserAvailable(Boolean(message.fileBrowserAvailable));
+      fileBrowserAvailableRef.current = Boolean(message.fileBrowserAvailable);
       if (message.fileBrowserAvailable) {
         setTreeError('');
-        requestDirectory('/');
+        setDirectoryLoading(true);
+        /** initialDirectory 表示 SFTP 就绪后应显示的根目录或等待同步的终端目录。 */
+        const initialDirectory = pendingTerminalDirectoryRef.current || '/';
+        pendingTerminalDirectoryRef.current = '';
+        requestDirectory(initialDirectory);
       } else {
         setTreeError(message.error || '远端服务器未启用 SFTP 文件浏览');
       }
@@ -370,12 +397,11 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
     if (message.type === 'directory') {
       /** directoryPath 表示当前目录响应的规范绝对路径。 */
       const directoryPath = message.path || '/';
-      /** childNodes 表示转换后的下级目录和文件节点。 */
-      const childNodes = (message.entries ?? []).map(createBrowserNode);
-      setTreeNodes((currentNodes) => updateTreeChildren(currentNodes, directoryPath, childNodes));
+      currentDirectoryRef.current = directoryPath;
+      setCurrentDirectory(directoryPath);
+      setDirectoryEntries(message.entries ?? []);
+      setDirectoryLoading(false);
       setTreeError(message.truncated ? '该目录超过 2000 项，仅显示前 2000 项' : '');
-      directoryResolversRef.current.get(directoryPath)?.();
-      directoryResolversRef.current.delete(directoryPath);
       return;
     }
     if (message.type === 'file') {
@@ -383,49 +409,43 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
       setTreeError('');
       setFileSaving(false);
       setFileSaveSucceeded(false);
-      setFilePreview({ path: message.path || '', originalContent: message.content ?? '', content: message.content ?? '', size: message.size ?? 0, truncated: Boolean(message.truncated), binary: Boolean(message.binary) });
+      setFilePreview({
+        path: message.path || '', originalContent: message.content ?? '', content: message.content ?? '',
+        size: message.size ?? 0, truncated: Boolean(message.truncated), binary: Boolean(message.binary),
+        mimeType: message.mimeType ?? '', base64Content: message.base64Content ?? '',
+      });
       setActiveView('file');
       return;
     }
-    if (message.type === 'search_results') {
-      if ((message.query || '') !== activeSearchQueryRef.current) return;
-      setSearchLoading(false);
-      setSearchResults(message.entries ?? []);
-      setSearchTruncated(Boolean(message.truncated));
-      setTreeError('');
-      return;
-    }
     if (message.type === 'file_saved') {
+      /** savedContent 保存服务端本次确认写入的不可变文本版本。 */
+      const savedContent = savingContentRef.current;
+      savingContentRef.current = '';
       setFileSaving(false);
       setFileSaveSucceeded(true);
       setTreeError('');
       setFilePreview((currentPreview) => {
         if (!currentPreview || currentPreview.path !== message.path) return currentPreview;
-        return { ...currentPreview, originalContent: savingContentRef.current, size: message.size ?? currentPreview.size };
+        return { ...currentPreview, originalContent: savedContent, size: message.size ?? currentPreview.size };
       });
-      savingContentRef.current = '';
+      void feedbackMessage.success(`文件已保存：${fileName(message.path || '')}`);
       return;
     }
     if (message.type === 'error') {
-      if (message.operation === 'search') {
-        if (message.query && message.query !== activeSearchQueryRef.current) return;
-        setSearchLoading(false);
-        setSearchResults([]);
-        setTreeError(message.error || '搜索远端文件失败');
-        return;
-      }
       if (message.operation === 'write_file') {
+        /** saveErrorMessage 表示本次远端文件保存失败的可见原因。 */
+        const saveErrorMessage = message.error || '保存远端文件失败';
         setFileSaving(false);
         setFileSaveSucceeded(false);
         savingContentRef.current = '';
-        setTreeError(message.error || '保存远端文件失败');
+        setTreeError(saveErrorMessage);
+        void feedbackMessage.error(saveErrorMessage);
         return;
       }
       if (message.operation === 'list_dir' || message.operation === 'read_file') {
         setFileLoading(false);
+        setDirectoryLoading(false);
         setTreeError(message.error || '读取远端文件系统失败');
-        directoryResolversRef.current.forEach((resolve) => resolve());
-        directoryResolversRef.current.clear();
         return;
       }
       setConnectionError(message.error || 'SSH 连接失败');
@@ -471,36 +491,18 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
     /** socket 保存文件树使用的当前 WebSocket。 */
     const socket = socketRef.current;
     if (socket?.readyState !== WebSocket.OPEN) return;
+    setDirectoryLoading(true);
     socket.send(JSON.stringify({ type: 'list_dir', path }));
   };
 
-  /** loadDirectory 为 Ant Design Tree 懒加载一个目录。 */
-  const loadDirectory = (node: DataNode) => {
-    /** browserNode 表示带远端路径的目录树节点。 */
-    const browserNode = node as SSHBrowserNode;
-    if (browserNode.children !== undefined || !browserNode.entry.directory) return Promise.resolve();
-    return new Promise<void>((resolve) => {
-      directoryResolversRef.current.set(browserNode.entry.path, resolve);
-      requestDirectory(browserNode.entry.path);
-    });
-  };
-
-  /** selectTreeNode 切换远端目录或读取文件预览。 */
-  const selectTreeNode = (keys: Key[], details: { node: DataNode }) => {
-    /** browserNode 表示用户点击的远端目录或文件。 */
-    const browserNode = details.node as SSHBrowserNode;
-    setSelectedKeys(keys);
+  /** enterDirectory 进入指定目录，并同步交互终端的当前工作目录。 */
+  const enterDirectory = (path: string) => {
+    setSearchQuery('');
     setTreeError('');
-    if (browserNode.entry.directory) {
-      setActiveView('terminal');
-      setExpandedKeys((currentKeys) => currentKeys.includes(browserNode.entry.path) ? currentKeys : [...currentKeys, browserNode.entry.path]);
-      if (browserNode.children === undefined) requestDirectory(browserNode.entry.path);
-      /** socket 保存接收远端 cd 命令的当前终端连接。 */
-      const socket = socketRef.current;
-      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'input', data: `cd -- ${quoteShellPath(browserNode.entry.path)}\r` }));
-      return;
-    }
-    openRemoteFile(browserNode.entry.path);
+    requestDirectory(path);
+    /** socket 保存接收远端 cd 命令的当前终端连接。 */
+    const socket = socketRef.current;
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'input', data: `cd -- ${quoteShellPath(path)}\r` }));
   };
 
   /** confirmDiscardChanges 在离开已修改文件前请求用户确认。 */
@@ -509,7 +511,7 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
       nextAction();
       return;
     }
-    Modal.confirm({
+    feedbackModal.confirm({
       title: '放弃未保存的修改？',
       content: filePreview.path,
       okText: '放弃修改',
@@ -536,66 +538,9 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
     });
   };
 
-  /** searchRemoteFiles 从远端根目录递归查找路径包含关键词的节点。 */
-  const searchRemoteFiles = (requestQuery: string) => {
-    /** normalizedQuery 表示去除首尾空白的有效关键词。 */
-    const normalizedQuery = requestQuery.trim();
-    setSearchQuery(requestQuery);
-    if (!normalizedQuery) {
-      activeSearchQueryRef.current = '';
-      setSearchResults([]);
-      setSearchLoading(false);
-      setSearchTruncated(false);
-      setTreeError('');
-      return;
-    }
-    if (Array.from(normalizedQuery).length < 2) {
-      setTreeError('搜索关键词至少需要 2 个字符');
-      return;
-    }
-    /** socket 保存接收搜索请求的当前连接。 */
-    const socket = socketRef.current;
-    if (socket?.readyState !== WebSocket.OPEN) return;
-    activeSearchQueryRef.current = normalizedQuery;
-    setSearchLoading(true);
-    setSearchResults([]);
-    setSearchTruncated(false);
-    setTreeError('');
-    socket.send(JSON.stringify({ type: 'search', query: normalizedQuery }));
-  };
-
-  /** selectSearchResult 打开搜索文件，或定位目录并同步终端工作目录。 */
-  const selectSearchResult = (entry: SSHFileEntry) => {
-    if (!entry.directory) {
-      openRemoteFile(entry.path);
-      return;
-    }
-    setSearchQuery('');
-    activeSearchQueryRef.current = '';
-    setSearchResults([]);
-    setSearchTruncated(false);
-    setSelectedKeys([entry.path]);
-    setExpandedKeys(pathAncestors(entry.path));
-    void revealDirectory(entry.path);
-    setActiveView('terminal');
-    /** socket 保存接收远端 cd 命令的当前终端连接。 */
-    const socket = socketRef.current;
-    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'input', data: `cd -- ${quoteShellPath(entry.path)}\r` }));
-  };
-
-  /** revealDirectory 逐级加载搜索命中的目录，使其在懒加载树中可见。 */
-  const revealDirectory = async (path: string) => {
-    for (const directoryPath of pathAncestors(path)) {
-      await new Promise<void>((resolve) => {
-        directoryResolversRef.current.set(directoryPath, resolve);
-        requestDirectory(directoryPath);
-      });
-    }
-  };
-
   /** saveRemoteFile 将当前未截断的 UTF-8 文本完整写回远端文件。 */
   const saveRemoteFile = () => {
-    if (!filePreview || filePreview.binary || filePreview.truncated || filePreview.content === filePreview.originalContent) return;
+    if (fileSaving || !filePreview || filePreview.binary || filePreview.truncated || filePreview.content === filePreview.originalContent) return;
     if (new TextEncoder().encode(filePreview.content).byteLength > 1 << 20) {
       setTreeError('单个文件保存内容不能超过 1 MiB');
       return;
@@ -610,6 +555,13 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
     socket.send(JSON.stringify({ type: 'write_file', path: filePreview.path, content: filePreview.content }));
   };
 
+  /** saveRemoteFileFromKeyboard 拦截编辑器的 Ctrl/Cmd+S 并触发远端保存。 */
+  const saveRemoteFileFromKeyboard = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (!(event.ctrlKey || event.metaKey) || event.key.toLocaleLowerCase() !== 's') return;
+    event.preventDefault();
+    saveRemoteFile();
+  };
+
   /** closeFilePreview 关闭当前文件，并保护尚未保存的编辑内容。 */
   const closeFilePreview = () => confirmDiscardChanges(() => {
     setFilePreview(null);
@@ -620,87 +572,69 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
     setActiveView('terminal');
   });
 
-  /** refreshRoot 清空缓存并重新读取远端根目录。 */
-  const refreshRoot = () => {
-    setTreeNodes([createRootNode()]);
-    setExpandedKeys(['/']);
-    setSelectedKeys(['/']);
+  /** refreshDirectory 重新读取步进浏览器当前目录。 */
+  const refreshDirectory = () => {
     setTreeError('');
     setSearchQuery('');
-    setSearchResults([]);
-    setSearchLoading(false);
-    setSearchTruncated(false);
-    activeSearchQueryRef.current = '';
-    requestDirectory('/');
+    requestDirectory(currentDirectory);
   };
 
   return (
     <div className="ssh-terminal-layout" data-tilt-disabled="true">
       {connected ? (
-        <aside className="ssh-file-browser" aria-label="远端文件目录树">
+        <aside className="ssh-file-browser" aria-label="远端文件浏览器">
           <div className="ssh-file-browser-header">
-            <div><FolderOpen size={17} /><strong>远端文件</strong><Tag color="processing">可编辑</Tag></div>
+            <div><FolderOpen size={17} /><strong title={currentDirectory}>{currentDirectory}</strong><Tag color="processing">当前目录</Tag></div>
             <div>
-              <Tooltip title="刷新根目录"><Button type="text" size="small" icon={<RefreshCw size={14} />} onClick={refreshRoot} disabled={!fileBrowserAvailable} aria-label="刷新远端根目录" /></Tooltip>
+              <Tooltip title="刷新当前目录"><Button type="text" size="small" icon={<RefreshCw size={14} />} onClick={refreshDirectory} disabled={!fileBrowserAvailable || directoryLoading} aria-label="刷新当前目录" /></Tooltip>
               <Tooltip title="断开当前终端"><Button type="text" danger size="small" icon={<Unplug size={14} />} onClick={onRequestClose} aria-label="断开当前 SSH 终端" /></Tooltip>
             </div>
           </div>
           {fileBrowserAvailable && (
             <div className="ssh-file-search">
-              <Input.Search
+              <Tooltip title="返回上一级目录">
+                <Button icon={<ArrowUp size={15} />} onClick={() => enterDirectory(parentDirectory(currentDirectory))} disabled={currentDirectory === '/' || directoryLoading} aria-label="返回上一级目录" />
+              </Tooltip>
+              <Input
                 value={searchQuery}
                 allowClear
-                enterButton={<Search size={14} />}
-                placeholder="从 / 递归搜索文件"
-                loading={searchLoading}
-                onChange={(event) => {
-                  setSearchQuery(event.target.value);
-                  activeSearchQueryRef.current = '';
-                  setSearchResults([]);
-                  setSearchTruncated(false);
-                  if (!event.target.value) searchRemoteFiles('');
-                }}
-                onSearch={searchRemoteFiles}
+                prefix={<Search size={14} />}
+                placeholder="搜索当前目录"
+                onChange={(event) => setSearchQuery(event.target.value)}
               />
             </div>
           )}
           {treeError && <Alert type="warning" showIcon title={treeError} closable onClose={() => setTreeError('')} />}
-          {fileBrowserLoading ? (
-            <div className="ssh-file-browser-loading"><Spin size="small" /><span>正在加载根目录</span></div>
+          {fileBrowserLoading || directoryLoading ? (
+            <div className="ssh-file-browser-loading"><Spin size="small" /><span>正在加载当前目录</span></div>
           ) : fileBrowserAvailable ? (
             <div className="ssh-file-tree-scroll">
-              {searchQuery.trim() ? (
-                searchLoading ? <div className="ssh-file-browser-loading"><Spin size="small" /><span>正在搜索远端根目录</span></div> : searchResults.length > 0 ? (
-                  <div className="ssh-file-search-results" role="list">
-                    {searchTruncated && <Tag color="warning">最多显示 200 项，结果可能不完整</Tag>}
-                    {searchResults.map((entry) => (
-                      <button key={entry.path} type="button" role="listitem" onClick={() => selectSearchResult(entry)}>
-                        {entry.directory ? <Folder size={15} /> : <FileCode2 size={15} />}
-                        <span><strong>{entry.name}</strong><small title={entry.path}>{entry.path}</small></span>
-                      </button>
-                    ))}
-                  </div>
-                ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的远端文件" />
-              ) : (
-                <Tree
-                  showIcon
-                  showLine={{ showLeafIcon: false }}
-                  blockNode
-                  treeData={treeNodes}
-                  expandedKeys={expandedKeys}
-                  selectedKeys={selectedKeys}
-                  loadData={loadDirectory}
-                  onExpand={(keys) => setExpandedKeys(keys)}
-                  onSelect={selectTreeNode}
-                />
-              )}
+              {visibleDirectoryEntries.length > 0 ? (
+                <div className="ssh-file-search-results" role="list">
+                  {visibleDirectoryEntries.map((entry) => (
+                    <button key={entry.path} type="button" role="listitem" onClick={() => entry.directory ? enterDirectory(entry.path) : openRemoteFile(entry.path)}>
+                      {entry.directory ? <Folder size={15} /> : isPreviewImage(entry.path) ? <FileImage size={15} /> : <FileCode2 size={15} />}
+                      <span><strong>{entry.name}</strong><small>{entry.directory ? '目录' : `${formatBytes(entry.size)} · ${entry.mode}`}</small></span>
+                    </button>
+                  ))}
+                </div>
+              ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={searchQuery.trim() ? '当前目录没有匹配项' : '当前目录为空'} />}
             </div>
           ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="SFTP 文件浏览不可用" />}
         </aside>
       ) : (
         <Form className="ssh-terminal-form" layout="vertical" onFinish={() => sendConnectRequest()}>
           <div className="ssh-terminal-status-row"><Tag color={socketReady ? 'processing' : 'default'}>{socketReady ? '等待连接' : '正在建立通道'}</Tag></div>
-          <Form.Item label="服务器地址" required><Input value={host} onChange={(event) => setHost(event.target.value)} placeholder="IP 地址或域名" autoComplete="off" /></Form.Item>
+          <Form.Item label="服务器地址" required>
+            <Input
+              className="ssh-server-input"
+              value={host}
+              allowClear
+              autoComplete="off"
+              placeholder="输入 IP 地址或域名"
+              onChange={(event) => setHost(event.target.value)}
+            />
+          </Form.Item>
           <div className="ssh-terminal-address-row">
             <Form.Item label="端口" required><InputNumber min={1} max={65535} value={port} onChange={(value) => setPort(value ?? 22)} /></Form.Item>
             <Form.Item label="用户名" required><Input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="off" /></Form.Item>
@@ -731,10 +665,10 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
           <div ref={terminalContainerRef} className="ssh-terminal-xterm" />
         </div>
         {activeView === 'file' && (
-          <div className="ssh-file-preview" aria-label="远端文件编辑器">
+          <div className="ssh-file-preview" aria-label="远端文件预览与编辑">
             {fileLoading ? <Spin tip="正在读取远端文件"><div className="ssh-file-preview-loading" /></Spin> : filePreview ? (
-              <><div className="ssh-file-preview-header"><div><FileCode2 size={16} /><strong>{filePreview.path}</strong>{filePreview.content !== filePreview.originalContent ? <Tag color="warning">未保存</Tag> : fileSaveSucceeded ? <Tag color="success">已保存</Tag> : null}</div><div><span>{formatBytes(filePreview.size)}{filePreview.truncated ? ' · 已截取前 1 MiB' : ''}</span><Tooltip title="保存远端文件"><Button type="text" size="small" icon={<Save size={15} />} loading={fileSaving} disabled={filePreview.binary || filePreview.truncated || filePreview.content === filePreview.originalContent} onClick={saveRemoteFile} aria-label="保存远端文件" /></Tooltip></div></div>{filePreview.binary ? <Empty image={<FileWarning size={46} />} description="二进制文件不支持文本编辑" /> : <>{filePreview.truncated && <Alert type="warning" showIcon title="文件超过 1 MiB，仅显示前 1 MiB，不能保存" />}<Input.TextArea className="ssh-file-editor" value={filePreview.content} readOnly={filePreview.truncated} onChange={(event) => { setFileSaveSucceeded(false); setFilePreview((currentPreview) => currentPreview ? { ...currentPreview, content: event.target.value } : currentPreview); }} spellCheck={false} /></>}</>
-            ) : <Empty image={<File size={46} />} description="从左侧目录树选择文件" />}
+              <><div className="ssh-file-preview-header"><div>{filePreview.mimeType.startsWith('image/') ? <FileImage size={16} /> : <FileCode2 size={16} />}<strong>{filePreview.path}</strong>{fileSaving ? <Tag color="processing">保存中</Tag> : !filePreview.binary && filePreview.content !== filePreview.originalContent ? <Tag color="warning">未保存</Tag> : fileSaveSucceeded ? <Tag color="success">已保存</Tag> : null}</div><div><span>{formatBytes(filePreview.size)}{filePreview.truncated ? ` · 超过 ${filePreview.mimeType ? '10 MiB' : '1 MiB'}` : ''}</span>{!filePreview.binary && <Tooltip title="保存远端文件"><Button type="text" size="small" icon={<Save size={15} />} loading={fileSaving} disabled={filePreview.truncated || filePreview.content === filePreview.originalContent} onClick={saveRemoteFile} aria-label="保存远端文件" /></Tooltip>}</div></div>{filePreview.truncated && filePreview.mimeType ? <Alert type="warning" showIcon title="文件超过 10 MiB，无法在浏览器中预览" /> : filePreview.mimeType.startsWith('image/') && filePreview.base64Content ? <div className="ssh-file-media-preview"><img src={fileDataURL(filePreview)} alt={fileName(filePreview.path)} /></div> : filePreview.mimeType === 'application/pdf' && filePreview.base64Content ? <iframe className="ssh-file-pdf-preview" src={fileDataURL(filePreview)} title={fileName(filePreview.path)} /> : filePreview.binary ? <Empty image={<FileWarning size={46} />} description="该二进制文件暂不支持预览" /> : <>{filePreview.truncated && <Alert type="warning" showIcon title="文件超过 1 MiB，仅显示前 1 MiB，不能保存" />}<Input.TextArea className="ssh-file-editor" value={filePreview.content} readOnly={filePreview.truncated} onKeyDown={saveRemoteFileFromKeyboard} onChange={(event) => { setFileSaveSucceeded(false); setFilePreview((currentPreview) => currentPreview ? { ...currentPreview, content: event.target.value } : currentPreview); }} spellCheck={false} /></>}</>
+            ) : <Empty image={<File size={46} />} description="从左侧当前目录选择文件" />}
           </div>
         )}
       </section>
@@ -759,33 +693,6 @@ function sendTerminalSize(terminal: XtermTerminal, socket: WebSocket | null, con
   if (connected && socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'resize', rows: terminal.rows, columns: terminal.cols }));
 }
 
-/** createRootNode 创建从远端根目录开始的首个懒加载节点。 */
-function createRootNode(): SSHBrowserNode {
-  /** rootEntry 表示远端根目录元数据。 */
-  const rootEntry: SSHFileEntry = { name: 'root', path: '/', directory: true, symlink: false, size: 0, mode: 'drwxr-xr-x', modifiedAt: '' };
-  return { key: '/', title: <span className="ssh-file-tree-node"><strong>/</strong><small>root</small></span>, icon: <FolderOpen size={15} />, entry: rootEntry };
-}
-
-/** createBrowserNode 将服务端文件项转换为 Ant Design 树节点。 */
-function createBrowserNode(entry: SSHFileEntry): SSHBrowserNode {
-  return {
-    key: entry.path,
-    title: <span className="ssh-file-tree-node"><strong>{entry.name}</strong>{!entry.directory && <small>{formatBytes(entry.size)}</small>}</span>,
-    icon: entry.directory ? <Folder size={15} /> : entry.symlink ? <FileWarning size={15} /> : <FileCode2 size={15} />,
-    isLeaf: !entry.directory,
-    entry,
-  };
-}
-
-/** updateTreeChildren 在不可变目录树中替换指定路径的已加载子节点。 */
-function updateTreeChildren(nodes: SSHBrowserNode[], path: string, children: SSHBrowserNode[]): SSHBrowserNode[] {
-  return nodes.map((node) => {
-    if (node.entry.path === path) return { ...node, children };
-    if (!node.children) return node;
-    return { ...node, children: updateTreeChildren(node.children, path, children) };
-  });
-}
-
 /** quoteShellPath 将 POSIX 远端路径安全转换为单引号 shell 参数。 */
 function quoteShellPath(path: string) {
   return `'${path.replaceAll("'", `'"'"'`)}'`;
@@ -796,11 +703,33 @@ function fileName(path: string) {
   return path.split('/').filter(Boolean).at(-1) || path;
 }
 
-/** pathAncestors 返回从根目录到目标目录的全部绝对路径。 */
-function pathAncestors(path: string) {
-  /** segments 表示目标绝对路径中的非空目录名。 */
+/** parentDirectory 返回当前 POSIX 目录的上一级，根目录保持不变。 */
+function parentDirectory(path: string) {
+  /** segments 表示当前绝对路径中的非空目录名。 */
   const segments = path.split('/').filter(Boolean);
-  return ['/', ...segments.map((_, index) => `/${segments.slice(0, index + 1).join('/')}`)];
+  if (segments.length <= 1) return '/';
+  return `/${segments.slice(0, -1).join('/')}`;
+}
+
+/** isPreviewImage 判断远端路径是否使用受支持的图片扩展名。 */
+function isPreviewImage(path: string) {
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(path);
+}
+
+/** fileDataURL 将服务端媒体响应组合为浏览器只读预览地址。 */
+function fileDataURL(preview: SSHFilePreview) {
+  return `data:${preview.mimeType};base64,${preview.base64Content}`;
+}
+
+/** parseTerminalDirectoryReport 从标准 OSC 7 file URI 中提取远端绝对目录。 */
+function parseTerminalDirectoryReport(directoryURI: string) {
+  if (!directoryURI.startsWith('file://') || /[\0\r\n]/.test(directoryURI)) return '';
+  /** pathStart 保存主机名之后首个路径分隔符的位置。 */
+  const pathStart = directoryURI.indexOf('/', 'file://'.length);
+  if (pathStart < 0) return '/';
+  /** remoteDirectory 表示折叠重复分隔符后的 POSIX 绝对目录。 */
+  const remoteDirectory = directoryURI.slice(pathStart).replace(/\/{2,}/g, '/');
+  return remoteDirectory.length > 1 ? remoteDirectory.replace(/\/$/, '') : '/';
 }
 
 /** formatBytes 将远端文件字节数转换为紧凑容量。 */

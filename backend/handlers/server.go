@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -32,7 +33,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// ServerHandler 提供服务器资源快照和超级管理员 SSH 终端服务。
+// ServerHandler 提供服务器资源快照和登录用户 SSH 终端服务。
 type ServerHandler struct {
 	// upgrader 将经过鉴权的终端请求升级为 WebSocket。
 	upgrader websocket.Upgrader
@@ -60,7 +61,7 @@ func (h *ServerHandler) Metrics(c *gin.Context) {
 	c.JSON(http.StatusOK, snapshot)
 }
 
-// Terminal 处理 GET /api/server/terminal；仅允许超级管理员建立经主机指纹校验的 SSH 终端。
+// Terminal 处理 GET /api/server/terminal；允许登录用户建立经主机指纹校验的 SSH 终端。
 func (h *ServerHandler) Terminal(c *gin.Context) {
 	// connection、err 表示升级后的浏览器 WebSocket 连接及其错误状态。
 	connection, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -105,8 +106,8 @@ func (h *ServerHandler) Terminal(c *gin.Context) {
 			}
 			terminalConnection = openedConnection
 			_ = socketWriter.write(terminalServerMessage{Type: "ready"})
-			// 部分远端 shell 在收到首个回车前不会输出提示符，连接后主动唤醒一次。
-			_, _ = io.WriteString(terminalConnection.stdin, "\r")
+			// 支持的交互 shell 会在每次提示符出现前报告实际工作目录，供前端同步文件浏览器。
+			terminalConnection.enableDirectoryReporting()
 			go terminalConnection.initializeFileBrowser(socketWriter)
 			go func(activeConnection *sshTerminalConnection) {
 				// waitErr 表示远端 shell 结束时返回的状态。
@@ -236,7 +237,7 @@ type terminalServerMessage struct {
 	Error string `json:"error,omitempty"`
 	// Operation 表示错误对应的 connect、list_dir 或 read_file 操作。
 	Operation string `json:"operation,omitempty"`
-	// HostKeyFingerprint 表示待超级管理员核验的 SSH 主机指纹。
+	// HostKeyFingerprint 表示待当前用户核验的 SSH 主机指纹。
 	HostKeyFingerprint string `json:"hostKeyFingerprint,omitempty"`
 	// FileBrowserAvailable 表示远端是否允许创建 SFTP 文件浏览通道。
 	FileBrowserAvailable bool `json:"fileBrowserAvailable,omitempty"`
@@ -252,6 +253,10 @@ type terminalServerMessage struct {
 	Truncated bool `json:"truncated,omitempty"`
 	// Binary 表示目标文件不是可直接预览的 UTF-8 文本。
 	Binary bool `json:"binary,omitempty"`
+	// MIMEType 表示图片或 PDF 预览使用的媒体类型。
+	MIMEType string `json:"mimeType,omitempty"`
+	// Base64Content 表示图片或 PDF 在安全体积上限内的 Base64 内容。
+	Base64Content string `json:"base64Content,omitempty"`
 	// Query 表示搜索结果对应的原始关键词，用于前端丢弃过期响应。
 	Query string `json:"query,omitempty"`
 }
@@ -314,6 +319,8 @@ type sshTerminalConnection struct {
 	session *ssh.Session
 	// stdin 表示写入远端 shell 的标准输入管道。
 	stdin io.WriteCloser
+	// shellName 表示远端账号默认交互 shell 的基础名称。
+	shellName string
 	// sftpClient 表示同一 SSH 客户端上的只读文件浏览通道；服务端不支持时为空。
 	sftpClient *sftp.Client
 	// closeOnce 保证网络资源只关闭一次。
@@ -322,6 +329,30 @@ type sshTerminalConnection struct {
 	resourceMutex sync.Mutex
 	// closed 表示当前 SSH 连接是否已经开始释放。
 	closed bool
+}
+
+// enableDirectoryReporting 为 Bash 或 Zsh 注入标准 OSC 7 工作目录报告钩子。
+func (c *sshTerminalConnection) enableDirectoryReporting() {
+	// integrationCommand 表示与远端 shell 类型匹配的提示符钩子命令。
+	integrationCommand := terminalDirectoryIntegrationCommand(c.shellName)
+	if integrationCommand == "" {
+		// 不支持的 shell 仍需回车以唤醒初始提示符。
+		_, _ = io.WriteString(c.stdin, "\r")
+		return
+	}
+	_, _ = io.WriteString(c.stdin, integrationCommand)
+}
+
+// terminalDirectoryIntegrationCommand 返回指定 shell 的 OSC 7 工作目录报告命令。
+func terminalDirectoryIntegrationCommand(shellName string) string {
+	switch strings.ToLower(strings.TrimSpace(shellName)) {
+	case "bash":
+		return " __collector_report_cwd(){ printf '\\033]7;file://%s%s\\007' \"${HOSTNAME:-localhost}\" \"$PWD\"; }; PROMPT_COMMAND=\"__collector_report_cwd${PROMPT_COMMAND:+;$PROMPT_COMMAND}\"; printf '\\033[1A\\033[2K\\r'\r"
+	case "zsh":
+		return " autoload -Uz add-zsh-hook; __collector_report_cwd(){ printf '\\033]7;file://%s%s\\007' \"${HOST:-localhost}\" \"$PWD\"; }; add-zsh-hook precmd __collector_report_cwd; printf '\\033[1A\\033[2K\\r'\r"
+	default:
+		return ""
+	}
 }
 
 // close 关闭 SSH 会话及其底层网络连接。
@@ -410,7 +441,10 @@ func (c *sshTerminalConnection) listDirectory(requestPath string) (terminalServe
 // maxRemoteTextFileBytes 限制远端文本读取和保存的单文件体积。
 const maxRemoteTextFileBytes = 1 << 20
 
-// readFile 读取不超过一 MiB 的 UTF-8 文本预览，不修改远端文件。
+// maxRemotePreviewFileBytes 限制远端图片和 PDF 的单文件预览体积。
+const maxRemotePreviewFileBytes = 10 << 20
+
+// readFile 读取 UTF-8 文本或受支持的图片、PDF 预览，不修改远端文件。
 func (c *sshTerminalConnection) readFile(requestPath string) (terminalServerMessage, error) {
 	// fileClient 表示当前可用的远端 SFTP 客户端。
 	fileClient := c.fileClient()
@@ -430,16 +464,33 @@ func (c *sshTerminalConnection) readFile(requestPath string) (terminalServerMess
 		return terminalServerMessage{}, errors.New("无法打开远端文件，请检查账号权限")
 	}
 	defer remoteFile.Close()
-	// previewLimit 限制单个文件预览读取量。
+	// previewMIMEType 表示按扩展名识别出的安全预览类型。
+	previewMIMEType := remotePreviewMIMEType(normalizedPath)
+	// previewLimit 根据文本或媒体类型限制单个文件预览读取量。
+	previewLimit := int64(maxRemoteTextFileBytes)
+	if previewMIMEType != "" {
+		previewLimit = maxRemotePreviewFileBytes
+	}
 	// content、readErr 表示最多多读取一个字节的文件内容及错误状态。
-	content, readErr := io.ReadAll(io.LimitReader(remoteFile, maxRemoteTextFileBytes+1))
+	content, readErr := io.ReadAll(io.LimitReader(remoteFile, previewLimit+1))
 	if readErr != nil {
 		return terminalServerMessage{}, errors.New("读取远端文件失败")
 	}
 	// truncated 表示文件内容是否超过预览上限。
-	truncated := len(content) > maxRemoteTextFileBytes
+	truncated := int64(len(content)) > previewLimit
 	if truncated {
-		content = content[:maxRemoteTextFileBytes]
+		content = content[:previewLimit]
+	}
+	if previewMIMEType != "" {
+		// 截断后的媒体内容无法可靠渲染，仅返回元数据和超限状态。
+		base64Content := ""
+		if !truncated {
+			base64Content = base64.StdEncoding.EncodeToString(content)
+		}
+		return terminalServerMessage{
+			Type: "file", Path: normalizedPath, Size: fileInfo.Size(), Truncated: truncated,
+			Binary: true, MIMEType: previewMIMEType, Base64Content: base64Content,
+		}, nil
 	}
 	// binary 表示文件内容不是有效 UTF-8 或包含空字节。
 	binary := !utf8.Valid(content) || strings.IndexByte(string(content), 0) >= 0
@@ -449,6 +500,17 @@ func (c *sshTerminalConnection) readFile(requestPath string) (terminalServerMess
 		previewContent = string(content)
 	}
 	return terminalServerMessage{Type: "file", Path: normalizedPath, Content: previewContent, Size: fileInfo.Size(), Truncated: truncated, Binary: binary}, nil
+}
+
+// remotePreviewMIMEType 按远端文件扩展名识别允许直接预览的图片和 PDF 类型。
+func remotePreviewMIMEType(remotePath string) string {
+	// previewTypes 保存允许通过浏览器只读展示的扩展名与媒体类型映射。
+	previewTypes := map[string]string{
+		".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+		".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+		".svg": "image/svg+xml", ".pdf": "application/pdf",
+	}
+	return previewTypes[strings.ToLower(pathpkg.Ext(remotePath))]
 }
 
 // searchFiles 从远端根目录递归搜索名称或完整路径包含关键词的节点。
@@ -595,7 +657,7 @@ func openSSHConnection(request terminalClientMessage, socketWriter *terminalSock
 	}
 	// discoveredFingerprint 保存握手期间服务端提供的主机指纹。
 	var discoveredFingerprint string
-	// expectedFingerprint 保存超级管理员已经确认的主机指纹。
+	// expectedFingerprint 保存当前用户已经确认的主机指纹。
 	expectedFingerprint := strings.TrimSpace(request.HostKeyFingerprint)
 	// clientConfig 保存 SSH 用户、认证方式和主机指纹校验规则。
 	clientConfig := &ssh.ClientConfig{
@@ -637,6 +699,8 @@ func openSSHConnection(request terminalClientMessage, socketWriter *terminalSock
 	}
 	// client 表示完成握手后的 SSH 客户端。
 	client := ssh.NewClient(sshConnection, channels, requests)
+	// shellName 表示通过独立非交互会话识别出的远端默认 shell。
+	shellName := detectRemoteShell(client)
 	// session、sessionErr 表示新建交互会话及其错误状态。
 	session, sessionErr := client.NewSession()
 	if sessionErr != nil {
@@ -670,7 +734,23 @@ func openSSHConnection(request terminalClientMessage, socketWriter *terminalSock
 		_ = client.Close()
 		return nil, "", errors.New("启动远端 shell 失败")
 	}
-	return &sshTerminalConnection{client: client, session: session, stdin: stdin}, "", nil
+	return &sshTerminalConnection{client: client, session: session, stdin: stdin, shellName: shellName}, "", nil
+}
+
+// detectRemoteShell 通过独立 SSH 会话读取远端账号的 SHELL 环境变量。
+func detectRemoteShell(client *ssh.Client) string {
+	// detectionSession、sessionErr 表示一次性 shell 识别会话及其错误状态。
+	detectionSession, sessionErr := client.NewSession()
+	if sessionErr != nil {
+		return ""
+	}
+	defer detectionSession.Close()
+	// shellOutput、outputErr 表示远端默认 shell 路径及执行状态。
+	shellOutput, outputErr := detectionSession.Output(`printf '%s' "$SHELL"`)
+	if outputErr != nil {
+		return ""
+	}
+	return pathpkg.Base(strings.TrimSpace(string(shellOutput)))
 }
 
 // buildSSHAuthMethods 根据临时密码或私钥创建 SSH 认证方式。

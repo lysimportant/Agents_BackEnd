@@ -47,7 +47,7 @@ import { pageKeys, pageTitles } from '@/src/config/constants';
 import { internalChatWebSocketURL, listSocketConversations, socketNotificationWebSocketURL } from '@/src/features/chat/socketApi';
 import { getInternalChatUnreadTotal, internalChatUnreadStorageKey, markInternalChatUnread } from '@/src/features/chat/unreadStore';
 import type { SocketConversation, SocketEnvelope } from '@/src/features/chat/types';
-import { isAdministratorRoleCode, isSuperAdminRoleCode } from '@/src/utils/roleAccess';
+import { isAdministratorRoleCode } from '@/src/utils/roleAccess';
 import {
   adminThemes,
   applyAdminTheme,
@@ -182,7 +182,7 @@ export function MainLayout({
   const [isFullscreen, setIsFullscreen] = useState(false);
   /** isMobile、setIsMobile 分别保存移动端状态及其更新函数。 */
   const [isMobile, setIsMobile] = useState(false);
-  /** terminalOpen、setTerminalOpen 表示全局超级管理员 SSH 终端是否展开。 */
+  /** terminalOpen、setTerminalOpen 表示全局登录用户 SSH 终端是否展开。 */
   const [terminalOpen, setTerminalOpen] = useState(false);
   /** headerConversations、setHeaderConversations 保存请求头、请求头。 */
   const [headerConversations, setHeaderConversations] = useState<SocketConversation[]>([]);
@@ -540,11 +540,9 @@ export function MainLayout({
               />
             </div>
             <Space size={10} wrap className="antd-header-actions">
-              {isSuperAdminRoleCode(authUser.roleCode) && (
-                <Tooltip title="SSH 服务器终端">
-                  <Button type="text" aria-label="打开 SSH 服务器终端" icon={<SquareTerminal size={18} />} onClick={() => setTerminalOpen(true)} />
-                </Tooltip>
-              )}
+              <Tooltip title="SSH 服务器终端">
+                <Button type="text" aria-label="打开 SSH 服务器终端" icon={<SquareTerminal size={18} />} onClick={() => setTerminalOpen(true)} />
+              </Tooltip>
               <Tooltip title="内部聊天">
                 <Badge count={internalUnreadCount} overflowCount={99} size="small">
                   <Button
@@ -636,7 +634,7 @@ export function MainLayout({
           </Content>
         </Layout>
       </Layout>
-      {isSuperAdminRoleCode(authUser.roleCode) && <SshTerminalModal open={terminalOpen} onClose={() => setTerminalOpen(false)} />}
+      <SshTerminalModal open={terminalOpen} onClose={() => setTerminalOpen(false)} />
     </ConfigProvider>
   );
 }

@@ -4054,6 +4054,13 @@ tbody tr:hover,
 }
 
 .ssh-terminal-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.ssh-terminal-title > span {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -4203,6 +4210,15 @@ tbody tr:hover,
   width: 100%;
 }
 
+.ssh-server-input.ant-input {
+  text-align: center;
+}
+
+.ssh-file-search .ant-input-affix-wrapper-focused {
+  outline: none;
+  box-shadow: none !important;
+}
+
 .ssh-terminal-form .ant-alert {
   margin-top: 12px;
 }
@@ -4232,8 +4248,18 @@ tbody tr:hover,
 }
 
 .ssh-file-search {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
   padding: 8px;
   border-bottom: 1px solid var(--border-subtle);
+}
+
+.ssh-file-search > .ant-btn {
+  width: 34px;
+  height: 32px;
+  padding: 0;
 }
 
 .ssh-file-search-results {
@@ -4557,6 +4583,29 @@ tbody tr:hover,
 .ssh-file-preview-loading {
   width: 1px;
   height: 180px;
+}
+
+.ssh-file-media-preview {
+  display: grid;
+  min-height: calc(100% - 43px);
+  padding: 18px;
+  place-items: center;
+}
+
+.ssh-file-media-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: min(58vh, 540px);
+  object-fit: contain;
+}
+
+.ssh-file-pdf-preview {
+  display: block;
+  width: 100%;
+  height: calc(100% - 43px);
+  min-height: 420px;
+  border: 0;
+  background: #fff;
 }
 
 @media (max-width: 1120px) {

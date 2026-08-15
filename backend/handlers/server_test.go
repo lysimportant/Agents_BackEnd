@@ -4,6 +4,7 @@ import (
 	"collector-backend/models"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -130,5 +131,36 @@ func TestValidateRemoteTextContent(t *testing.T) {
 	}
 	if err := validateRemoteTextContent(string(make([]byte, maxRemoteTextFileBytes+1))); err == nil {
 		t.Fatal("oversized remote text content was accepted")
+	}
+}
+
+// TestRemotePreviewMIMEType 验证图片和 PDF 可预览类型识别不受扩展名大小写影响。
+func TestRemotePreviewMIMEType(t *testing.T) {
+	// cases 保存远端路径与预期媒体类型映射。
+	cases := map[string]string{
+		"/tmp/chart.PNG":        "image/png",
+		"/home/root/photo.jpeg": "image/jpeg",
+		"/var/report.pdf":       "application/pdf",
+		"/etc/nginx.conf":       "",
+		"/tmp/archive.zip":      "",
+	}
+	for remotePath, expectedMIMEType := range cases {
+		if actualMIMEType := remotePreviewMIMEType(remotePath); actualMIMEType != expectedMIMEType {
+			t.Fatalf("preview MIME type %q: got %q want %q", remotePath, actualMIMEType, expectedMIMEType)
+		}
+	}
+}
+
+// TestTerminalDirectoryIntegrationCommand 验证仅支持的交互 shell 会安装工作目录报告钩子。
+func TestTerminalDirectoryIntegrationCommand(t *testing.T) {
+	// supportedShells 保存应生成 OSC 7 命令的远端 shell 名称。
+	for _, shellName := range []string{"bash", "ZSH"} {
+		integrationCommand := terminalDirectoryIntegrationCommand(shellName)
+		if integrationCommand == "" || !strings.Contains(integrationCommand, "]7;file://") {
+			t.Fatalf("missing directory integration for shell %q: %q", shellName, integrationCommand)
+		}
+	}
+	if integrationCommand := terminalDirectoryIntegrationCommand("fish"); integrationCommand != "" {
+		t.Fatalf("unsupported shell received integration command: %q", integrationCommand)
 	}
 }
