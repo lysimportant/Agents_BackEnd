@@ -1,5 +1,42 @@
 # Docker Compose 故障排查指南
 
+## 最新修复（2026-08-15）
+
+### 问题：Backend 容器 unhealthy - /health 返回 404
+
+**根因**：Docker healthcheck 使用 `wget --spider` 发送 HEAD 请求，但后端路由只注册了 GET 方法。
+
+**修复**：在 `backend/routes/routes.go` 中同时注册 GET 和 HEAD 方法：
+
+```go
+healthHandler := func(c *gin.Context) {
+    c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+router.GET("/health", healthHandler)
+router.HEAD("/health", healthHandler)
+```
+
+**如何应用修复**：
+
+```bash
+cd /opt/Agents_BackEnd
+
+# 停止容器
+docker compose down
+
+# 重新构建后端（代码已修改）
+docker compose build backend
+
+# 启动所有服务
+docker compose up -d
+
+# 查看状态（等待约 10-15 秒）
+docker compose ps
+
+# 验证健康检查
+curl -I http://localhost:30003/health
+```
+
 ## 当前修复内容
 
 已修复自定义端口配置问题，现在支持通过 `.env` 文件完全控制端口：

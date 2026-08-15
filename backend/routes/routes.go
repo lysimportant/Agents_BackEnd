@@ -35,9 +35,12 @@ func Setup(router *gin.Engine, appStore Store, authService *auth.Service, passwo
 	router.MaxMultipartMemory = handlers.MaxUploadSize
 	router.Use(middleware.CORS(cfg.AllowedOrigins), middleware.VisitorAccessLogger(appStore, cfg.VisitorLogRetentionDays))
 
-	router.GET("/health", func(c *gin.Context) {
+	// 健康检查端点，同时支持 GET 和 HEAD 方法
+	healthHandler := func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
+	}
+	router.GET("/health", healthHandler)
+	router.HEAD("/health", healthHandler)
 
 	// api 保存变量 api。
 	api := router.Group("/api")
