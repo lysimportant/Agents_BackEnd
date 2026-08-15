@@ -336,14 +336,14 @@ export function UsersPage({
                           /** canEditTarget 保存目标。 */
                           const canEditTarget = canUpdate && (!targetIsAdministrator || actorIsSuperAdmin);
                           /** canDeleteTarget 保存目标。 */
-                          const canDeleteTarget = canDelete && user.username.toLowerCase() !== 'mh' && (!targetIsAdministrator || actorIsSuperAdmin);
+                          const canDeleteTarget = canDelete && user.username.toLowerCase() !== 'mh' && !isSuperAdminRoleCode(user.roleCode);
                           if (!canAuthorizeTarget && !canEditTarget && !canDeleteTarget) return null;
                           return (
                           <>
-                            {canAuthorizeTarget && <button type="button" onClick={() => void openPermissionDialog(user.id)}>授权</button>}
+                            {canAuthorizeTarget && <button type=”button” onClick={() => void openPermissionDialog(user.id)}>授权</button>}
                             {canEditTarget && (
                             <button
-                              type="button"
+                              type=”button”
                               onClick={() => {
                                 onEditUser(user);
                                 setDialogOpen(true);
@@ -354,14 +354,14 @@ export function UsersPage({
                             )}
                             {canDeleteTarget && (
                               <Popconfirm
-                                title="确认删除该用户？"
-                                description={`账号“${user.username}”删除后不可恢复。`}
-                                okText="确认删除"
-                                cancelText="取消"
+                                title=”确认删除该用户？”
+                                description={`账号”${user.username}”删除后不可恢复。`}
+                                okText=”确认删除”
+                                cancelText=”取消”
                                 okButtonProps={{ danger: true }}
                                 onConfirm={() => onDeleteUser(user.id)}
                               >
-                                <button className="danger" type="button">删除</button>
+                                <button className=”danger” type=”button”>删除</button>
                               </Popconfirm>
                             )}
                           </>

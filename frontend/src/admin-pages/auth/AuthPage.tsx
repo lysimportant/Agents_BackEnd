@@ -98,7 +98,7 @@ export function AuthPage({ isCheckingSession, loginForm, loginError, isLoggingIn
             autoFocus
             value={loginForm.username}
             onChange={(event) => onLoginFormChange((current) => ({ ...current, username: event.target.value }))}
-            placeholder="MH"
+            placeholder="请输入账号"
             autoComplete="username"
           />
         </label>
@@ -109,7 +109,7 @@ export function AuthPage({ isCheckingSession, loginForm, loginError, isLoggingIn
             type="password"
             value={loginForm.password}
             onChange={(event) => onLoginFormChange((current) => ({ ...current, password: event.target.value }))}
-            placeholder="123"
+            placeholder="请输入密码"
             autoComplete="current-password"
           />
         </label>
