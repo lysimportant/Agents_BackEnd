@@ -58,7 +58,7 @@ func (s *SQLiteStore) MigrateAndSeed() error {
 	if err := s.reconcileLegacyUserRoles(); err != nil {
 		return err
 	}
-	return s.assignMHAdminInvariants()
+	return nil
 }
 
 // applicationMenuSeed 定义对应业务的数据结构与调用契约。
@@ -459,7 +459,7 @@ func (s *SQLiteStore) migrate() error {
 	// err 保存当前操作结果以及可能返回的错误状态。
 	if _, err := s.db.Exec(`
 		UPDATE articles
-		SET owner_id = COALESCE((SELECT id FROM users WHERE lower(username)=lower('MH') ORDER BY id LIMIT 1), (SELECT id FROM users WHERE role IN ('超级管理员','系统管理员') ORDER BY id LIMIT 1), 1)
+		SET owner_id = COALESCE((SELECT id FROM users WHERE role IN ('超级管理员','系统管理员') ORDER BY id LIMIT 1), (SELECT id FROM users ORDER BY id LIMIT 1), 1)
 		WHERE owner_id = 0 OR owner_id IS NULL
 	`); err != nil {
 		return err
@@ -467,7 +467,7 @@ func (s *SQLiteStore) migrate() error {
 	// err 保存当前操作结果以及可能返回的错误状态。
 	if _, err := s.db.Exec(`
 		UPDATE files
-		SET owner_id = COALESCE((SELECT id FROM users WHERE lower(username)=lower('MH') ORDER BY id LIMIT 1), (SELECT id FROM users WHERE role IN ('超级管理员','系统管理员') ORDER BY id LIMIT 1), 1)
+		SET owner_id = COALESCE((SELECT id FROM users WHERE role IN ('超级管理员','系统管理员') ORDER BY id LIMIT 1), (SELECT id FROM users ORDER BY id LIMIT 1), 1)
 		WHERE owner_id = 0 OR owner_id IS NULL
 	`); err != nil {
 		return err
@@ -511,13 +511,13 @@ func (s *SQLiteStore) ensureColumn(table, column, ddl string) error {
 
 // seed 执行对应业务流程。
 func (s *SQLiteStore) seed() error {
-	// mhCount 保存数量。
-	var mhCount int
+	// userCount 保存当前系统已有账号数量。
+	var userCount int
 	// err 保存当前操作结果以及可能返回的错误状态。
-	if err := s.db.QueryRow(`SELECT COUNT(1) FROM users WHERE lower(username)=lower('MH')`).Scan(&mhCount); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(1) FROM users`).Scan(&userCount); err != nil {
 		return err
 	}
-	if mhCount == 0 {
+	if userCount == 0 {
 		// now 保存当前时间。
 		now := timeText(time.Now())
 		// passwordHash、err 保存当前操作结果以及可能返回的错误状态。
@@ -849,27 +849,6 @@ func (s *SQLiteStore) UpdateUser(id int, request models.UserRequest, passwordHas
 	if !ok {
 		return models.User{}, "用户不存在"
 	}
-	if strings.EqualFold(existing.Username, "MH") {
-		// root、exists 保存业务值及其是否存在或处理成功的标记。
-		root, exists := s.findDepartmentByCode("huajian")
-		if !exists {
-			return models.User{}, "根部门不存在"
-		}
-		// canLogin 保存登录。
-		canLogin := true
-		// systemRole、exists 保存业务值及其是否存在或处理成功的标记。
-		systemRole, exists := s.findRoleByCode(superAdminRoleCode)
-		if !exists {
-			return models.User{}, "超级管理员角色不存在"
-		}
-		request.Username = "MH"
-		request.RoleID = &systemRole.ID
-		request.Role = systemRole.Name
-		request.DepartmentID = &root.ID
-		request.Department = root.Name
-		request.Status = "在岗"
-		request.CanLogin = &canLogin
-	}
 	// other、exists 保存业务值及其是否存在或处理成功的标记。
 	if other, exists := s.FindUserByUsername(request.Username); exists && other.ID != id {
 		return models.User{}, "用户名已存在"
@@ -939,13 +918,10 @@ func (s *SQLiteStore) UpdateUser(id int, request models.UserRequest, passwordHas
 
 // DeleteUser 删除或清理对应业务记录。
 func (s *SQLiteStore) DeleteUser(id int) string {
-	// user、ok 保存业务值及其是否存在或处理成功的标记。
-	user, ok := s.FindUserByID(id)
+	// ok 表示待删除用户是否存在。
+	_, ok := s.FindUserByID(id)
 	if !ok {
 		return "用户不存在"
-	}
-	if strings.EqualFold(user.Username, "MH") {
-		return "默认管理员 MH 不能删除"
 	}
 	// tx、err 保存当前操作结果以及可能返回的错误状态。
 	tx, err := s.db.Begin()

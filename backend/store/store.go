@@ -239,26 +239,6 @@ func (s *MemoryStore) UpdateUser(id int, request models.UserRequest, passwordHas
 	if !found {
 		return models.User{}, "用户不存在"
 	}
-	if strings.EqualFold(s.users[index].Username, "MH") {
-		// root、exists 保存业务值及其是否存在或处理成功的标记。
-		root, exists := s.findDepartmentByCode("huajian")
-		if !exists {
-			return models.User{}, "根部门不存在"
-		}
-		// canLogin 保存登录。
-		canLogin := true
-		// systemRole、exists 保存业务值及其是否存在或处理成功的标记。
-		systemRole, exists := s.findRoleByCode(superAdminRoleCode)
-		if !exists {
-			return models.User{}, "超级管理员角色不存在"
-		}
-		request.Username = "MH"
-		request.RoleID = &systemRole.ID
-		request.Role = systemRole.Name
-		request.DepartmentID = &root.ID
-		request.Department = root.Name
-		request.CanLogin = &canLogin
-	}
 	// username 保存用户名。
 	username := strings.TrimSpace(request.Username)
 	// existing、exists 保存业务值及其是否存在或处理成功的标记。
@@ -267,9 +247,6 @@ func (s *MemoryStore) UpdateUser(id int, request models.UserRequest, passwordHas
 	}
 	if strings.TrimSpace(request.Status) == "" {
 		request.Status = s.users[index].Status
-	}
-	if strings.EqualFold(s.users[index].Username, "MH") {
-		request.Status = "在岗"
 	}
 	// canLogin 保存登录。
 	canLogin := s.users[index].CanLogin
@@ -331,9 +308,6 @@ func (s *MemoryStore) DeleteUser(id int) string {
 	index, found := s.findUserIndexByID(id)
 	if !found {
 		return "用户不存在"
-	}
-	if strings.EqualFold(s.users[index].Username, "MH") {
-		return "默认管理员 MH 不能删除"
 	}
 	s.users = append(s.users[:index], s.users[index+1:]...)
 	delete(s.userMenuIDs, id)

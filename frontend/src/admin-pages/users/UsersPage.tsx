@@ -336,7 +336,7 @@ export function UsersPage({
                           /** canEditTarget 保存目标。 */
                           const canEditTarget = canUpdate && (!targetIsAdministrator || actorIsSuperAdmin);
                           /** canDeleteTarget 保存目标。 */
-                          const canDeleteTarget = canDelete && user.username.toLowerCase() !== 'mh' && !isSuperAdminRoleCode(user.roleCode);
+                          const canDeleteTarget = canDelete && !isSuperAdminRoleCode(user.roleCode);
                           if (!canAuthorizeTarget && !canEditTarget && !canDeleteTarget) return null;
                           return (
                             <>

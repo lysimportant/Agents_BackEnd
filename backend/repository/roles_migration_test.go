@@ -222,7 +222,7 @@ func TestRoleCodeIsImmutableAfterCreation(t *testing.T) {
 	}
 }
 
-func TestAddingSuperAdminOnlyPromotesMH(t *testing.T) {
+func TestAddingSuperAdminDoesNotPromoteExistingAccountsByName(t *testing.T) {
 	store, _ := openPreRoleMigrationStore(t)
 	defer store.db.Close()
 
@@ -254,8 +254,8 @@ func TestAddingSuperAdminOnlyPromotesMH(t *testing.T) {
 		t.Fatalf("migrate administrator split: %v", err)
 	}
 	mh, ok := store.FindUserByUsername("MH")
-	if !ok || mh.RoleCode != superAdminRoleCode || mh.Role != "超级管理员" {
-		t.Fatalf("MH was not promoted exclusively: %+v", mh)
+	if !ok || mh.RoleCode != systemAdminRoleCode || mh.Role != "系统管理员" || mh.RoleID == nil || *mh.RoleID != systemID {
+		t.Fatalf("named seed account was promoted during role migration: %+v", mh)
 	}
 	legacyAdmin, ok := store.FindUserByUsername("legacy-system-admin")
 	if !ok || legacyAdmin.RoleCode != systemAdminRoleCode || legacyAdmin.Role != "系统管理员" || legacyAdmin.RoleID == nil || *legacyAdmin.RoleID != systemID {

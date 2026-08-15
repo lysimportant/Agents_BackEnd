@@ -3,7 +3,6 @@ package repository
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -47,24 +46,6 @@ var standardRoleSeeds = []roleSeed{
 // validateMigrationPreconditions 在修改结构、菜单、部门或角色数据前检查会导致
 // RBAC 迁移中止的编码冲突；各迁移步骤仍保留独立检查作为第二层保护。
 func (s *SQLiteStore) validateMigrationPreconditions() error {
-	// usersTableExists 保存用户。
-	var usersTableExists bool
-	// err 保存当前操作结果以及可能返回的错误状态。
-	if err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='users')`).Scan(&usersTableExists); err != nil {
-		return err
-	}
-	if usersTableExists {
-		// mhCount 保存数量。
-		var mhCount int
-		// err 保存当前操作结果以及可能返回的错误状态。
-		if err := s.db.QueryRow(`SELECT COUNT(1) FROM users WHERE lower(username)=lower('MH')`).Scan(&mhCount); err != nil {
-			return err
-		}
-		if mhCount > 1 {
-			return fmt.Errorf("默认管理员 MH 必须且只能存在一个，当前检测到 %d 个；迁移未修改任何账号", mhCount)
-		}
-	}
-
 	// rolesTableExists 保存角色。
 	var rolesTableExists bool
 	// err 保存当前操作结果以及可能返回的错误状态。

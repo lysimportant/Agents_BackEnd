@@ -40,7 +40,7 @@
 
 - `main.go` 的生产装配使用 `repository.NewSQLiteStore`；`store/store.go` 是遗留内存实现，不能作为生产功能的唯一实现。
 - `database.Open` 使用纯 Go `modernc.org/sqlite` 驱动，开启 `foreign_keys`、WAL 和 5 秒 busy timeout，并将最大连接数设为 1。不要引入依赖系统 SQLite 的隐式假设。
-- `MigrateAndSeed` 是增量、幂等迁移入口，顺序为预检 → 建表/补列/索引 → 应用菜单 → 部门 → 角色 → 默认账号 → 遗留角色对齐 → `MH` 不变量。遇到碰撞会主动失败并保留数据，不能用清库绕过。
+- `MigrateAndSeed` 是增量、幂等迁移入口，顺序为预检 → 建表/补列/索引 → 应用菜单 → 部门 → 角色 → 默认账号 → 遗留角色对齐。遇到碰撞会主动失败并保留数据，不能用清库绕过。
 - 启动时 `ReconcileUploadFiles` 会为上传目录中未记录的物理文件补数据库记录；因此测试服务必须同时隔离 SQLite 和上传目录。
 - SQLite 主要表包括 `users`、`departments`、`roles`、`menus`、三类菜单关联表、`user_action_permissions`、`sessions`、`articles`、`files` 与 `data_points`。修改列时同步检查所有 `SELECT` 扫描顺序。
 
@@ -73,7 +73,7 @@
 
 ## 数据不变量与业务边界
 
-- `MH` 必须且只能存在一个，固定属于 HuaJian 根部门和 `super-admin`，保持在岗、可登录且拥有全部菜单；不得删除、降级或迁移到其他部门。
+- `MH` 仅在用户表首次为空时作为初始化超级管理员创建；之后不得按用户名特殊处理，可由超级管理员改名、调整角色或部门、停用和删除，启动迁移不得恢复或重建该账号。
 - 内置管理员角色必须保持启用并拥有全部菜单；角色编码创建后不可修改。角色显示名变化时，兼容字段 `users.role` 要在同一事务中同步。
 - 根部门 `huajian` 不可改编码、停用、设置上级或缩减菜单；部门改名时兼容字段 `users.department` 要同步。
 - 部门树禁止自引用和循环；删除部门前必须没有下级部门与直属用户，删除角色前必须没有关联用户。

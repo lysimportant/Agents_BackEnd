@@ -552,14 +552,13 @@ func TestAdminCanRecoverManagementMenusWithoutMenuGrant(t *testing.T) {
 	}
 }
 
-func TestMHInvariantsAreProtected(t *testing.T) {
+func TestSeedAdministratorHasNoRuntimeSpecialTreatment(t *testing.T) {
 	router, store, _ := setupTestRouter(t)
 	mh, ok := store.FindUserByUsername("MH")
 	if !ok {
 		t.Fatal("MH seed missing")
 	}
-	var rootDepartment models.Department
-	var otherDepartment models.Department
+	var rootDepartment, otherDepartment models.Department
 	for _, department := range store.ListDepartments() {
 		if department.Code == "huajian" {
 			rootDepartment = department
@@ -570,35 +569,67 @@ func TestMHInvariantsAreProtected(t *testing.T) {
 	if rootDepartment.ID == 0 || otherDepartment.ID == 0 {
 		t.Fatal("department seeds missing")
 	}
-	cookie := loginCookie(t, router, "MH", "123")
-	canLogin := false
-	maliciousBody, _ := json.Marshal(models.UserRequest{
-		Username: "renamed-mh", Name: "MH 更新", Role: "普通用户", DepartmentID: &otherDepartment.ID,
-		Department: otherDepartment.Name, Status: mh.Status, Shift: mh.Shift, Phone: mh.Phone,
-		Email: mh.Email, CanLogin: &canLogin,
+	// superRole、viewerRole 保存执行修改的超级管理员角色和种子账号的新角色。
+	var superRole, viewerRole models.Role
+	for _, role := range store.ListRoles() {
+		switch role.Code {
+		case permissions.SuperAdminRoleCode:
+			superRole = role
+		case "viewer":
+			viewerRole = role
+		}
+	}
+	if superRole.ID == 0 || viewerRole.ID == 0 {
+		t.Fatal("required role seeds missing")
+	}
+	// canLogin 保存同级超级管理员的登录开关。
+	canLogin := true
+	peerSuperAdmin, message := store.CreateUser(models.UserRequest{
+		Username: "seed-peer-super", Name: "种子账号管理者", RoleID: &superRole.ID,
+		DepartmentID: &rootDepartment.ID, Status: "在岗", CanLogin: &canLogin,
+	}, auth.MustHashPassword("pass1234"))
+	if message != "" {
+		t.Fatalf("create peer super administrator: %s", message)
+	}
+	peerCookie := loginCookie(t, router, peerSuperAdmin.Username, "pass1234")
+	// seedCanLogin 保存初始化账号修改后的登录开关。
+	seedCanLogin := false
+	updateBody, _ := json.Marshal(models.UserRequest{
+		Username: "renamed-seed-admin", Name: "初始化账号已修改", RoleID: &viewerRole.ID,
+		DepartmentID: &otherDepartment.ID, Status: "停用", Shift: mh.Shift, Phone: mh.Phone,
+		Email: mh.Email, CanLogin: &seedCanLogin,
 	})
-	req := httptest.NewRequest(http.MethodPut, "/api/users/"+strconv.Itoa(mh.ID), bytes.NewReader(maliciousBody))
+	req := httptest.NewRequest(http.MethodPut, "/api/users/"+strconv.Itoa(mh.ID), bytes.NewReader(updateBody))
 	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "sessionId", Value: cookie})
+	req.AddCookie(&http.Cookie{Name: "sessionId", Value: peerCookie})
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("update MH status=%d body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("update initialization account status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var updated models.User
 	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
-		t.Fatalf("decode updated MH: %v", err)
+		t.Fatalf("decode updated initialization account: %v", err)
 	}
-	if updated.Username != "MH" || updated.Role != "超级管理员" || updated.RoleCode != "super-admin" || updated.RoleID == nil || !updated.CanLogin || updated.DepartmentID == nil || *updated.DepartmentID != rootDepartment.ID {
-		t.Fatalf("MH invariants were not preserved: %+v", updated)
+	if updated.Username != "renamed-seed-admin" || updated.RoleCode != viewerRole.Code || updated.RoleID == nil || updated.CanLogin || updated.DepartmentID == nil || *updated.DepartmentID != otherDepartment.ID {
+		t.Fatalf("initialization account retained special treatment: %+v", updated)
 	}
 
 	req = httptest.NewRequest(http.MethodDelete, "/api/users/"+strconv.Itoa(mh.ID), nil)
-	req.AddCookie(&http.Cookie{Name: "sessionId", Value: cookie})
+	req.AddCookie(&http.Cookie{Name: "sessionId", Value: peerCookie})
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("deleting MH was not blocked: status=%d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("delete initialization account status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, found := store.FindUserByID(mh.ID); found {
+		t.Fatal("deleted initialization account remains in SQLite")
+	}
+	if err := store.MigrateAndSeed(); err != nil {
+		t.Fatalf("rerun migration after deleting initialization account: %v", err)
+	}
+	if _, found := store.FindUserByUsername("MH"); found {
+		t.Fatal("migration recreated initialization account after deletion")
 	}
 
 	var dashboardID int
@@ -611,7 +642,7 @@ func TestMHInvariantsAreProtected(t *testing.T) {
 	permissionsBody, _ := json.Marshal(models.UserMenusRequest{MenuIDs: []int{dashboardID}})
 	req = httptest.NewRequest(http.MethodPut, "/api/departments/"+strconv.Itoa(rootDepartment.ID)+"/menus", bytes.NewReader(permissionsBody))
 	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "sessionId", Value: cookie})
+	req.AddCookie(&http.Cookie{Name: "sessionId", Value: peerCookie})
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
@@ -1058,11 +1089,13 @@ func TestSuperAdministratorsCanPersistentlyUpdateEachOther(t *testing.T) {
 	if !found {
 		t.Fatal("MH seed missing")
 	}
-	// updateMHBody 保存第二超级管理员修改 MH 可编辑资料的请求正文。
+	// mhCanLogin 保存第二超级管理员对 MH 登录权限的关闭值。
+	mhCanLogin := false
+	// updateMHBody 保存第二超级管理员修改 MH 资料并关闭登录权限的请求正文。
 	updateMHBody, _ := json.Marshal(models.UserRequest{
 		Username: mh.Username, Name: "由同级超级管理员更新", RoleID: mh.RoleID,
 		DepartmentID: mh.DepartmentID, Status: mh.Status, Shift: mh.Shift,
-		Phone: "13800000002", Email: "mh.peer.updated@example.com", CanLogin: &canLogin,
+		Phone: "13800000002", Email: "mh.peer.updated@example.com", CanLogin: &mhCanLogin,
 	})
 	request = httptest.NewRequest(http.MethodPut, "/api/users/"+strconv.Itoa(mh.ID), bytes.NewReader(updateMHBody))
 	request.Header.Set("Content-Type", "application/json")
@@ -1074,8 +1107,28 @@ func TestSuperAdministratorsCanPersistentlyUpdateEachOther(t *testing.T) {
 	}
 	// persistedMH 从 SQLite 重新查询第二超级管理员修改后的 MH。
 	persistedMH, found := store.FindUserByID(mh.ID)
-	if !found || persistedMH.Name != "由同级超级管理员更新" || persistedMH.Email != "mh.peer.updated@example.com" || persistedMH.Phone != "13800000002" {
+	if !found || persistedMH.Name != "由同级超级管理员更新" || persistedMH.Email != "mh.peer.updated@example.com" || persistedMH.Phone != "13800000002" || persistedMH.CanLogin {
 		t.Fatalf("MH peer update was not persisted: %+v", persistedMH)
+	}
+
+	// mhCanLogin 切换为 true，验证同级超级管理员也能恢复 MH 登录权限。
+	mhCanLogin = true
+	updateMHBody, _ = json.Marshal(models.UserRequest{
+		Username: persistedMH.Username, Name: persistedMH.Name, RoleID: persistedMH.RoleID,
+		DepartmentID: persistedMH.DepartmentID, Status: persistedMH.Status, Shift: persistedMH.Shift,
+		Phone: persistedMH.Phone, Email: persistedMH.Email, CanLogin: &mhCanLogin,
+	})
+	request = httptest.NewRequest(http.MethodPut, "/api/users/"+strconv.Itoa(mh.ID), bytes.NewReader(updateMHBody))
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(&http.Cookie{Name: "sessionId", Value: secondSuperCookie})
+	response = httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("peer super administrator restored MH login: status=%d body=%s", response.Code, response.Body.String())
+	}
+	persistedMH, found = store.FindUserByID(mh.ID)
+	if !found || !persistedMH.CanLogin {
+		t.Fatalf("MH login restore was not persisted: %+v", persistedMH)
 	}
 }
 

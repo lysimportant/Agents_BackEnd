@@ -151,65 +151,6 @@ func migrateLegacyDepartmentBrand(tx *sql.Tx, now string) error {
 	return nil
 }
 
-// assignMHAdminInvariants 更新并保存对应业务状态。
-func (s *SQLiteStore) assignMHAdminInvariants() error {
-	// tx、err 保存当前操作结果以及可能返回的错误状态。
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	// mhCount 保存数量。
-	var mhCount int
-	// err 保存当前操作结果以及可能返回的错误状态。
-	if err := tx.QueryRow(`SELECT COUNT(1) FROM users WHERE lower(username)=lower('MH')`).Scan(&mhCount); err != nil {
-		return err
-	}
-	if mhCount != 1 {
-		return fmt.Errorf("默认管理员 MH 必须且只能存在一个，当前检测到 %d 个；迁移未修改任何账号", mhCount)
-	}
-	// mhID 保存标识。
-	var mhID int
-	// err 保存当前操作结果以及可能返回的错误状态。
-	if err := tx.QueryRow(`SELECT id FROM users WHERE lower(username)=lower('MH')`).Scan(&mhID); err != nil {
-		return err
-	}
-	// rootID 保存标识。
-	var rootID int
-	// rootName 保存名称。
-	var rootName string
-	// err 保存当前操作结果以及可能返回的错误状态。
-	if err := tx.QueryRow(`SELECT id,name FROM departments WHERE code='huajian'`).Scan(&rootID, &rootName); err != nil {
-		return err
-	}
-	// roleID 保存角色标识。
-	var roleID int
-	// roleName 保存角色名称。
-	var roleName string
-	// err 保存当前操作结果以及可能返回的错误状态。
-	if err := tx.QueryRow(`SELECT id,name FROM roles WHERE code=?`, superAdminRoleCode).Scan(&roleID, &roleName); err != nil {
-		return err
-	}
-	// err 保存当前操作结果以及可能返回的错误状态。
-	if _, err := tx.Exec(
-		`UPDATE users SET role_id=?,role=?,department_id=?,department=?,status='在岗',can_login=1,updated_at=?
-			 WHERE id=?
-			   AND (role_id IS NOT ? OR role<>? OR department_id IS NOT ? OR department<>? OR status<>'在岗' OR can_login<>1)`,
-		roleID, roleName, rootID, rootName, timeText(time.Now()), mhID, roleID, roleName, rootID, rootName,
-	); err != nil {
-		return err
-	}
-	// err 保存当前操作结果以及可能返回的错误状态。
-	if _, err := tx.Exec(`INSERT OR IGNORE INTO department_menus(department_id,menu_id) SELECT ?,id FROM menus`, rootID); err != nil {
-		return err
-	}
-	// err 保存当前操作结果以及可能返回的错误状态。
-	if _, err := tx.Exec(`INSERT OR IGNORE INTO role_menus(role_id,menu_id) SELECT ?,id FROM menus`, roleID); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
 // ListDepartments 查询并返回对应业务列表。
 func (s *SQLiteStore) ListDepartments() []models.Department {
 	// rows、err 保存当前操作结果以及可能返回的错误状态。

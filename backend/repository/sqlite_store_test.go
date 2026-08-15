@@ -259,7 +259,7 @@ func TestDepartmentAndExtraMenuPermissions(t *testing.T) {
 	}
 }
 
-func TestMigrationPreservesBusinessPermissionsAndMHPassword(t *testing.T) {
+func TestMigrationPreservesBusinessPermissionsAndSeedAccountChanges(t *testing.T) {
 	store, _ := openTempStore(t)
 	defer store.db.Close()
 
@@ -284,9 +284,16 @@ func TestMigrationPreservesBusinessPermissionsAndMHPassword(t *testing.T) {
 	if !ok {
 		t.Fatal("MH seed missing")
 	}
+	viewerRole, ok := store.findRoleByCode("viewer")
+	if !ok {
+		t.Fatal("viewer role missing")
+	}
 	customHash := auth.MustHashPassword("do-not-reset")
-	if _, err := store.db.Exec(`UPDATE users SET password_hash=?,role='普通用户',can_login=0,department_id=NULL,department='旧部门' WHERE id=?`, customHash, mh.ID); err != nil {
-		t.Fatalf("set custom MH password: %v", err)
+	if _, err := store.db.Exec(
+		`UPDATE users SET username=?,password_hash=?,role_id=?,role=?,can_login=0,department_id=NULL,department='旧部门' WHERE id=?`,
+		"renamed-seed-admin", customHash, viewerRole.ID, viewerRole.Name, mh.ID,
+	); err != nil {
+		t.Fatalf("customize seed account: %v", err)
 	}
 	if err := store.MigrateAndSeed(); err != nil {
 		t.Fatalf("migrate again: %v", err)
@@ -299,16 +306,16 @@ func TestMigrationPreservesBusinessPermissionsAndMHPassword(t *testing.T) {
 	if message != "" || !reflect.DeepEqual(sortedMenuIDs(extraMenus), []int{customMenu.ID}) {
 		t.Fatalf("personal permissions changed during migration: message=%s menus=%+v", message, extraMenus)
 	}
-	mh, ok = store.FindUserByUsername("mh")
-	if !ok || mh.PasswordHash != customHash {
-		t.Fatal("MH password was reset during migration")
+	if _, found := store.FindUserByUsername("MH"); found {
+		t.Fatal("migration recreated or restored the initialization username")
 	}
-	if mh.RoleID == nil || mh.Role != "超级管理员" || mh.RoleCode != superAdminRoleCode || !mh.CanLogin {
-		t.Fatalf("MH administrator invariant was not restored: %+v", mh)
+	renamedSeed, ok := store.FindUserByUsername("renamed-seed-admin")
+	if !ok || renamedSeed.PasswordHash != customHash || renamedSeed.RoleCode != viewerRole.Code || renamedSeed.CanLogin {
+		t.Fatalf("seed account changes were not preserved: %+v", renamedSeed)
 	}
 	root, ok := store.findDepartmentByCode("huajian")
-	if !ok || mh.DepartmentID == nil || *mh.DepartmentID != root.ID {
-		t.Fatalf("MH was not assigned to root department: %+v", mh)
+	if !ok {
+		t.Fatal("root department missing")
 	}
 	rootMenus, message := store.ListDepartmentMenus(root.ID)
 	if message != "" || len(rootMenus) != len(store.ListMenus()) {
@@ -316,7 +323,7 @@ func TestMigrationPreservesBusinessPermissionsAndMHPassword(t *testing.T) {
 	}
 }
 
-func TestMigrationRejectsCaseInsensitiveMHDuplicates(t *testing.T) {
+func TestMigrationAllowsCaseInsensitiveSeedAccountNames(t *testing.T) {
 	store, _ := openTempStore(t)
 	defer store.db.Close()
 	now := timeText(time.Now().UTC())
@@ -331,13 +338,12 @@ func TestMigrationRejectsCaseInsensitiveMHDuplicates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get duplicate MH id: %v", err)
 	}
-	err = store.MigrateAndSeed()
-	if err == nil || !strings.Contains(err.Error(), "必须且只能存在一个") {
-		t.Fatalf("expected duplicate MH migration failure, got %v", err)
+	if err := store.MigrateAndSeed(); err != nil {
+		t.Fatalf("case-insensitive account names should not trigger seed-specific validation: %v", err)
 	}
 	duplicate, ok := store.FindUserByID(int(duplicateID))
 	if !ok || duplicate.RoleCode == superAdminRoleCode {
-		t.Fatalf("duplicate account was elevated despite failed migration: %+v", duplicate)
+		t.Fatalf("similarly named account was changed during migration: %+v", duplicate)
 	}
 }
 
@@ -555,9 +561,9 @@ func TestLegacyMigrationIsAdditive(t *testing.T) {
 	if err := store.MigrateAndSeed(); err != nil {
 		t.Fatalf("migrate legacy db: %v", err)
 	}
-	mh, ok := store.FindUserByUsername("MH")
-	if !ok || mh.PasswordHash != hash || mh.DepartmentID == nil {
-		t.Fatalf("legacy MH changed unexpectedly: %+v", mh)
+	seedAccount, ok := store.FindUserByUsername("MH")
+	if !ok || seedAccount.PasswordHash != hash || seedAccount.DepartmentID != nil {
+		t.Fatalf("legacy initialization account changed unexpectedly: %+v", seedAccount)
 	}
 	legacyMenu, ok := store.FindMenuByID(int(menuID))
 	if !ok || legacyMenu.Code != "legacy-menu" {
