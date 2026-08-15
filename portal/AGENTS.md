@@ -1,5 +1,10 @@
 # portal/AGENTS.md
 
+## 操作前规则读取
+
+- 每次收到新的用户任务、补充要求或任务方向变化后，在对 `portal/` 执行任何文件检索、读取、命令、编辑、构建、测试、提交或推送之前，必须重新读取仓库根目录的 `../AGENTS.md` 和本文件。
+- 涉及门户业务实现时还必须重新读取 `../docs/portal-requirements.md`；不得仅依赖历史对话、上下文摘要或之前读取过的规则。
+
 ## 适用范围与优先级
 
 - 本文件适用于 `portal/` 及其全部子目录，并补充仓库根目录 `AGENTS.md`。
@@ -7,21 +12,28 @@
 - C 端产品与技术基线以 `../docs/portal-requirements.md` 为准。实现前先阅读需求文档，不得只依据页面截图猜测业务规则。
 - 当前任务编号必须根据最新 Git 提交和根目录规则确定：同一尚未提交任务的补充修改沿用当前 `Pn`，当前任务提交后，下一个独立任务递增为新的 `Pn`。
 
+## 当前实现状态
+
+- 当前 `portal/` 只有本规则文件，尚无 `package.json`、锁文件、Next.js 配置、`app/` 或 `src/`，因此目前不是可安装、可启动或可构建的应用。
+- 后端 `/api/public/*` 和 B 端门户发布字段已经存在，但不能把后端能力、需求文档或 HTML 预览稿视为 C 端页面已经实现。
+- 普通文档任务不得执行不存在的 portal npm 命令。只有用户要求创建门户并完成脚手架后，才启用本文件后续的依赖、构建、浏览器和三语言验收规则。
+- 仓库根 `docker-compose.yml` 当前不包含门户服务；门户真正实现后若需容器化，必须显式更新 Compose、根 `.env.example`、README 和部署说明。
+
 ## 项目定位与业务边界
 
-- `portal/` 是面向匿名访问者的 C 端内容门户，展示经 B 端明确发布的文章、图片和文件资源。
-- `backend/` 是唯一业务数据来源；C 端不得直连 SQLite、扫描上传目录、复制后台数据或实现第二套内容存储。
+- `portal/` 的目标是成为面向匿名访问者的 C 端内容门户，展示经 B 端明确发布的文章、图片和文件资源。
+- 门户实现后，`backend/` 是唯一业务数据来源；C 端不得直连 SQLite、扫描上传目录、复制后台数据或实现第二套内容存储。
 - C 端业务请求只能使用 `/api/public/*`。不得调用需要后台 Cookie、菜单权限或动作权限的管理接口，也不得读取或持久化后台会话 ID。
 - `isPrivate=false` 不等于允许匿名访问。只有同时满足后端门户发布条件的资源才能展示，前端不得自行放宽 `portalVisible`、状态、删除状态或文件类型限制。
 - 客服入口只能复用现有客服聊天边界，不得调用或混用 `/api/internal-chat/*`、内部聊天状态和后台鉴权。
 - C 端不提供内容编辑、用户注册、评论、付费或投稿能力，除非后续需求明确扩展。
 
-## 技术栈与运行约定
+## 目标技术栈与运行约定
 
-- `portal/` 本身就是 C 端项目根目录，`package.json` 名称使用 `portal`；所有源码和配置直接写入当前目录，禁止创建 `collector-portal/`、`portal/` 等第二层项目目录。
-- 使用 Next.js 16 App Router、React、strict TypeScript、Tailwind CSS 4、Lucide React 和 `next-intl`。
-- 项目独立维护 `package.json` 与 `package-lock.json`，依赖只在 `portal/` 安装；禁止在仓库根目录混装依赖。
-- 默认开发地址为 `http://localhost:3001`，后端默认地址为 `http://localhost:8080`。
+- 创建应用时，`portal/` 本身就是 C 端项目根目录，`package.json` 名称使用 `portal`；所有源码和配置直接写入当前目录，禁止创建 `collector-portal/`、`portal/` 等第二层项目目录。
+- 目标技术栈为 Next.js 16 App Router、React、strict TypeScript、Tailwind CSS 4、Lucide React 和 `next-intl`。
+- 应用创建后独立维护 `package.json` 与 `package-lock.json`，依赖只在 `portal/` 安装；禁止在仓库根目录混装依赖。
+- 规划的默认开发地址为 `http://localhost:3001`，后端默认地址为 `http://localhost:8080`。
 - 浏览器可见后端地址读取 `NEXT_PUBLIC_API_BASE_URL`，站点绝对地址读取 `NEXT_PUBLIC_SITE_URL`；`NEXT_PUBLIC_*` 中禁止放密钥、数据库地址、后台 Cookie 或其他秘密。
 - 新增依赖前先确认现有平台能力能否完成需求。开源代码必须核对许可证，并在 `THIRD_PARTY_NOTICES.md` 记录来源、许可证、使用范围和修改说明。
 
@@ -128,7 +140,8 @@
 
 ## 测试、数据隔离与验收
 
-- C 端最小验证包括 `npm run typecheck`、`npm run lint`、`npm run build` 和 `npm run docs`；新增测试脚本后同步执行相关单元与集成测试。
+- 在门户骨架尚不存在时，只执行规则、需求、后端公开 API 与路径一致性检查，不运行 npm 命令。
+- 门户应用创建后，C 端最小验证包括 `npm run typecheck`、`npm run lint`、`npm run build` 和 `npm run docs`；创建脚本时必须保证这些命令真实存在并可执行，新增测试脚本后同步执行相关单元与集成测试。
 - 涉及后端公开 API 时执行 `go test ./...`、`go vet ./...`；涉及 B 端发布控件时执行 B 端严格类型检查和生产构建。
 - 所有联调、脚本和浏览器验收使用当前任务对应的 `.workspace-temp/p<n>-portal/` 目录，其中 `n` 为当前 `Pn` 的数字部分；目录内使用独立 SQLite、上传目录、日志和中间产物。
 - 严禁删除、覆盖、重置、清空或使用真实业务 API 批量清理 `backend/data/`、SQLite WAL/SHM 和 `backend/uploads/`。

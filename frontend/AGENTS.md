@@ -25,6 +25,8 @@
 
 本文件适用于 `frontend/` 及其所有子目录，并补充仓库根目录的 `AGENTS.md`。
 
+当前目录是已运行的 B 端管理前端，不是规划中的 `portal/` C 端。它同时承载后台工作台、内部聊天真实路由和 Socket 客服访客/管理入口，但三者必须保持各自状态与鉴权边界。
+
 ## 任务编号
 
 当前 `Pn` 以最近一次已经创建的 Git commit 摘要为准。工作区尚未提交的连续前端改动必须继续使用同一个 `Pn`，不能因为补充需求自动递增；只有前一个 `Pn` 已成功提交后，下一项独立任务才使用下一个编号。提交前不得把未提交改动标记为新的已完成 `P`。
@@ -34,14 +36,15 @@
 本目录是采集数据管理平台的浏览器端管理后台，使用 Next.js 16 App Router、React 和 strict TypeScript，界面文案默认使用简体中文。
 
 - `app/layout.tsx`：全局布局、metadata、Ant Design registry 和全局样式入口。
-- `app/page.tsx`：当前单页管理后台的客户端编排入口；未登录时展示认证页，登录后在主布局内切换各功能页。
-- `app/hooks/useAdminWorkspace.ts`：认证状态、业务状态以及 CRUD/API 流程的核心编排。
-- `app/layout/MainLayout.tsx`：导航、响应式侧栏、主题和全屏交互。
-- `app/auth/`、`app/dashboard/`、`app/users/`、`app/departments/`、`app/roles/`、`app/menus/`、`app/articles/`、`app/files/`：各业务功能页面。
-- `app/lib/`：请求、常量、菜单树、文件 API 和状态工具；`app/types/`：共享业务类型。
-- `app/theme/`：10 套全站主题定义、CSS 变量映射、首屏初始化和本地持久化。
-- `app/components/`：项目级共享组件，包括富文本编辑器、关联用户弹窗和全站 3D 卡片增强。
-- `components/ui/`、根 `hooks/` 和根 `lib/`：shadcn/ui 共享基础设施。
+- `app/page.tsx`：管理后台客户端编排入口；未登录显示 `src/admin-pages/auth/AuthPage.tsx`，登录后按 `activePage` 挂载管理页面。
+- `app/chat/`：内部员工聊天真实路由；`app/socket/chat/`：Socket 客服访客聊天真实路由与兼容入口。
+- `src/admin-pages/`：认证、预览台、用户、部门、角色、菜单、文章、文件、资料和访问分析页面。
+- `src/features/workspace/`：会话恢复、菜单驱动加载、CRUD、筛选和反馈等工作台状态；`src/features/chat/`：Socket 客服管理端与访客端业务。
+- `src/components/layout/MainLayout.tsx`：导航、响应式侧栏、主题、全局 SSH 入口和终端弹窗宿主。
+- `src/components/shared/` 与 `src/components/table/`：共享反馈、富文本、关联用户、3D 卡片和表格组件。
+- `src/services/`：认证业务请求、文件、访问分析和服务器/SSH API；`src/types/`：共享业务类型。
+- `src/config/`、`src/utils/`、`src/theme/`、`src/styles/`：常量、权限/导出/菜单工具、主题和全局增强样式。
+- `components/ui/`、根 `hooks/` 和根 `lib/`：shadcn/ui 基础设施；不得把管理业务重新迁回这些兼容目录。
 
 ## 页面与状态模型
 
@@ -52,7 +55,7 @@
 - 处理内部聊天附件时，必须同时修改并验证前端发送与展示、后端持久化、下载与预览鉴权以及相关测试。
 - 内部聊天应连接认证 WebSocket `/api/internal-chat/socket`：首页内部聊天入口显示未读总数，聊天页按会话显示未读角标，并在收到新消息时提供视觉提示和可用的声音提示；登录成功后立即发送在线状态。
 - 消息列表的自动滚动必须尊重用户位置：历史滚动时禁止回弹，只有初次加载、切换会话或用户位于底部时才跟随新消息。
-- 业务状态管理使用 React hooks，核心集中在 `app/hooks/useAdminWorkspace.ts`，当前没有 Redux、Zustand、MobX 或 React Query。
+- 业务状态管理使用 React hooks，核心集中在 `src/features/workspace/useAdminWorkspace.ts`，当前没有 Redux、Zustand、MobX 或 React Query。
 - `useAdminWorkspace` 负责会话恢复、按有效菜单加载资源、CRUD、筛选、表单、权限保存、加载状态和全局错误；页面组件通过 props 接收状态与动作。
 - 当前页面写入 `sessionStorage` 的 `collector:active-page`，刷新后恢复；退出登录会清理。侧栏父菜单展开根据异步菜单树与 `activePage` 推导，修改导航时必须验证刷新恢复与父菜单展开。
 - 主题使用 `localStorage` 持久化，并通过 `ADMIN_THEME_BOOTSTRAP_SCRIPT` 在首屏应用，避免水合前闪烁。新增主题时同步主题定义、CSS 变量和 Ant Design token。
@@ -62,7 +65,7 @@
 
 - 现有界面同时使用 Ant Design、Lucide、shadcn/ui、Tailwind CSS 4 和原生 CSS；修改时优先沿用相邻代码的组件和样式体系，避免为单个功能再引入一套 UI 依赖。
 - 仅在需要浏览器 API、状态或事件时使用 Client Component。业务状态和 API 流程优先集中在 `useAdminWorkspace`，纯展示逻辑保留在功能组件。
-- 共享业务类型、常量和请求逻辑分别放入 `app/types/` 与 `app/lib/`，不要在多个页面重复定义 API 结构。
+- 共享业务类型、常量和请求逻辑分别放入 `src/types/`、`src/config/` 与 `src/services/`，不要在多个页面重复定义 API 结构。
 - 后端地址取自 `NEXT_PUBLIC_API_BASE_URL`，默认 `http://localhost:8080`。
 - 需要会话的请求复用 `requestWithSession`：固定 `credentials: 'include'`，单次超时 12 秒，仅 GET/HEAD/OPTIONS 在网络错误时按 350ms、900ms 重试；写请求禁止自动重试，以免产生重复副作用。
 - API JSON 字段保持 camelCase。接口变更时同步检查后端模型、路由、权限以及 `README.md`。
@@ -74,10 +77,11 @@
 
 ## 权限与导航约定
 
-- `app/types/admin.ts` 中的 `PageKey`、`app/lib/constants.ts` 中的 `pageKeys/pageTitles`、`MainLayout.resolvePageKey` 与 `app/page.tsx` 的条件渲染必须保持一致。
+- `src/types/admin.ts` 中的 `PageKey`、`src/config/constants.ts` 中的 `pageKeys/pageTitles`、`MainLayout.resolvePageKey` 与 `app/page.tsx` 的条件渲染必须保持一致。
 - 菜单节点只有在 `code` 与去除斜杠后的 `path` 都匹配受支持页面时才映射为 `PageKey`；父级分组可以没有页面路径。
-- 动作编码后端权威源是 `backend/permissions/actions.go`，前端镜像位于 `app/lib/actionPermissions.ts`。新增或重命名动作时两端与按钮显隐要同步。
-- `super-admin`、`system-admin` 的判断使用 `app/lib/roleAccess.ts` 的稳定编码。不要用“超级管理员”等显示文字做安全判断。
+- 动作编码后端权威源是 `backend/permissions/actions.go`，前端镜像位于 `src/utils/actionPermissions.ts`。新增或重命名动作时两端与按钮显隐要同步。
+- `super-admin`、`system-admin` 的判断使用 `src/utils/roleAccess.ts` 的稳定编码。不要用“超级管理员”等显示文字或用户名做安全判断。
+- 所有超级管理员彼此同权，可以互相修改资料和登录权限；系统管理员及其他角色不能修改超级管理员。前端提示和按钮状态必须与后端真实结果一致，不得对初始化用户名 `MH` 设置例外。
 - 页面不可只靠隐藏按钮保护操作；所有写请求必须接受并正确呈现后端 401/403/4xx 响应。
 
 ## 样式、组件与动画
@@ -97,9 +101,19 @@
 - 后端 `/api/articles/export` 是文章集合 CSV/PDF；前端 `articleExport.ts` 是单篇文章 CSV、打印/PDF、Word、PNG、Markdown、SEO HTML，两者不是同一实现。
 - Markdown 目录与锚点逻辑位于 `articleMarkdown.ts`：正文有标题时生成目录、显式锚点和重复标题唯一后缀；无标题时不生成目录。
 - 文章导出会处理跨源媒体、图片内联、分页画布和可见内容检查；修改时必须实际导出至少一个含标题和图片的样本验证文件内容。
-- 前端和后端上传限制均为 32 MiB。文件读取/元数据/文本内容/永久删除复用 `app/lib/fileApi.ts`，业务编排仍位于 `useAdminWorkspace` 与 `FilesPage`。
+- 前端和后端上传限制均为 32 MiB。文件读取、元数据、文本内容和永久删除复用 `src/services/fileApi.ts`，业务编排仍位于 `useAdminWorkspace` 与 `FilesPage`。
 - 文件删除默认移入回收站；永久删除按钮和请求只能在用户明确确认后触发，测试不能用正式业务 API 清理样本。
 - 文件管理页面必须保留刷新按钮和“设为登录背景”操作；聊天数据等新增分类只能扩展现有文件管理能力，不得覆盖或隐藏这些操作。
+
+## 服务器监控与 SSH 工作区
+
+- 预览台通过 `src/services/serverApi.ts` 每 5 秒读取 `/api/server/metrics`，维护最近 5 分钟的网络与磁盘吞吐趋势；停止访问或组件卸载时必须清理采样计时器。
+- 监控值代表后端进程所在主机或容器可见资源。缺失温度、磁盘 I/O 等平台数据时展示 `collectionWarnings`，不能伪造为零或宿主机完整指标。
+- SSH 是 Header 全局功能，任意有效登录用户都可打开，不依赖当前管理页面或管理员角色。弹窗关闭行为是最小化：切换页面或再次打开时连接、多终端标签、目录和未关闭预览继续保留。
+- 只有退出登录、会话失效或浏览器页面卸载时才销毁全部 SSH 连接和敏感状态；密码、私钥、编辑内容不得写入 `localStorage`、`sessionStorage` 或日志。
+- `SshTerminalModal.tsx` 管理多会话与弹窗生命周期，`SshTerminalSession.tsx` 管理单连接终端、SFTP 步进目录、当前目录搜索、文件编辑/保存和图片/PDF预览。终端 OSC 7 路径变化必须同步刷新左侧当前目录。
+- 主机地址使用普通可编辑 Input，默认值为 `lolicon.beer`；用户名默认 `root`。文件保存成功必须同时显示 message、清除待保存状态并保留明确的已保存反馈。
+- 使用 Ant Design 对话框确认时必须消费 `App` 上下文提供的 modal/message 实例，禁止调用会触发动态主题警告的 `Modal.confirm`、`message.success` 等静态函数。
 
 ## 开发与验证
 

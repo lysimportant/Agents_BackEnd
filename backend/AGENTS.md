@@ -5,6 +5,11 @@
 - 每次收到新的用户任务、补充要求或任务方向变化后，在对 `backend/` 执行任何文件检索、读取、命令、编辑、构建、测试、提交或推送之前，必须重新读取仓库根目录的 `../AGENTS.md` 和本文件。
 - 不得仅依赖历史对话、上下文摘要或之前读取过的规则；每一轮后端任务操作都必须以工作区当前版本的两份 `AGENTS.md` 为准。
 
+## 适用范围与当前能力
+
+- 本文件适用于 `backend/` 及其所有子目录，并补充仓库根目录的 `AGENTS.md`。
+- 当前后端已实现后台认证和权限、文章与文件、门户公开读取、内部聊天、Socket 客服、访问分析、服务器资源监控及 SSH/SFTP 工作区；新增功能时先确认应落入现有业务边界，而不是建立重复接口或第二套存储。
+
 ## 代码文档与命名
 
 - 业务源码中的文档注释和解释性行内注释必须使用简体中文；协议名、库名、标识符和代码字面量可以保留英文。
@@ -14,13 +19,9 @@
 - 注释必须说明变量保存的业务内容、函数执行的行为或状态变化；不得添加“保存变量”一类无助于理解业务的注释。
 - 使用 `Get-ChildItem -Directory | Where-Object { Test-Path "$($_.FullName)\doc.go" } | ForEach-Object { go doc ".\$($_.Name)" }` 检查生成的包文档；API 总览维护在 `../docs/api/openapi.yaml`。
 
-## 适用范围
-
 ## 后端新增功能说明
 
 新增接口按 `models -> repository -> handlers -> routes` 顺序实现：模型定义数据契约，repository 负责 SQLite 持久化，handler 负责鉴权、参数校验和响应，routes 负责路径及权限中间件绑定。涉及菜单时同步 `repository/sqlite_store.go`，涉及动作权限时同步 `permissions/actions.go`；前端请求封装放在 `frontend/src/services/`，页面挂载和状态编排放在 `frontend/app/page.tsx` 与 `frontend/src/features/workspace/`。
-
-本文件适用于 `backend/` 及其所有子目录，并补充仓库根目录的 `AGENTS.md`。
 
 ## 目录职责
 
@@ -29,14 +30,15 @@
 - `main.go`：程序入口与依赖组装，负责加载配置、打开数据库、迁移和初始化数据、补录上传文件并启动 Gin。
 - `config/`：环境变量和默认配置。
 - `database/`：SQLite 连接初始化及连接级设置。
-- `handlers/`：所有 HTTP handler，按认证、数据点、用户、部门、角色、菜单、文章和文件拆分为独立 Go 文件。
-- `repository/`：当前生产路径使用的 SQLite 持久化实现，包含迁移、HuaJian 组织种子、部门/角色/个人菜单权限和业务 CRUD。
+- `handlers/`：HTTP 与 WebSocket handler，覆盖认证、数据点、用户、部门、角色、菜单、文章、文件、公开门户、两套聊天、访问分析、服务器指标和 SSH/SFTP。
+- `repository/`：当前生产路径使用的 SQLite 持久化实现，包含增量迁移、幂等种子、权限合并、内容、文件、聊天和访问日志查询。
 - `store/`：保留的内存存储实现；`main.go` 当前不使用它，不要把新功能只实现于此。
 - `routes/`：所有路由注册；`routes.go` 负责总装配，各业务文件负责本域的路径和权限绑定。
 - `middleware/`：CORS、会话认证和菜单权限中间件。
 - `auth/`：bcrypt 密码处理和 HttpOnly Cookie 会话服务；HTTP 登录、会话查询和登出入口位于 `handlers/auth.go`。
 - `permissions/`：动作权限目录及 `resource.action` 稳定编码，是前后端动作权限契约的后端权威来源。
 - `verification/`：密码修改验证码服务，使用 Redis 保存一次性验证码并通过 SMTP 发送邮件。
+- `content/`：公开文章富文本白名单清洗与媒体安全处理。
 - `models/`：领域模型及请求/响应结构。
 - `utils/`：handler 复用的无状态小工具，例如路径 ID 解析、布尔值解析、文件名清理和管理员判断。
 - `data/`：SQLite 业务数据库目录；`uploads/`：用户上传文件目录。
@@ -47,12 +49,12 @@
 - `database.Open` 使用纯 Go `modernc.org/sqlite` 驱动，开启 `foreign_keys`、WAL 和 5 秒 busy timeout，并将最大连接数设为 1。不要引入依赖系统 SQLite 的隐式假设。
 - `MigrateAndSeed` 是增量、幂等迁移入口，顺序为预检 → 建表/补列/索引 → 应用菜单 → 部门 → 角色 → 默认账号 → 遗留角色对齐。遇到碰撞会主动失败并保留数据，不能用清库绕过。
 - 启动时 `ReconcileUploadFiles` 会为上传目录中未记录的物理文件补数据库记录；因此测试服务必须同时隔离 SQLite 和上传目录。
-- SQLite 主要表包括 `users`、`departments`、`roles`、`menus`、三类菜单关联表、`user_action_permissions`、`sessions`、`articles`、`files` 与 `data_points`。修改列时同步检查所有 `SELECT` 扫描顺序。
+- SQLite 主要表包括用户/部门/角色/菜单及其授权关系、`sessions`、`articles`、`files`、`data_points`、内部聊天、Socket 客服和访问分析相关表。权威清单位于 `../docs/database/schema.md`；修改列时同步检查所有 `SELECT` 扫描顺序。
 
 ## 接口与实现约定
 
 - 健康检查使用 `GET /health`；API 统一位于 `/api`。
-- `/api/auth/*` 负责登录会话，其余 API 需要认证；受控业务接口还应保持菜单权限和动作权限检查。
+- `/api/auth/*` 负责登录会话；`/api/public/*` 和访客 Socket 客服入口按各自公开边界访问；其余 API 默认需要认证，受控业务接口还应保持菜单权限和动作权限检查。
 - JSON 字段使用 camelCase，错误信息和用户可见文案默认使用简体中文。
 - 保持现有直接清晰的 `handler -> repository` 结构；只有确有复用或复杂业务规则时才新增层次。
 - 新增业务接口时，将 HTTP 处理放入 `handlers/<domain>.go`，将路由放入 `routes/<domain>.go`；跨 handler 的无状态工具才放入 `utils/`。
@@ -66,6 +68,9 @@
 - 访问分析只记录必要的访问元数据，不记录 Cookie、密码、请求正文或查询参数；国家/地区等 Geo 字段只接受可信反向代理 Header（如 `CF-IPCountry`），未提供时返回“未知”。
 - 修改模型、路由或权限时，检查所有 handler、SQLite repository、前端调用方和 `README.md` 是否需要同步。
 - 文件删除默认是可恢复的软删除；未经用户明确授权，不得实现或执行永久物理清理。
+- `GET /api/server/metrics` 需要 `dashboard` 菜单和 `dashboard.view` 动作，使用 `gopsutil` 采集后端运行环境可见的 CPU、内存、磁盘、网络、进程和温度；Docker 中不得宣称为宿主机完整指标。
+- `/api/server/terminal` 只要求有效登录会话，所有登录用户权限相同。SSH WebSocket 同时承载终端数据、主机指纹确认、SFTP 目录/搜索/读写以及 OSC 7 工作目录同步协议。
+- SSH 文本编辑仅允许不超过 1 MiB 的现有 UTF-8 普通文件；图片和 PDF 预览不超过 10 MiB；目录和递归搜索必须保留数量上限、路径清理及远端权限错误反馈。
 
 ## 鉴权层次
 
@@ -73,12 +78,12 @@
 - `RequireMenu(store, code)` 校验有效菜单，`RequireAction(store, code)` 校验动作编码；多数业务路由需要二者同时通过。
 - `GET /api/menus` 是已登录用户恢复导航树的引导接口，不额外要求菜单动作；不要随意给它加上会导致无法恢复导航的循环依赖。
 - 用户、部门、角色的写接口有些只挂动作权限而不挂目标菜单，这是为了允许管理员修复权限配置。改变路由中间件前必须运行路由权限测试。
-- `RequireAdmin` 只接受 `super-admin` 或 `system-admin`；只有 `super-admin` 能跨越超级管理员边界。所有判断必须使用 `roleCode`。
+- `RequireAdmin` 只接受 `super-admin` 或 `system-admin`；只有 `super-admin` 能管理目标超级管理员，且所有超级管理员彼此同权，不得按用户名或初始化身份区分。所有判断必须使用 `roleCode`。
 - 非管理员角色默认动作来自 `permissions.DefaultRoleCodes()`，即查询/查看动作；个人附加动作保存在 `user_action_permissions`。管理员动作固定为全量，不能个人修改。
 
 ## 数据不变量与业务边界
 
-- `MH` 仅在用户表首次为空时作为初始化超级管理员创建；之后不得按用户名特殊处理，可由超级管理员改名、调整角色或部门、停用和删除，启动迁移不得恢复或重建该账号。
+- `MH` 仅在用户表首次为空时作为初始化超级管理员创建；之后不得按用户名特殊处理，可由任意超级管理员改名、调整角色或部门、修改登录权限、停用和删除，启动迁移不得恢复或重建该账号。
 - 内置管理员角色必须保持启用并拥有全部菜单；角色编码创建后不可修改。角色显示名变化时，兼容字段 `users.role` 要在同一事务中同步。
 - 根部门 `huajian` 不可改编码、停用、设置上级或缩减菜单；部门改名时兼容字段 `users.department` 要同步。
 - 部门树禁止自引用和循环；删除部门前必须没有下级部门与直属用户，删除角色前必须没有关联用户。
@@ -105,6 +110,7 @@
 - `REDIS_DB=0`
 - `EMAIL_CONFIG_PATH=email.txt`（默认依次检查当前目录与上级项目目录；Docker Compose 将仓库根目录的 `email.txt` 只读挂载到 `/app/email.txt`）
 - `PASSWORD_CODE_TTL_SECONDS=180`
+- `VISITOR_LOG_RETENTION_DAYS=90`（设为 `0` 时关闭自动清理）
 
 邮箱文件按 `KEY=VALUE` 读取：`EMAIL_HOST`、`EMAIL_PORT`、`EMAIL_SECURE`、`EMAIL_USER`、`EMAIL_PASS`、`EMAIL_FROM`；`EMAIL_FROM` 空缺时使用 `EMAIL_USER`。密码验证码当前必须写入 Redis，没有内存降级；Redis 或 SMTP 不可用时接口应返回错误，不能把验证码打印到日志或响应。
 
@@ -122,7 +128,7 @@ go run .
 
 依赖确实变化时再执行 `go mod tidy`，并同时检查 `go.mod`、`go.sum` 差异；不要把它作为每次任务的无条件步骤。
 
-新增路由、权限或持久化行为时，应补充对应层级测试：纯权限目录放在 `permissions/`，存储/迁移放在 `repository/`，HTTP 契约和越权边界放在 `routes/`。测试必须使用 `t.TempDir()` 或等价的独立临时目录，并通过配置指向临时 SQLite 数据库和上传目录。
+新增路由、权限或持久化行为时，应补充对应层级测试：纯权限目录放在 `permissions/`，存储/迁移放在 `repository/`，HTTP 契约和越权边界放在 `routes/`，服务器采集与 SSH 协议放在 `handlers/server_test.go` 和 `routes/server_test.go`。测试必须使用 `t.TempDir()` 或等价的独立临时目录，并通过配置指向临时 SQLite 数据库和上传目录。
 
 访问分析、内部聊天附件和文件下载/预览的测试必须覆盖正常参与者、非参与者、管理员、最新优先排序、分页边界和 Geo Header 缺失等情况；测试数据只能写入隔离临时数据库与上传目录。
 
