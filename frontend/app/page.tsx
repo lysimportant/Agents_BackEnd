@@ -97,7 +97,10 @@ export default function Home() {
           articlesCount={workspace.articles.length}
           publishedArticles={workspace.articles.filter((article) => article.status === '已发布').length}
           isLoading={workspace.isLoading}
-          onRefresh={workspace.refreshData}
+          serverMetrics={workspace.serverMetrics}
+          isLoadingServerMetrics={workspace.isLoadingServerMetrics}
+          onRefresh={workspace.refreshDashboardData}
+          onRefreshMetrics={workspace.loadServerMetrics}
         />
       )}
 

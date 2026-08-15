@@ -16,6 +16,7 @@ tags:
   - name: 内部聊天
   - name: 客服聊天
   - name: 访问分析
+  - name: 服务器
 paths:
   /api/public/articles:
     get:
@@ -194,6 +195,28 @@ paths:
       security: [{ cookieSession: [] }]
       responses:
         '201': { description: 指标创建成功。 }
+  /api/server/metrics:
+    get:
+      tags: [服务器]
+      summary: 查询后端运行环境资源快照
+      description: 需要预览台菜单和 dashboard.view 动作；返回硬件、内核、资源、网络、进程和健康检查快照。Docker 部署返回后端容器视角，平台或权限不支持的扩展项记录在 collectionWarnings。
+      security: [{ cookieSession: [] }]
+      responses:
+        '200':
+          description: CPU、负载、内存、交换区、文件系统、磁盘 I/O、网络、连接、温度、后端进程和健康状态快照。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServerMetrics' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/server/terminal:
+    get:
+      tags: [服务器]
+      summary: 建立超级管理员 SSH 终端 WebSocket
+      description: 仅 roleCode 为 super-admin 的会话可升级；每个 WebSocket 对应一个独立 SSH 终端，前端可同时打开多个连接。连接凭据不持久化，首次握手必须确认 SHA256 主机指纹。连接后可通过同一通道的 list_dir、read_file、search 和 write_file 消息浏览 SFTP 根目录、从根目录递归搜索，以及编辑保存不超过 1 MiB 的现有 UTF-8 普通文本文件。目录单次最多返回 2000 项；搜索最多扫描 10000 个节点并返回 200 项；写入受远端 SSH 账号文件权限约束。
+      security: [{ cookieSession: [] }]
+      responses:
+        '101': { description: WebSocket 升级成功。 }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /api/visitor-analytics:
     get:
       tags: [访问分析]
@@ -763,3 +786,194 @@ components:
           type: array
           maxItems: 10
           items: { type: integer, minimum: 1 }
+    ServerMetrics:
+      type: object
+      required: [scope, hostname, os, platform, platformVersion, kernelVersion, architecture, uptimeSeconds, bootedAt, cpu, load, memory, disk, partitions, diskIO, network, process, temperatures, health, collectionWarnings, sampledAt]
+      properties:
+        scope: { type: string, enum: [host, container] }
+        hostname: { type: string }
+        os: { type: string }
+        platform: { type: string }
+        platformVersion: { type: string }
+        kernelVersion: { type: string }
+        architecture: { type: string }
+        uptimeSeconds: { type: integer, minimum: 0 }
+        bootedAt: { type: string, format: date-time }
+        virtualizationSystem: { type: string }
+        virtualizationRole: { type: string }
+        cpu:
+          type: object
+          required: [logicalCores, physicalCores, usagePercent, perCoreUsagePercent, times]
+          properties:
+            logicalCores: { type: integer, minimum: 1 }
+            physicalCores: { type: integer, minimum: 0 }
+            usagePercent: { type: number, minimum: 0, maximum: 100 }
+            perCoreUsagePercent:
+              type: array
+              items: { type: number, minimum: 0, maximum: 100 }
+            modelName: { type: string }
+            vendorId: { type: string }
+            frequencyMHz: { type: number, minimum: 0 }
+            cacheSizeKB: { type: integer, minimum: 0 }
+            times:
+              type: object
+              properties:
+                userSeconds: { type: number, minimum: 0 }
+                systemSeconds: { type: number, minimum: 0 }
+                idleSeconds: { type: number, minimum: 0 }
+                ioWaitSeconds: { type: number, minimum: 0 }
+                irqSeconds: { type: number, minimum: 0 }
+                softIrqSeconds: { type: number, minimum: 0 }
+                stealSeconds: { type: number, minimum: 0 }
+        load:
+          type: object
+          properties:
+            load1: { type: number, minimum: 0 }
+            load5: { type: number, minimum: 0 }
+            load15: { type: number, minimum: 0 }
+            processTotal: { type: integer, minimum: 0 }
+            processRunning: { type: integer, minimum: 0 }
+            processBlocked: { type: integer, minimum: 0 }
+            processesCreated: { type: integer, minimum: 0 }
+            contextSwitches: { type: integer, minimum: 0 }
+        memory:
+          type: object
+          properties:
+            totalBytes: { type: integer, minimum: 0 }
+            usedBytes: { type: integer, minimum: 0 }
+            availableBytes: { type: integer, minimum: 0 }
+            freeBytes: { type: integer, minimum: 0 }
+            cachedBytes: { type: integer, minimum: 0 }
+            buffersBytes: { type: integer, minimum: 0 }
+            activeBytes: { type: integer, minimum: 0 }
+            inactiveBytes: { type: integer, minimum: 0 }
+            usagePercent: { type: number, minimum: 0, maximum: 100 }
+            swap:
+              type: object
+              properties:
+                totalBytes: { type: integer, minimum: 0 }
+                usedBytes: { type: integer, minimum: 0 }
+                freeBytes: { type: integer, minimum: 0 }
+                usagePercent: { type: number, minimum: 0, maximum: 100 }
+                bytesIn: { type: integer, minimum: 0 }
+                bytesOut: { type: integer, minimum: 0 }
+        disk:
+          $ref: '#/components/schemas/ServerDiskResource'
+        partitions:
+          type: array
+          items: { $ref: '#/components/schemas/ServerDiskResource' }
+        diskIO:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              readBytes: { type: integer, minimum: 0 }
+              writeBytes: { type: integer, minimum: 0 }
+              readOperations: { type: integer, minimum: 0 }
+              writeOperations: { type: integer, minimum: 0 }
+              readTimeMs: { type: integer, minimum: 0 }
+              writeTimeMs: { type: integer, minimum: 0 }
+              ioOperationsInProgress: { type: integer, minimum: 0 }
+        network:
+          type: object
+          properties:
+            bytesSent: { type: integer, minimum: 0 }
+            bytesReceived: { type: integer, minimum: 0 }
+            packetsSent: { type: integer, minimum: 0 }
+            packetsReceived: { type: integer, minimum: 0 }
+            errorsIn: { type: integer, minimum: 0 }
+            errorsOut: { type: integer, minimum: 0 }
+            dropsIn: { type: integer, minimum: 0 }
+            dropsOut: { type: integer, minimum: 0 }
+            interfaces:
+              type: array
+              items:
+                type: object
+                properties:
+                  name: { type: string }
+                  hardwareAddress: { type: string }
+                  mtu: { type: integer, minimum: 0 }
+                  flags: { type: array, items: { type: string } }
+                  addresses: { type: array, items: { type: string } }
+                  bytesSent: { type: integer, minimum: 0 }
+                  bytesReceived: { type: integer, minimum: 0 }
+                  packetsSent: { type: integer, minimum: 0 }
+                  packetsReceived: { type: integer, minimum: 0 }
+                  errorsIn: { type: integer, minimum: 0 }
+                  errorsOut: { type: integer, minimum: 0 }
+                  dropsIn: { type: integer, minimum: 0 }
+                  dropsOut: { type: integer, minimum: 0 }
+            connections:
+              type: object
+              properties:
+                available: { type: boolean }
+                sampled: { type: integer, minimum: 0 }
+                truncated: { type: boolean }
+                tcp: { type: integer, minimum: 0 }
+                udp: { type: integer, minimum: 0 }
+                established: { type: integer, minimum: 0 }
+                listen: { type: integer, minimum: 0 }
+                timeWait: { type: integer, minimum: 0 }
+                closeWait: { type: integer, minimum: 0 }
+        process:
+          type: object
+          properties:
+            pid: { type: integer, minimum: 1 }
+            goVersion: { type: string }
+            goroutines: { type: integer, minimum: 1 }
+            threads: { type: integer, minimum: 0 }
+            cpuUsagePercent: { type: number, minimum: 0 }
+            allocatedBytes: { type: integer, minimum: 0 }
+            systemBytes: { type: integer, minimum: 0 }
+            heapInUseBytes: { type: integer, minimum: 0 }
+            heapObjects: { type: integer, minimum: 0 }
+            gcCycles: { type: integer, minimum: 0 }
+            residentBytes: { type: integer, minimum: 0 }
+            virtualBytes: { type: integer, minimum: 0 }
+            readBytes: { type: integer, minimum: 0 }
+            writeBytes: { type: integer, minimum: 0 }
+            openFileDescriptors: { type: integer, minimum: 0 }
+            uptimeSeconds: { type: integer, minimum: 0 }
+        temperatures:
+          type: array
+          items:
+            type: object
+            properties:
+              sensorKey: { type: string }
+              temperatureCelsius: { type: number }
+              highCelsius: { type: number }
+              criticalCelsius: { type: number }
+        health:
+          type: object
+          required: [status, score, alerts]
+          properties:
+            status: { type: string, enum: [healthy, warning, critical] }
+            score: { type: integer, minimum: 0, maximum: 100 }
+            alerts:
+              type: array
+              items:
+                type: object
+                properties:
+                  code: { type: string }
+                  severity: { type: string, enum: [warning, critical] }
+                  title: { type: string }
+                  message: { type: string }
+        collectionWarnings:
+          type: array
+          items: { type: string }
+        sampledAt: { type: string, format: date-time }
+    ServerDiskResource:
+      type: object
+      required: [device, path, fileSystem, totalBytes, usedBytes, freeBytes, usagePercent, inodesTotal, inodesUsed, inodesUsagePercent]
+      properties:
+        device: { type: string }
+        path: { type: string }
+        fileSystem: { type: string }
+        totalBytes: { type: integer, minimum: 0 }
+        usedBytes: { type: integer, minimum: 0 }
+        freeBytes: { type: integer, minimum: 0 }
+        usagePercent: { type: number, minimum: 0, maximum: 100 }
+        inodesTotal: { type: integer, minimum: 0 }
+        inodesUsed: { type: integer, minimum: 0 }
+        inodesUsagePercent: { type: number, minimum: 0, maximum: 100 }

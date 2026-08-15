@@ -17,6 +17,7 @@ import type {
   PageKey,
   Role,
   RoleForm,
+  ServerMetrics,
   User,
   UserForm,
   UserPermissionDetails,
@@ -28,6 +29,7 @@ import { requestWithSession } from '@/src/services/api';
 import { buildMenuTree } from '@/src/utils/menu';
 import { runViewTransition } from '@/src/utils/viewTransition';
 import { fetchVisitorAnalytics } from '@/src/services/visitorAnalyticsApi';
+import { fetchServerMetrics } from '@/src/services/serverApi';
 
 /** parseError 解析对应业务数据。 */
 async function parseError(response: Response, fallback: string) {
@@ -206,6 +208,10 @@ export function useAdminWorkspace() {
   const [visitorAnalyticsKeyword, setVisitorAnalyticsKeyword] = useState('');
   /** visitorAnalyticsPageSize、setVisitorAnalyticsPageSize 分别保存访问者分析数据页码大小状态及其更新函数。 */
   const [visitorAnalyticsPageSize, setVisitorAnalyticsPageSize] = useState(10);
+  /** serverMetrics、setServerMetrics 保存后端运行环境资源快照及其更新函数。 */
+  const [serverMetrics, setServerMetrics] = useState<ServerMetrics | null>(null);
+  /** isLoadingServerMetrics、setIsLoadingServerMetrics 表示服务器资源快照加载状态。 */
+  const [isLoadingServerMetrics, setIsLoadingServerMetrics] = useState(false);
 
   /** menuTree 缓存计算得到的菜单树形数据。 */
   const menuTree = useMemo(() => buildMenuTree(menus), [menus]);
@@ -356,9 +362,32 @@ export function useAdminWorkspace() {
     }
   };
 
-  /** refreshData 负责计算或维护业务数据。 */
+  /** loadServerMetrics 读取并更新后端运行环境资源快照。 */
+  const loadServerMetrics = async () => {
+    setIsLoadingServerMetrics(true);
+    try {
+      /** resourceSnapshot 保存最新服务器资源快照。 */
+      const resourceSnapshot = await fetchServerMetrics();
+      setServerMetrics(resourceSnapshot);
+      return true;
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : '加载服务器资源失败');
+      return false;
+    } finally {
+      setIsLoadingServerMetrics(false);
+    }
+  };
+
+  /** refreshData 刷新各管理页面共用的平台业务数据。 */
   const refreshData = async () => {
     if (await loadData()) void globalMessage.success('刷新完成');
+  };
+
+  /** refreshDashboardData 同步刷新预览台业务数据和服务器资源快照。 */
+  const refreshDashboardData = async () => {
+    /** results 保存预览台业务数据和服务器指标的刷新结果。 */
+    const results = await Promise.all([loadData(), loadServerMetrics()]);
+    if (results.every(Boolean)) void globalMessage.success('刷新完成');
   };
 
   /** loadVisitorAnalytics 负责读取并返回对应业务数据。 */
@@ -444,6 +473,14 @@ export function useAdminWorkspace() {
   }, [activePage, authUser]);
 
   useEffect(() => {
+    /** dashboardAccessible 表示当前账号是否拥有已启用的预览台菜单。 */
+    const dashboardAccessible = menus.some((menu) => menu.code === 'dashboard' && menu.status === '启用');
+    if (authUser && activePage === 'dashboard' && dashboardAccessible && !serverMetrics) {
+      void loadServerMetrics();
+    }
+  }, [activePage, authUser, menus, serverMetrics]);
+
+  useEffect(() => {
     if (authUser) {
       saveActivePage(activePage);
     }
@@ -503,6 +540,7 @@ export function useAdminWorkspace() {
     setFiles([]);
     setRecycleFiles([]);
     setVisitorAnalytics(null);
+    setServerMetrics(null);
     setVisitorAnalyticsPageSize(10);
     setSelectedUserId(null);
     setSelectedMenuIds([]);
@@ -1254,6 +1292,8 @@ export function useAdminWorkspace() {
     isLoadingVisitorAnalytics,
     visitorAnalyticsRange,
     visitorAnalyticsKeyword,
+    serverMetrics,
+    isLoadingServerMetrics,
     menuTree,
     setLoginForm,
     setUserForm,
@@ -1266,7 +1306,9 @@ export function useAdminWorkspace() {
     setVisitorAnalyticsKeyword,
     loadData,
     refreshData,
+    refreshDashboardData,
     loadVisitorAnalytics,
+    loadServerMetrics,
     handleVisitorAnalyticsRangeChange,
     handleLogin,
     handleLogout,

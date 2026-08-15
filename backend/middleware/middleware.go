@@ -180,3 +180,20 @@ func RequireAdmin() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// RequireSuperAdmin 仅允许稳定角色编码为 super-admin 的用户继续访问。
+func RequireSuperAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// user、exists 表示当前会话用户及其是否已由认证中间件写入上下文。
+		user, exists := CurrentUser(c)
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
+			return
+		}
+		if !utils.IsSuperAdmin(user) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "仅超级管理员可使用服务器终端"})
+			return
+		}
+		c.Next()
+	}
+}

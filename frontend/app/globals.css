@@ -3,6 +3,7 @@
 @import "shadcn/tailwind.css";
 @import "../src/styles/article-file-enhancements.css";
 @import "../src/features/chat/socket.css";
+@import "@xterm/xterm/css/xterm.css";
 
 @custom-variant dark (&:is(.dark *));
 :root {
@@ -3468,6 +3469,47 @@ tbody tr:hover,
   min-width: 0;
 }
 
+.dashboard-hero-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.dashboard-live-toggle {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dashboard-live-toggle .ant-switch:not(.ant-switch-checked) {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.dashboard-hero-actions .ant-btn:not(.ant-btn-primary) {
+  border-color: rgba(255, 255, 255, 0.48);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.dashboard-hero-actions .ant-btn:not(.ant-btn-primary):hover,
+.dashboard-hero-actions .ant-btn:not(.ant-btn-primary):focus-visible {
+  border-color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+}
+
 .dashboard-hero h1 {
   margin-bottom: 7px;
   color: #ffffff;
@@ -3586,10 +3628,302 @@ tbody tr:hover,
   gap: 14px;
 }
 
+.dashboard-server-stat-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dashboard-health-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--theme-primary);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.dashboard-health-summary {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.dashboard-health-summary .ant-tag {
+  margin: 0;
+}
+
+.dashboard-health-summary strong {
+  color: var(--text-primary);
+}
+
+.dashboard-health-summary span,
+.dashboard-health-band > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-alert-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dashboard-monitor-chart-grid {
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 1fr);
+}
+
+.dashboard-chart-panel .ant-tag {
+  max-width: min(46vw, 300px);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.dashboard-detail-grid > .dashboard-panel {
+  align-content: start;
+}
+
+.dashboard-load-values {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 8px;
+}
+
+.dashboard-load-values > div {
+  min-width: 0;
+  padding: 10px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--surface-active);
+  text-align: center;
+}
+
+.dashboard-load-values span,
+.dashboard-load-values strong {
+  display: block;
+}
+
+.dashboard-load-values span {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.dashboard-load-values strong {
+  margin-top: 3px;
+  color: var(--text-primary);
+  font-size: 20px;
+}
+
+.dashboard-meter-block {
+  margin: 14px 0 8px;
+}
+
+.dashboard-meter-block > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.dashboard-meter-block strong {
+  color: var(--text-primary);
+}
+
+.dashboard-table-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.dashboard-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.dashboard-metrics-table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.dashboard-metrics-table th,
+.dashboard-metrics-table td {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.dashboard-metrics-table th {
+  background: var(--surface-active);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dashboard-metrics-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.dashboard-metrics-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--surface-selected) 58%, transparent);
+}
+
+.dashboard-metrics-table td > strong,
+.dashboard-metrics-table td > small {
+  display: block;
+}
+
+.dashboard-metrics-table td > strong {
+  max-width: 280px;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-metrics-table td > small {
+  margin-top: 3px;
+  color: var(--text-secondary);
+}
+
+.dashboard-metrics-table td > strong + .ant-tag {
+  margin: 4px 0 0;
+}
+
+.dashboard-table-meter {
+  width: 128px;
+}
+
+.dashboard-table-meter span {
+  display: block;
+  margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-table-meter i {
+  display: block;
+  width: 100%;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--surface-active);
+}
+
+.dashboard-table-meter b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--chart-2);
+}
+
+.dashboard-table-meter.is-warning b {
+  background: var(--chart-4);
+}
+
+.dashboard-table-meter.is-critical b {
+  background: var(--danger-color, #d4380d);
+}
+
+.dashboard-network-summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashboard-network-table {
+  min-width: 980px;
+}
+
+.dashboard-network-table .ant-tag {
+  margin: 2px 4px 2px 0;
+}
+
+.dashboard-address {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-warning-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dashboard-warning-list li {
+  position: relative;
+  padding: 10px 12px 10px 30px;
+  border: 1px solid color-mix(in srgb, var(--chart-4) 30%, var(--border-subtle));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--chart-4) 8%, transparent);
+  color: var(--text-primary);
+}
+
+.dashboard-warning-list li::before {
+  position: absolute;
+  top: 14px;
+  left: 13px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--chart-4);
+  content: '';
+}
+
 .dashboard-bottom-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.dashboard-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 16px;
+  padding: 2px 2px 0;
+}
+
+.dashboard-section-heading > div {
+  min-width: 0;
+}
+
+.dashboard-section-heading p {
+  margin: 0 0 3px;
+  color: var(--theme-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dashboard-section-heading h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.dashboard-section-heading .ant-tag {
+  max-width: min(48vw, 420px);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dashboard-panel {
@@ -3639,9 +3973,18 @@ tbody tr:hover,
   font-size: 20px;
 }
 
+.dashboard-heading-lucide {
+  flex: 0 0 auto;
+  color: var(--theme-primary);
+}
+
 .dashboard-chart {
   width: 100%;
   height: 310px !important;
+}
+
+.dashboard-server-chart {
+  height: 284px !important;
 }
 
 .dashboard-progress-panel,
@@ -3671,6 +4014,12 @@ tbody tr:hover,
 
 .dashboard-progress-row .ant-progress {
   line-height: 1;
+}
+
+.dashboard-availability-panel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
 }
 
 .dashboard-info-list {
@@ -3704,20 +4053,560 @@ tbody tr:hover,
   text-align: right;
 }
 
+.ssh-terminal-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ssh-terminal-modal {
+  max-width: calc(100vw - 32px);
+}
+
+.ssh-terminal-modal .ant-modal-content {
+  padding: 18px;
+}
+
+.ssh-terminal-tabs {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  height: 40px;
+  margin: 0 0 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ssh-terminal-tab-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.ssh-terminal-tab {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  max-width: 210px;
+  gap: 7px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.ssh-terminal-tab:hover,
+.ssh-terminal-tab:focus-visible {
+  background: var(--surface-active);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.ssh-terminal-tab.is-active {
+  border-bottom-color: var(--theme-primary);
+  color: var(--theme-primary);
+}
+
+.ssh-terminal-tab > span:nth-last-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-terminal-tab-status {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-tertiary, #a0a0a0);
+}
+
+.ssh-terminal-tab-status.is-connecting {
+  background: var(--chart-4);
+}
+
+.ssh-terminal-tab-status.is-connected {
+  background: var(--chart-2);
+}
+
+.ssh-terminal-tab-status.is-error {
+  background: var(--danger-color, #d4380d);
+}
+
+.ssh-terminal-tab-close {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+.ssh-terminal-tab-close:hover,
+.ssh-terminal-tab-close:focus-visible {
+  background: var(--surface-selected);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.ssh-terminal-session-stack,
+.ssh-terminal-session-panel {
+  min-width: 0;
+}
+
+.ssh-terminal-session-panel[hidden] {
+  display: none;
+}
+
+.ssh-terminal-layout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 540px;
+  gap: 16px;
+}
+
+.ssh-terminal-form {
+  align-content: start;
+  min-width: 0;
+  max-height: min(68vh, 620px);
+  padding-right: 4px;
+  overflow-y: auto;
+}
+
+.ssh-terminal-form .ant-form-item {
+  margin-bottom: 12px;
+}
+
+.ssh-terminal-status-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.ssh-terminal-status-row .ant-tag {
+  margin: 0;
+}
+
+.ssh-terminal-address-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.ssh-terminal-address-row .ant-input-number {
+  width: 100%;
+}
+
+.ssh-terminal-form .ant-alert {
+  margin-top: 12px;
+}
+
+.ssh-terminal-form .ant-alert-description code {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.ssh-terminal-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.ssh-file-browser {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: min(68vh, 620px);
+  min-height: 460px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--surface-panel);
+}
+
+.ssh-file-search {
+  padding: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ssh-file-search-results {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  gap: 2px;
+}
+
+.ssh-file-search-results > .ant-tag {
+  width: fit-content;
+  margin: 0 4px 6px;
+}
+
+.ssh-file-search-results button {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ssh-file-search-results button:hover,
+.ssh-file-search-results button:focus-visible {
+  background: var(--surface-active);
+  outline: none;
+}
+
+.ssh-file-search-results button > span {
+  display: grid;
+  min-width: 0;
+}
+
+.ssh-file-search-results strong,
+.ssh-file-search-results small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-file-search-results small {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.ssh-file-browser-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 8px;
+  min-height: 45px;
+  padding: 6px 8px 6px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-active);
+}
+
+.ssh-file-browser-header > div {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+}
+
+.ssh-file-browser-header strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-file-browser-header .ant-tag {
+  margin: 0;
+}
+
+.ssh-file-browser > .ant-alert {
+  margin: 8px;
+}
+
+.ssh-file-tree-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 8px 6px;
+  overflow: auto;
+}
+
+.ssh-file-browser > .ant-empty {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  place-items: center;
+}
+
+.ssh-file-browser-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  gap: 9px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.ssh-file-tree-scroll .ant-tree {
+  min-width: max-content;
+  background: transparent;
+}
+
+.ssh-file-tree-scroll .ant-tree-node-content-wrapper {
+  min-width: 0;
+}
+
+.ssh-file-tree-node {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.ssh-file-tree-node strong {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-file-tree-node small {
+  color: var(--text-secondary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.ssh-terminal-workbench {
+  display: grid;
+  grid-template-rows: 38px minmax(0, 1fr);
+  min-width: 0;
+  height: min(68vh, 620px);
+  min-height: 460px;
+  overflow: hidden;
+  border: 1px solid #26303b;
+  border-radius: 6px;
+  background: #0b0f14;
+}
+
+.ssh-terminal-view-tabs {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  padding: 0 6px;
+  overflow-x: auto;
+  border-bottom: 1px solid #26303b;
+  background: #111821;
+}
+
+.ssh-terminal-view-tabs button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  max-width: 260px;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #8f9baa;
+  cursor: pointer;
+}
+
+.ssh-terminal-view-tabs button:hover,
+.ssh-terminal-view-tabs button:focus-visible,
+.ssh-terminal-view-tabs button.is-active {
+  color: #e9f0f7;
+  outline: none;
+}
+
+.ssh-terminal-view-tabs button.is-active {
+  border-bottom-color: var(--theme-primary);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.ssh-terminal-view-tabs button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-terminal-connection-label {
+  align-self: center;
+  margin-left: auto;
+  padding: 0 8px;
+  color: #7e8996;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ssh-terminal-connection-label.is-connected {
+  color: #78c991;
+}
+
+.ssh-terminal-screen {
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  padding: 12px 6px 8px 12px;
+  overflow: hidden;
+  background: #0b0f14;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+}
+
+.ssh-terminal-screen.is-hidden {
+  display: none;
+}
+
+.ssh-terminal-xterm {
+  width: 100%;
+  height: 100%;
+}
+
+.ssh-terminal-xterm .xterm {
+  height: 100%;
+}
+
+.ssh-file-preview {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: #0b0f14;
+  color: #d7e0ea;
+}
+
+.ssh-file-preview-header {
+  display: flex;
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 16px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #26303b;
+  background: #111821;
+  color: #9eabb9;
+  font-size: 11px;
+}
+
+.ssh-file-preview-header > div {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.ssh-file-preview-header .ant-tag {
+  margin: 0;
+}
+
+.ssh-file-editor.ant-input {
+  display: block;
+  width: 100%;
+  height: calc(100% - 43px);
+  min-height: 340px;
+  padding: 14px 16px 40px;
+  resize: none;
+  border: 0;
+  border-radius: 0;
+  background: #0b0f14;
+  color: #d7e0ea;
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.62;
+  box-shadow: none;
+  white-space: pre;
+  overflow: auto;
+}
+
+.ssh-file-editor.ant-input:focus,
+.ssh-file-editor.ant-input:hover {
+  border: 0;
+  background: #0b0f14;
+  box-shadow: none;
+}
+
+.ssh-file-preview-header strong {
+  overflow: hidden;
+  color: #d7e0ea;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-file-preview pre {
+  min-width: max-content;
+  margin: 0;
+  padding: 14px 16px 40px;
+  color: #d7e0ea;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  tab-size: 4;
+  white-space: pre;
+}
+
+.ssh-file-preview > .ant-empty,
+.ssh-file-preview > .ant-spin-nested-loading {
+  display: grid;
+  min-height: 380px;
+  place-items: center;
+}
+
+.ssh-file-preview .ant-empty-description {
+  color: #8f9baa;
+}
+
+.ssh-file-preview-loading {
+  width: 1px;
+  height: 180px;
+}
+
 @media (max-width: 1120px) {
   .dashboard-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-server-stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 840px) {
   .dashboard-chart-grid,
-  .dashboard-bottom-grid {
+  .dashboard-bottom-grid,
+  .dashboard-monitor-chart-grid,
+  .dashboard-detail-grid,
+  .dashboard-network-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-alert-list {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .dashboard-composition-panel {
     min-width: 0;
+  }
+
+  .dashboard-availability-panel {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .ssh-terminal-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ssh-terminal-form {
+    max-height: none;
+  }
+
+  .ssh-file-browser {
+    height: 230px;
+    min-height: 230px;
+  }
+
+  .ssh-terminal-workbench {
+    height: 52vh;
+    min-height: 360px;
   }
 }
 
@@ -3733,7 +4622,37 @@ tbody tr:hover,
   }
 
   .dashboard-hero .ant-btn {
+    flex: 1 1 0;
+  }
+
+  .dashboard-hero-actions {
     width: 100%;
+    justify-content: flex-start;
+  }
+
+  .dashboard-live-toggle {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  .dashboard-health-band,
+  .dashboard-health-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .dashboard-health-summary,
+  .dashboard-health-band > span {
+    width: 100%;
+  }
+
+  .dashboard-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .dashboard-section-heading .ant-tag {
+    max-width: 100%;
   }
 }
 
@@ -3751,6 +4670,10 @@ tbody tr:hover,
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .dashboard-server-stat-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .dashboard-panel,
   .dashboard-stat-card {
     padding: 16px;
@@ -3758,6 +4681,44 @@ tbody tr:hover,
 
   .dashboard-chart {
     height: 280px !important;
+  }
+
+  .dashboard-chart-panel .ant-tag {
+    max-width: 42vw;
+  }
+
+  .ant-modal.ssh-terminal-modal {
+    top: 8px;
+    max-width: calc(100vw - 16px);
+    margin: 8px auto;
+    padding-bottom: 8px;
+  }
+
+  .ssh-terminal-modal .ant-modal-content {
+    padding: 14px;
+  }
+
+  .ssh-terminal-address-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .ssh-terminal-workbench {
+    height: 280px;
+    min-height: 280px;
+  }
+
+  .ssh-file-browser {
+    height: 210px;
+    min-height: 210px;
+  }
+
+  .ssh-terminal-connection-label {
+    display: none;
+  }
+
+  .ssh-terminal-tab {
+    max-width: 160px;
   }
 }
 

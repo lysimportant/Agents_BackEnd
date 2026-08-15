@@ -75,9 +75,9 @@ npm run dev
 
 ### 认证接口
 
-预置管理员账号：`MH`，初始密码：`123`。密码使用 bcrypt 哈希存储，API 响应不会返回 `password` 或 `passwordHash`。
+登录账号由初始化数据或超级管理员创建，登录页不会预填任何账号或密码。密码使用 bcrypt 哈希存储，API 响应不会返回 `password` 或 `passwordHash`。
 
-- `POST /api/auth/login`: 登录并创建会话，Body 示例：`{"username":"MH","password":"123"}`
+- `POST /api/auth/login`: 登录并创建会话，Body 包含 `username` 和 `password`
 - `GET /api/auth/session`: 校验并恢复当前会话
 - `POST /api/auth/logout`: 退出登录并清除会话
 
@@ -97,6 +97,8 @@ npm run dev
 - `GET /health`: 健康检查
 - `GET /api/data-points`: 获取采集数据
 - `POST /api/data-points`: 新增采集数据
+- `GET /api/server/metrics`: 获取后端运行环境的 CPU/核心/负载、物理内存与交换区、文件系统与磁盘 I/O、总流量与网卡/连接、硬件温度、后端进程和即时健康告警；工作台默认每 5 秒采样并计算最近 5 分钟的网络及磁盘吞吐趋势。Docker 部署显示容器视角，平台或容器权限不支持的扩展项会通过 `collectionWarnings` 说明
+- `GET /api/server/terminal`: 超级管理员专用 SSH WebSocket；全局 Header 可打开同一弹窗中的多终端标签，连接后支持 SFTP 根目录树、递归搜索，以及不超过 1 MiB 的 UTF-8 文本编辑保存。连接密码、私钥和编辑内容仅在当前弹窗内存中使用，跨管理页面保持，关闭弹窗或退出登录后全部清除；首次连接必须确认服务器 SHA256 主机指纹
 
 ### 用户管理
 
@@ -272,7 +274,8 @@ npm run dev
 
 ```powershell
 $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-Invoke-RestMethod -Uri http://localhost:8080/api/auth/login -Method Post -ContentType 'application/json' -Body '{"username":"MH","password":"123"}' -WebSession $session
+$credentials = @{username='your-account'; password='your-password'} | ConvertTo-Json
+Invoke-RestMethod -Uri http://localhost:8080/api/auth/login -Method Post -ContentType 'application/json' -Body $credentials -WebSession $session
 Invoke-RestMethod -Uri http://localhost:8080/api/articles -Method Post -ContentType 'application/json' -Body '{"title":"生产日报","category":"通知公告","author":"管理员","status":"草稿","summary":"今日生产摘要","content":"正文内容"}' -WebSession $session
 Invoke-RestMethod -Uri http://localhost:8080/api/files -Method Post -Form @{file=Get-Item .\README.md; displayName='README'; category='文档'; description='项目说明'} -WebSession $session
 Invoke-RestMethod -Uri http://localhost:8080/api/auth/logout -Method Post -WebSession $session

@@ -22,6 +22,7 @@ import {
   SettingOutlined,
   UserOutlined,
 } from '@ant-design/icons';
+import { SquareTerminal } from 'lucide-react';
 import {
   Avatar,
   Badge,
@@ -41,11 +42,12 @@ import {
   type MenuProps,
 } from 'antd';
 import type { AuthUser, Menu as AdminMenu, PageKey } from '@/src/types/admin';
+import { SshTerminalModal } from '@/src/admin-pages/dashboard/SshTerminalModal';
 import { pageKeys, pageTitles } from '@/src/config/constants';
 import { internalChatWebSocketURL, listSocketConversations, socketNotificationWebSocketURL } from '@/src/features/chat/socketApi';
 import { getInternalChatUnreadTotal, internalChatUnreadStorageKey, markInternalChatUnread } from '@/src/features/chat/unreadStore';
 import type { SocketConversation, SocketEnvelope } from '@/src/features/chat/types';
-import { isAdministratorRoleCode } from '@/src/utils/roleAccess';
+import { isAdministratorRoleCode, isSuperAdminRoleCode } from '@/src/utils/roleAccess';
 import {
   adminThemes,
   applyAdminTheme,
@@ -180,6 +182,8 @@ export function MainLayout({
   const [isFullscreen, setIsFullscreen] = useState(false);
   /** isMobile、setIsMobile 分别保存移动端状态及其更新函数。 */
   const [isMobile, setIsMobile] = useState(false);
+  /** terminalOpen、setTerminalOpen 表示全局超级管理员 SSH 终端是否展开。 */
+  const [terminalOpen, setTerminalOpen] = useState(false);
   /** headerConversations、setHeaderConversations 保存请求头、请求头。 */
   const [headerConversations, setHeaderConversations] = useState<SocketConversation[]>([]);
   /** internalUnreadCount、setInternalUnreadCount 分别保存数量状态及其更新函数。 */
@@ -347,6 +351,12 @@ export function MainLayout({
     onCloseMobileSidebar();
   };
 
+  /** logout 关闭内存中的全部 SSH 会话后退出当前管理端账号。 */
+  const logout = () => {
+    setTerminalOpen(false);
+    onLogout();
+  };
+
   /** currentTheme 缓存计算得到的当前主题。 */
   const currentTheme = useMemo(() => getAdminTheme(themeId), [themeId]);
   /** palette 保存配色。 */
@@ -416,7 +426,7 @@ export function MainLayout({
       collapsed={sidebarCollapsed && !isMobile}
       onNavigate={navigate}
       onOpenProfile={() => navigate('profile')}
-      onLogout={onLogout}
+      onLogout={logout}
       onToggleSidebar={isMobile ? undefined : onToggleSidebar}
     />
   );
@@ -530,6 +540,11 @@ export function MainLayout({
               />
             </div>
             <Space size={10} wrap className="antd-header-actions">
+              {isSuperAdminRoleCode(authUser.roleCode) && (
+                <Tooltip title="SSH 服务器终端">
+                  <Button type="text" aria-label="打开 SSH 服务器终端" icon={<SquareTerminal size={18} />} onClick={() => setTerminalOpen(true)} />
+                </Tooltip>
+              )}
               <Tooltip title="内部聊天">
                 <Badge count={internalUnreadCount} overflowCount={99} size="small">
                   <Button
@@ -621,6 +636,7 @@ export function MainLayout({
           </Content>
         </Layout>
       </Layout>
+      {isSuperAdminRoleCode(authUser.roleCode) && <SshTerminalModal open={terminalOpen} onClose={() => setTerminalOpen(false)} />}
     </ConfigProvider>
   );
 }

@@ -501,3 +501,183 @@ export type VisitorAnalyticsResponse = {
     timeline: VisitorAnalyticsPoint[];
   };
 };
+
+/** ServerDiskResource 表示一个文件系统分区的容量与 inode 使用量。 */
+export type ServerDiskResource = {
+  /** device 表示分区对应设备。 */
+  device: string;
+  /** path 表示文件系统挂载路径。 */
+  path: string;
+  /** fileSystem 表示文件系统类型。 */
+  fileSystem: string;
+  /** totalBytes、usedBytes、freeBytes 表示分区容量。 */
+  totalBytes: number;
+  usedBytes: number;
+  freeBytes: number;
+  /** usagePercent 表示分区空间使用率。 */
+  usagePercent: number;
+  /** inodesTotal、inodesUsed、inodesUsagePercent 表示 inode 使用情况。 */
+  inodesTotal: number;
+  inodesUsed: number;
+  inodesUsagePercent: number;
+};
+
+/** ServerNetworkInterface 表示一个网卡的地址、状态和累计流量。 */
+export type ServerNetworkInterface = {
+  /** name 表示网卡名称。 */
+  name: string;
+  /** hardwareAddress 表示网卡硬件地址。 */
+  hardwareAddress: string;
+  /** mtu 表示网卡最大传输单元。 */
+  mtu: number;
+  /** flags 表示网卡状态标志。 */
+  flags: string[];
+  /** addresses 表示网卡绑定的 IP 地址和掩码。 */
+  addresses: string[];
+  /** bytesSent、bytesReceived 表示网卡累计流量。 */
+  bytesSent: number;
+  bytesReceived: number;
+  /** packetsSent、packetsReceived 表示网卡累计数据包数。 */
+  packetsSent: number;
+  packetsReceived: number;
+  /** errorsIn、errorsOut 表示网卡累计错误数。 */
+  errorsIn: number;
+  errorsOut: number;
+  /** dropsIn、dropsOut 表示网卡累计丢包数。 */
+  dropsIn: number;
+  dropsOut: number;
+};
+
+/** ServerMetrics 表示后端实际运行环境的完整服务器监控快照。 */
+export type ServerMetrics = {
+  /** scope 区分宿主机和容器运行环境。 */
+  scope: 'host' | 'container';
+  /** hostname 表示运行环境主机名。 */
+  hostname: string;
+  /** os、platform、platformVersion 表示操作系统与发行版。 */
+  os: string;
+  platform: string;
+  platformVersion: string;
+  /** kernelVersion、architecture 表示内核和处理器架构。 */
+  kernelVersion: string;
+  architecture: string;
+  /** uptimeSeconds、bootedAt 表示主机持续运行时间与启动时间。 */
+  uptimeSeconds: number;
+  bootedAt: string;
+  /** virtualizationSystem、virtualizationRole 表示虚拟化环境。 */
+  virtualizationSystem: string;
+  virtualizationRole: string;
+  /** cpu 表示处理器硬件、利用率和累计运行时间。 */
+  cpu: {
+    logicalCores: number;
+    physicalCores: number;
+    usagePercent: number;
+    perCoreUsagePercent: number[];
+    modelName: string;
+    vendorId: string;
+    frequencyMHz: number;
+    cacheSizeKB: number;
+    times: {
+      userSeconds: number;
+      systemSeconds: number;
+      idleSeconds: number;
+      ioWaitSeconds: number;
+      irqSeconds: number;
+      softIrqSeconds: number;
+      stealSeconds: number;
+    };
+  };
+  /** load 表示平均负载和进程调度统计。 */
+  load: {
+    load1: number;
+    load5: number;
+    load15: number;
+    processTotal: number;
+    processRunning: number;
+    processBlocked: number;
+    processesCreated: number;
+    contextSwitches: number;
+  };
+  /** memory 表示物理内存、缓存和交换区使用情况。 */
+  memory: {
+    totalBytes: number;
+    usedBytes: number;
+    availableBytes: number;
+    freeBytes: number;
+    cachedBytes: number;
+    buffersBytes: number;
+    activeBytes: number;
+    inactiveBytes: number;
+    usagePercent: number;
+    swap: { totalBytes: number; usedBytes: number; freeBytes: number; usagePercent: number; bytesIn: number; bytesOut: number };
+  };
+  /** disk 表示后端工作目录所在分区。 */
+  disk: ServerDiskResource;
+  /** partitions 表示可访问的物理文件系统分区。 */
+  partitions: ServerDiskResource[];
+  /** diskIO 表示块设备累计读写统计。 */
+  diskIO: Array<{
+    name: string;
+    readBytes: number;
+    writeBytes: number;
+    readOperations: number;
+    writeOperations: number;
+    readTimeMs: number;
+    writeTimeMs: number;
+    ioOperationsInProgress: number;
+  }>;
+  /** network 表示总流量、网卡和连接状态。 */
+  network: {
+    bytesSent: number;
+    bytesReceived: number;
+    packetsSent: number;
+    packetsReceived: number;
+    errorsIn: number;
+    errorsOut: number;
+    dropsIn: number;
+    dropsOut: number;
+    interfaces: ServerNetworkInterface[];
+    connections: {
+      available: boolean;
+      sampled: number;
+      truncated: boolean;
+      tcp: number;
+      udp: number;
+      established: number;
+      listen: number;
+      timeWait: number;
+      closeWait: number;
+    };
+  };
+  /** process 表示后端进程和 Go 运行时状态。 */
+  process: {
+    pid: number;
+    goVersion: string;
+    goroutines: number;
+    threads: number;
+    cpuUsagePercent: number;
+    allocatedBytes: number;
+    systemBytes: number;
+    heapInUseBytes: number;
+    heapObjects: number;
+    gcCycles: number;
+    residentBytes: number;
+    virtualBytes: number;
+    readBytes: number;
+    writeBytes: number;
+    openFileDescriptors: number;
+    uptimeSeconds: number;
+  };
+  /** temperatures 表示硬件温度传感器读数。 */
+  temperatures: Array<{ sensorKey: string; temperatureCelsius: number; highCelsius: number; criticalCelsius: number }>;
+  /** health 表示即时健康分数、级别和告警。 */
+  health: {
+    status: 'healthy' | 'warning' | 'critical';
+    score: number;
+    alerts: Array<{ code: string; severity: 'warning' | 'critical'; title: string; message: string }>;
+  };
+  /** collectionWarnings 表示平台或权限导致的非关键采集缺失。 */
+  collectionWarnings: string[];
+  /** sampledAt 表示快照采集时间。 */
+  sampledAt: string;
+};

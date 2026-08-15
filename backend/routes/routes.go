@@ -63,4 +63,5 @@ func Setup(router *gin.Engine, appStore Store, authService *auth.Service, passwo
 	registerProtectedSocketRoutes(protected, appStore, socketHandler)
 	registerInternalChatRoutes(protected, handlers.NewInternalChatHandler(appStore, cfg.UploadDir))
 	registerVisitorAnalyticsRoutes(protected, appStore, handlers.NewVisitorAnalyticsHandler(appStore))
+	registerServerRoutes(protected, appStore, handlers.NewServerHandler(cfg.AllowedOrigins))
 }
