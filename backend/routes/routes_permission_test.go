@@ -993,3 +993,138 @@ func TestSystemAdminCannotEscalateToSuperAdministrator(t *testing.T) {
 		t.Fatalf("system administrator deleted super role: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestSuperAdministratorsCanPersistentlyUpdateEachOther(t *testing.T) {
+	// router、store 保存隔离测试路由与 SQLite 存储。
+	router, store, _ := setupTestRouter(t)
+	// superRole 保存超级管理员角色。
+	var superRole models.Role
+	// rootDepartment 保存内置根部门。
+	var rootDepartment models.Department
+	for _, role := range store.ListRoles() {
+		if role.Code == permissions.SuperAdminRoleCode {
+			superRole = role
+			break
+		}
+	}
+	for _, department := range store.ListDepartments() {
+		if department.Code == "huajian" {
+			rootDepartment = department
+			break
+		}
+	}
+	if superRole.ID == 0 || rootDepartment.ID == 0 {
+		t.Fatal("super administrator role or root department seed missing")
+	}
+	// canLogin 表示测试超级管理员保持可登录。
+	canLogin := true
+	// secondSuperAdmin 保存第二个超级管理员账号。
+	secondSuperAdmin, message := store.CreateUser(models.UserRequest{
+		Username: "peer-super-admin", Name: "第二超级管理员", RoleID: &superRole.ID,
+		DepartmentID: &rootDepartment.ID, Status: "在岗", CanLogin: &canLogin,
+	}, auth.MustHashPassword("pass1234"))
+	if message != "" {
+		t.Fatalf("create second super administrator: %s", message)
+	}
+
+	// mhCookie 保存 MH 超级管理员会话。
+	mhCookie := loginCookie(t, router, "MH", "123")
+	// updateSecondBody 保存 MH 修改另一超级管理员的请求正文。
+	updateSecondBody, _ := json.Marshal(models.UserRequest{
+		Username: secondSuperAdmin.Username, Name: "由 MH 更新", RoleID: &superRole.ID,
+		DepartmentID: &rootDepartment.ID, Status: "在岗", Shift: "中班",
+		Phone: "13800000001", Email: "peer.updated@example.com", CanLogin: &canLogin,
+	})
+	// request 保存 MH 发起的超级管理员更新请求。
+	request := httptest.NewRequest(http.MethodPut, "/api/users/"+strconv.Itoa(secondSuperAdmin.ID), bytes.NewReader(updateSecondBody))
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(&http.Cookie{Name: "sessionId", Value: mhCookie})
+	// response 保存 MH 更新请求的响应。
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("MH updated peer super administrator: status=%d body=%s", response.Code, response.Body.String())
+	}
+	// persistedSecondAdmin 从 SQLite 重新查询 MH 修改后的第二超级管理员。
+	persistedSecondAdmin, found := store.FindUserByID(secondSuperAdmin.ID)
+	if !found || persistedSecondAdmin.Name != "由 MH 更新" || persistedSecondAdmin.Email != "peer.updated@example.com" || persistedSecondAdmin.Shift != "中班" {
+		t.Fatalf("peer super administrator update was not persisted: %+v", persistedSecondAdmin)
+	}
+
+	// secondSuperCookie 保存第二超级管理员的登录会话。
+	secondSuperCookie := loginCookie(t, router, secondSuperAdmin.Username, "pass1234")
+	// mh 保存被第二超级管理员修改的内置超级管理员。
+	mh, found := store.FindUserByUsername("MH")
+	if !found {
+		t.Fatal("MH seed missing")
+	}
+	// updateMHBody 保存第二超级管理员修改 MH 可编辑资料的请求正文。
+	updateMHBody, _ := json.Marshal(models.UserRequest{
+		Username: mh.Username, Name: "由同级超级管理员更新", RoleID: mh.RoleID,
+		DepartmentID: mh.DepartmentID, Status: mh.Status, Shift: mh.Shift,
+		Phone: "13800000002", Email: "mh.peer.updated@example.com", CanLogin: &canLogin,
+	})
+	request = httptest.NewRequest(http.MethodPut, "/api/users/"+strconv.Itoa(mh.ID), bytes.NewReader(updateMHBody))
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(&http.Cookie{Name: "sessionId", Value: secondSuperCookie})
+	response = httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("peer super administrator updated MH: status=%d body=%s", response.Code, response.Body.String())
+	}
+	// persistedMH 从 SQLite 重新查询第二超级管理员修改后的 MH。
+	persistedMH, found := store.FindUserByID(mh.ID)
+	if !found || persistedMH.Name != "由同级超级管理员更新" || persistedMH.Email != "mh.peer.updated@example.com" || persistedMH.Phone != "13800000002" {
+		t.Fatalf("MH peer update was not persisted: %+v", persistedMH)
+	}
+}
+
+func TestSystemAdministratorCannotUpdateSuperAdministratorProfile(t *testing.T) {
+	// router、store 保存隔离测试路由与 SQLite 存储。
+	router, store, _ := setupTestRouter(t)
+	// systemRole 保存系统管理员角色。
+	var systemRole models.Role
+	for _, role := range store.ListRoles() {
+		if role.Code == permissions.SystemAdminRoleCode {
+			systemRole = role
+			break
+		}
+	}
+	if systemRole.ID == 0 {
+		t.Fatal("system administrator role seed missing")
+	}
+	// canLogin 表示测试系统管理员保持可登录。
+	canLogin := true
+	// systemAdmin 保存尝试越权修改超级管理员资料的系统管理员。
+	systemAdmin, message := store.CreateUser(models.UserRequest{
+		Username: "profile-system-admin", Name: "资料系统管理员", RoleID: &systemRole.ID,
+		Status: "在岗", CanLogin: &canLogin,
+	}, auth.MustHashPassword("pass1234"))
+	if message != "" {
+		t.Fatalf("create system administrator: %s", message)
+	}
+	// mh 保存受保护的超级管理员资料。
+	mh, found := store.FindUserByUsername("MH")
+	if !found {
+		t.Fatal("MH seed missing")
+	}
+	// systemCookie 保存系统管理员会话。
+	systemCookie := loginCookie(t, router, systemAdmin.Username, "pass1234")
+	// profileBody 保存越权资料更新请求正文。
+	profileBody := []byte(`{"name":"越权资料修改","email":"forbidden@example.com"}`)
+	// request 保存系统管理员修改超级管理员资料的请求。
+	request := httptest.NewRequest(http.MethodPut, "/api/users/"+strconv.Itoa(mh.ID)+"/profile", bytes.NewReader(profileBody))
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(&http.Cookie{Name: "sessionId", Value: systemCookie})
+	// response 保存越权资料更新请求的响应。
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("system administrator modified super administrator profile: status=%d body=%s", response.Code, response.Body.String())
+	}
+	// persistedMH 从 SQLite 重新查询受保护的超级管理员资料。
+	persistedMH, found := store.FindUserByID(mh.ID)
+	if !found || persistedMH.Name != mh.Name || persistedMH.Email != mh.Email {
+		t.Fatalf("forbidden profile update changed SQLite data: before=%+v after=%+v", mh, persistedMH)
+	}
+}

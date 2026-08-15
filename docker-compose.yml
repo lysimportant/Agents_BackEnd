@@ -37,11 +37,17 @@ services:
       REDIS_DB: "${REDIS_DB:-0}"
       PASSWORD_CODE_TTL_SECONDS: "${PASSWORD_CODE_TTL_SECONDS:-180}"
       VISITOR_LOG_RETENTION_DAYS: "${VISITOR_LOG_RETENTION_DAYS:-90}"
-      EMAIL_CONFIG_PATH: /app/config/email.txt
+      EMAIL_CONFIG_PATH: /app/email.txt
+      EMAIL_HOST: "${EMAIL_HOST:-}"
+      EMAIL_PORT: "${EMAIL_PORT:-}"
+      EMAIL_SECURE: "${EMAIL_SECURE:-}"
+      EMAIL_USER: "${EMAIL_USER:-}"
+      EMAIL_PASS: "${EMAIL_PASS:-}"
+      EMAIL_FROM: "${EMAIL_FROM:-}"
     volumes:
       - "${DATA_DIR:-./backend/data}:/app/data"
       - "${UPLOAD_DIR:-./backend/uploads}:/app/uploads"
-      - "${CONFIG_DIR:-./config}:/app/config:ro"
+      - "${EMAIL_CONFIG_FILE:-./email.txt}:/app/email.txt:ro"
     healthcheck:
       test: ["CMD", "sh", "-c", "wget --spider --quiet http://127.0.0.1:$${BACKEND_INTERNAL_PORT:-8080}/health"]
       interval: 10s

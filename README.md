@@ -35,6 +35,8 @@ go run .
 | `SESSION_TTL_HOURS` | `8` | 会话有效小时数 |
 | `VISITOR_LOG_RETENTION_DAYS` | `90` | 访问分析日志保留天数；设为 `0` 可关闭自动清理 |
 
+Docker 启动时默认读取仓库根目录的 `email.txt`，并将其只读挂载为容器内的 `/app/email.txt`；可通过 `EMAIL_CONFIG_FILE` 覆盖宿主机文件路径。也可直接设置 `EMAIL_HOST`、`EMAIL_PORT`、`EMAIL_SECURE`、`EMAIL_USER`、`EMAIL_PASS`、`EMAIL_FROM`，非空环境变量优先于文件配置。`email.txt` 已被 Git 忽略，不要把真实邮箱密码提交到仓库。
+
 跨站前后端部署通常需要同时设置 `COOKIE_SAMESITE=None`、`COOKIE_SECURE=true`。开发默认的 `CORS_ALLOWED_ORIGINS=*` 会回显请求的实际 Origin，以兼容携带凭证的请求和任意本地前端端口；公网生产环境应将其覆盖为明确 Origin 白名单。允许来源响应会包含 `Access-Control-Allow-Credentials: true` 和 `Vary: Origin`。
 
 ## 启动前端
@@ -116,9 +118,9 @@ npm run dev
 - `GET /api/profile`: 获取当前登录用户资料
 - `PUT /api/profile`: 更新当前登录用户资料
 - `GET /api/users/:id/profile`: 本人或管理员获取指定用户资料
-- `PUT /api/users/:id/profile`: 本人或管理员更新指定用户资料
+- `PUT /api/users/:id/profile`: 本人或管理员更新指定用户资料；管理员目标仅允许超级管理员修改
 
-资料更新 Body 可包含 `name`、`email`、`phone`、`age`、`description`、`avatarUrl`。该接口不会修改账号、密码、角色、部门、状态或登录权限；`age` 允许 `0` 到 `150`。
+资料更新 Body 可包含 `name`、`email`、`phone`、`age`、`description`、`avatarUrl`。该接口会直接持久化到 SQLite，不会修改账号、密码、角色、部门、状态或登录权限；`age` 允许 `0` 到 `150`。超级管理员可以互相修改资料，系统管理员和其他角色不能修改超级管理员资料。
 
 ### 菜单管理
 

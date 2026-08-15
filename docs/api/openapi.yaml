@@ -390,7 +390,9 @@ paths:
       summary: 更新已授权用户资料
       security: [{ cookieSession: [] }]
       parameters: [{ $ref: '#/components/parameters/NumericID' }]
-      responses: { '200': { description: 用户资料更新成功。 } }
+      responses:
+        '200': { description: 用户资料更新成功并持久化。 }
+        '403': { description: 非超级管理员尝试修改管理员资料。 }
   /api/profile:
     get:
       tags: [用户]

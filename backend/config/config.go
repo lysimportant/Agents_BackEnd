@@ -63,6 +63,8 @@ type EmailConfig struct {
 func Load() Config {
 	// emailConfigPath 保存配置路径。
 	emailConfigPath := envOrDefault("EMAIL_CONFIG_PATH", defaultEmailConfigPath())
+	// emailConfig 合并配置文件与容器环境变量中的 SMTP 参数。
+	emailConfig := loadEmailConfig(emailConfigPath)
 	return Config{
 		SQLitePath:              envOrDefault("SQLITE_PATH", "data/app.db"),
 		UploadDir:               envOrDefault("UPLOAD_DIR", "uploads"),
@@ -76,7 +78,7 @@ func Load() Config {
 		RedisPassword:           strings.TrimSpace(os.Getenv("REDIS_PASSWORD")),
 		RedisDB:                 nonNegativeIntEnv("REDIS_DB", 0),
 		EmailConfigPath:         emailConfigPath,
-		Email:                   loadEmailConfig(emailConfigPath),
+		Email:                   emailConfig,
 		PasswordCodeTTL:         time.Duration(positiveIntEnv("PASSWORD_CODE_TTL_SECONDS", 180)) * time.Second,
 		VisitorLogRetentionDays: nonNegativeIntEnv("VISITOR_LOG_RETENTION_DAYS", 90),
 	}
@@ -114,12 +116,16 @@ func nonNegativeIntEnv(key string, fallback int) int {
 
 // defaultEmailConfigPath 实现对应业务逻辑。
 func defaultEmailConfigPath() string {
-	// home、err 保存当前操作结果以及可能返回的错误状态。
-	home, err := os.UserHomeDir()
-	if err != nil || strings.TrimSpace(home) == "" {
-		return "email.txt"
+	// candidates 保存当前目录和上级项目目录中的邮件配置候选路径。
+	candidates := []string{"email.txt", filepath.Join("..", "email.txt")}
+	for _, candidate := range candidates {
+		// fileInfo、err 保存候选路径的文件信息及读取错误。
+		fileInfo, err := os.Stat(candidate)
+		if err == nil && !fileInfo.IsDir() {
+			return candidate
+		}
 	}
-	return filepath.Join(home, "Desktop", "email.txt")
+	return "email.txt"
 }
 
 // loadEmailConfig 加载对应业务数据。
@@ -128,34 +134,61 @@ func loadEmailConfig(path string) EmailConfig {
 	config := EmailConfig{}
 	// content、err 保存当前操作结果以及可能返回的错误状态。
 	content, err := os.ReadFile(path)
-	if err != nil {
-		return config
-	}
-	// line 表示当前循环中的索引、键或业务元素。
-	for _, line := range strings.Split(string(content), "\n") {
-		// key、value、ok 保存业务值及其是否存在或处理成功的标记。
-		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
-		if !ok {
-			continue
-		}
-		switch strings.TrimSpace(key) {
-		case "EMAIL_HOST":
-			config.Host = strings.TrimSpace(value)
-		case "EMAIL_PORT":
-			// port、err 保存当前操作结果以及可能返回的错误状态。
-			port, err := strconv.Atoi(strings.TrimSpace(value))
-			if err == nil && port > 0 {
-				config.Port = port
+	if err == nil {
+		// line 表示当前配置文件中的一行 SMTP 参数。
+		for _, line := range strings.Split(string(content), "\n") {
+			// key、value、ok 保存配置键、配置值及其格式是否有效。
+			key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+			if !ok {
+				continue
 			}
-		case "EMAIL_SECURE":
-			config.Secure = strings.EqualFold(strings.TrimSpace(value), "true")
-		case "EMAIL_USER":
-			config.Username = strings.TrimSpace(value)
-		case "EMAIL_PASS":
-			config.Password = strings.TrimSpace(value)
-		case "EMAIL_FROM":
-			config.From = strings.TrimSpace(value)
+			switch strings.TrimSpace(key) {
+			case "EMAIL_HOST":
+				config.Host = strings.TrimSpace(value)
+			case "EMAIL_PORT":
+				// port、portError 保存解析后的 SMTP 端口及其错误状态。
+				port, portError := strconv.Atoi(strings.TrimSpace(value))
+				if portError == nil && port > 0 {
+					config.Port = port
+				}
+			case "EMAIL_SECURE":
+				config.Secure = strings.EqualFold(strings.TrimSpace(value), "true")
+			case "EMAIL_USER":
+				config.Username = strings.TrimSpace(value)
+			case "EMAIL_PASS":
+				config.Password = strings.TrimSpace(value)
+			case "EMAIL_FROM":
+				config.From = strings.TrimSpace(value)
+			}
 		}
+	}
+	// environmentHost 保存容器直接注入的 SMTP 主机，并优先于配置文件。
+	if environmentHost := strings.TrimSpace(os.Getenv("EMAIL_HOST")); environmentHost != "" {
+		config.Host = environmentHost
+	}
+	// environmentPort 保存容器直接注入的 SMTP 端口。
+	if environmentPort := strings.TrimSpace(os.Getenv("EMAIL_PORT")); environmentPort != "" {
+		// port 保存解析后的 SMTP 端口。
+		port, portError := strconv.Atoi(environmentPort)
+		if portError == nil && port > 0 {
+			config.Port = port
+		}
+	}
+	// environmentSecure 保存容器是否要求直接建立 TLS 连接。
+	if environmentSecure := strings.TrimSpace(os.Getenv("EMAIL_SECURE")); environmentSecure != "" {
+		config.Secure = strings.EqualFold(environmentSecure, "true")
+	}
+	// environmentUsername 保存容器直接注入的 SMTP 登录账号。
+	if environmentUsername := strings.TrimSpace(os.Getenv("EMAIL_USER")); environmentUsername != "" {
+		config.Username = environmentUsername
+	}
+	// environmentPassword 保存容器直接注入的 SMTP 登录凭据。
+	if environmentPassword := strings.TrimSpace(os.Getenv("EMAIL_PASS")); environmentPassword != "" {
+		config.Password = environmentPassword
+	}
+	// environmentFrom 保存容器直接注入的发件人地址。
+	if environmentFrom := strings.TrimSpace(os.Getenv("EMAIL_FROM")); environmentFrom != "" {
+		config.From = environmentFrom
 	}
 	if config.From == "" {
 		config.From = config.Username

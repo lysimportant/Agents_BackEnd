@@ -412,6 +412,9 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if h.administratorTargetForbidden(c, id) {
+		return
+	}
 	if !h.canAccessProfile(c, id) {
 		return
 	}

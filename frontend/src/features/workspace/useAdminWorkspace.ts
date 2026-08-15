@@ -106,7 +106,7 @@ export function useAdminWorkspace() {
   /** isCheckingSession、setIsCheckingSession 分别保存登录会话状态及其更新函数。 */
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   /** loginForm、setLoginForm 保存登录表单、登录表单。 */
-  const [loginForm, setLoginForm] = useState<LoginForm>({ username: 'MH', password: '123' });
+  const [loginForm, setLoginForm] = useState<LoginForm>({ username: '', password: '' });
   /** loginError、setLoginError 分别保存登录错误状态状态及其更新函数。 */
   const [loginError, setLoginError] = useState('');
   /** isLoggingIn、setIsLoggingIn 分别保存登录状态状态及其更新函数。 */
@@ -472,7 +472,7 @@ export function useAdminWorkspace() {
       const payload = (await response.json()) as { user: AuthUser };
       setAuthUser(payload.user);
       void requestWithSession(`${API_BASE_URL}/api/internal-chat/presence`, { method: 'POST' });
-      setLoginForm({ username: 'MH', password: '123' });
+      setLoginForm({ username: '', password: '' });
       globalNotification.success({
         placement: 'bottomRight',
         title: `${payload.user.name || payload.user.username} 登录成功`,

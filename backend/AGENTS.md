@@ -98,7 +98,7 @@
 - `REDIS_ADDR=localhost:6379`
 - `REDIS_PASSWORD=`
 - `REDIS_DB=0`
-- `EMAIL_CONFIG_PATH=~/Desktop/email.txt`（Windows 通常对应 `%USERPROFILE%\Desktop\email.txt`；无法解析用户目录时回退为当前目录 `email.txt`）
+- `EMAIL_CONFIG_PATH=email.txt`（默认依次检查当前目录与上级项目目录；Docker Compose 将仓库根目录的 `email.txt` 只读挂载到 `/app/email.txt`）
 - `PASSWORD_CODE_TTL_SECONDS=180`
 
 邮箱文件按 `KEY=VALUE` 读取：`EMAIL_HOST`、`EMAIL_PORT`、`EMAIL_SECURE`、`EMAIL_USER`、`EMAIL_PASS`、`EMAIL_FROM`；`EMAIL_FROM` 空缺时使用 `EMAIL_USER`。密码验证码当前必须写入 Redis，没有内存降级；Redis 或 SMTP 不可用时接口应返回错误，不能把验证码打印到日志或响应。
