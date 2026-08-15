@@ -339,19 +339,23 @@ export function UsersPage({
                           const canDeleteTarget = canDelete && user.username.toLowerCase() !== 'mh' && !isSuperAdminRoleCode(user.roleCode);
                           if (!canAuthorizeTarget && !canEditTarget && !canDeleteTarget) return null;
                           return (
-                          <>
-                            {canAuthorizeTarget && <button type=”button” onClick={() => void openPermissionDialog(user.id)}>授权</button>}
-                            {canEditTarget && (
-                            <button
-                              type=”button”
-                              onClick={() => {
-                                onEditUser(user);
-                                setDialogOpen(true);
-                              }}
-                            >
-                              编辑
-                            </button>
-                            )}
+                            <>
+                              {canAuthorizeTarget && (
+                                <button type=”button” onClick={() => void openPermissionDialog(user.id)}>
+                                  授权
+                                </button>
+                              )}
+                              {canEditTarget && (
+                                <button
+                                  type=”button”
+                                  onClick={() => {
+                                    onEditUser(user);
+                                    setDialogOpen(true);
+                                  }}
+                                >
+                                  编辑
+                                </button>
+                              )}
                             {canDeleteTarget && (
                               <Popconfirm
                                 title=”确认删除该用户？”
