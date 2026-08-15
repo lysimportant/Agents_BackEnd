@@ -17,11 +17,19 @@ docker compose up -d --build
 ```dotenv
 BACKEND_PORT=8080
 FRONTEND_PORT=3000
+BACKEND_INTERNAL_PORT=8080
 FRONTEND_API_BASE_URL=http://localhost:8080
 FRONTEND_SITE_URL=http://localhost:3000
-DATA_DIR=./data
-UPLOAD_DIR=./uploads
+DATA_DIR=./backend/data
+UPLOAD_DIR=./backend/uploads
 CONFIG_DIR=./config
 ```
 
-修改端口后，`FRONTEND_API_BASE_URL` 和 `FRONTEND_SITE_URL` 也要同步修改。SQLite 数据保存在 `DATA_DIR`，上传文件保存在 `UPLOAD_DIR`，Redis 数据由 Compose 卷 `redis-data` 持久化。SMTP 配置可选，放入 `CONFIG_DIR/email.txt`。
+**端口配置说明：**
+- `BACKEND_PORT`：宿主机映射端口（浏览器访问的端口）
+- `BACKEND_INTERNAL_PORT`：容器内部端口（通常不需要修改）
+- `FRONTEND_PORT`：前端宿主机端口
+
+修改 `BACKEND_PORT` 后，`FRONTEND_API_BASE_URL` 也要同步修改为新端口。
+
+SQLite 数据保存在 `DATA_DIR`，上传文件保存在 `UPLOAD_DIR`，Redis 数据由 Compose 卷 `redis-data` 持久化。SMTP 配置可选，放入 `CONFIG_DIR/email.txt`。

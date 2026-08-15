@@ -12,5 +12,8 @@ RUN apk add --no-cache ca-certificates wget
 WORKDIR /app
 COPY --from=builder /out/collector-backend /app/collector-backend
 
-EXPOSE 8080
+ARG BACKEND_INTERNAL_PORT=8080
+ENV BACKEND_INTERNAL_PORT=${BACKEND_INTERNAL_PORT}
+
+EXPOSE ${BACKEND_INTERNAL_PORT}
 ENTRYPOINT ["/app/collector-backend"]
