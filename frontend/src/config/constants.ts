@@ -23,11 +23,12 @@ export const roleStatusOptions = ['启用', '停用'];
 export const articleStatusOptions = ['草稿', '已发布', '归档'];
 
 /** pageKeys 保存模块使用的固定配置或共享状态。 */
-export const pageKeys = ['dashboard', 'socket-support', 'visitor-analytics', 'users', 'departments', 'roles', 'menus', 'articles', 'files', 'profile'] as const;
+export const pageKeys = ['dashboard', 'business-resources', 'socket-support', 'visitor-analytics', 'users', 'departments', 'roles', 'menus', 'articles', 'files', 'profile'] as const;
 
 /** pageTitles 定义对应业务的数据结构与调用契约。 */
 export const pageTitles: Record<(typeof pageKeys)[number], string> = {
   dashboard: '预览台',
+  'business-resources': '业务资源',
   'socket-support': '在线聊天',
   'visitor-analytics': '访问分析',
   users: '用户管理',

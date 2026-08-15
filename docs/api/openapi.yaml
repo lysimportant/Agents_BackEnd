@@ -208,6 +208,19 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ServerMetrics' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /api/server/connections:
+    get:
+      tags: [服务器]
+      summary: 按需查询服务器网络连接明细
+      description: 需要预览台菜单和 dashboard.view 动作；点击活动连接指标时调用。最多枚举 5000 个套接字并返回按诊断优先级排列的前 500 条明细，包含协议、地址族、本地/远端端点、状态、PID 和权限允许时的进程名；平台或权限不支持枚举时以 available=false 和 warning 结构化降级。
+      security: [{ cookieSession: [] }]
+      responses:
+        '200':
+          description: 当前网络连接汇总及受限数量的连接明细。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServerConnectionDetails' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /api/server/terminal:
     get:
       tags: [服务器]
@@ -786,6 +799,46 @@ components:
           type: array
           maxItems: 10
           items: { type: integer, minimum: 1 }
+    ServerConnectionSummary:
+      type: object
+      required: [available, sampled, truncated, tcp, udp, established, listen, timeWait, closeWait]
+      properties:
+        available: { type: boolean }
+        sampled: { type: integer, minimum: 0 }
+        truncated: { type: boolean }
+        tcp: { type: integer, minimum: 0 }
+        udp: { type: integer, minimum: 0 }
+        established: { type: integer, minimum: 0 }
+        listen: { type: integer, minimum: 0 }
+        timeWait: { type: integer, minimum: 0 }
+        closeWait: { type: integer, minimum: 0 }
+    ServerConnectionDetails:
+      type: object
+      required: [available, warning, sampled, truncated, detailsTruncated, summary, connections, sampledAt]
+      properties:
+        available: { type: boolean }
+        warning: { type: string }
+        sampled: { type: integer, minimum: 0 }
+        truncated: { type: boolean }
+        detailsTruncated: { type: boolean }
+        summary: { $ref: '#/components/schemas/ServerConnectionSummary' }
+        connections:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required: [protocol, addressFamily, localAddress, localPort, remoteAddress, remotePort, status, pid, processName]
+            properties:
+              protocol: { type: string }
+              addressFamily: { type: string }
+              localAddress: { type: string }
+              localPort: { type: integer, minimum: 0 }
+              remoteAddress: { type: string }
+              remotePort: { type: integer, minimum: 0 }
+              status: { type: string }
+              pid: { type: integer, minimum: 0 }
+              processName: { type: string }
+        sampledAt: { type: string, format: date-time }
     ServerMetrics:
       type: object
       required: [scope, hostname, os, platform, platformVersion, kernelVersion, architecture, uptimeSeconds, bootedAt, cpu, load, memory, disk, partitions, diskIO, network, process, temperatures, health, collectionWarnings, sampledAt]

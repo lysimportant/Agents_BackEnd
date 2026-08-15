@@ -75,8 +75,9 @@ func (s *SQLiteStore) reconcileApplicationMenus() error {
 	seeds := []applicationMenuSeed{
 		{Name: "工作台", Code: "workspace", Icon: "dashboard", Sort: 10},
 		{Name: "预览台", Code: "dashboard", Path: "dashboard", Icon: "dashboard", ParentCode: "workspace", Sort: 11},
-		{Name: "在线聊天", Code: "socket-support", Path: "socket-support", Icon: "message", ParentCode: "workspace", Sort: 12},
-		{Name: "访问分析", Code: "visitor-analytics", Path: "visitor-analytics", Icon: "line-chart", ParentCode: "workspace", Sort: 13},
+		{Name: "业务资源", Code: "business-resources", Path: "business-resources", Icon: "appstore", ParentCode: "workspace", Sort: 12},
+		{Name: "在线聊天", Code: "socket-support", Path: "socket-support", Icon: "message", ParentCode: "workspace", Sort: 13},
+		{Name: "访问分析", Code: "visitor-analytics", Path: "visitor-analytics", Icon: "line-chart", ParentCode: "workspace", Sort: 14},
 		{Name: "系统管理", Code: "system", Icon: "setting", Sort: 20},
 		{Name: "用户管理", Code: "users", Path: "users", Icon: "team", ParentCode: "system", Sort: 21},
 		{Name: "部门管理", Code: "departments", Path: "departments", Icon: "apartment", ParentCode: "system", Sort: 22},
@@ -131,8 +132,16 @@ func (s *SQLiteStore) reconcileApplicationMenus() error {
 	if _, err := tx.Exec(`UPDATE menus SET name='预览台',path='dashboard',icon='dashboard',parent_id=?,sort=11,updated_at=? WHERE code='dashboard'`, workspaceID, now); err != nil {
 		return err
 	}
+	// 业务资源页固定为工作台下的独立统计入口。
+	if _, err := tx.Exec(`UPDATE menus SET name='业务资源',path='business-resources',icon='appstore',parent_id=?,sort=12,updated_at=? WHERE code='business-resources'`, workspaceID, now); err != nil {
+		return err
+	}
 	// err 保存当前操作结果以及可能返回的错误状态。
-	if _, err := tx.Exec(`UPDATE menus SET name='在线聊天',path='socket-support',icon='message',parent_id=?,sort=12,updated_at=? WHERE code='socket-support'`, workspaceID, now); err != nil {
+	if _, err := tx.Exec(`UPDATE menus SET name='在线聊天',path='socket-support',icon='message',parent_id=?,sort=13,updated_at=? WHERE code='socket-support'`, workspaceID, now); err != nil {
+		return err
+	}
+	// 访问分析保持为工作台下的第四个业务入口。
+	if _, err := tx.Exec(`UPDATE menus SET name='访问分析',path='visitor-analytics',icon='line-chart',parent_id=?,sort=14,updated_at=? WHERE code='visitor-analytics'`, workspaceID, now); err != nil {
 		return err
 	}
 	return tx.Commit()

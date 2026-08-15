@@ -23,6 +23,14 @@ func TestServerMetricsAndTerminalAuthorization(t *testing.T) {
 	if anonymousMetricsResponse.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous metrics status=%d", anonymousMetricsResponse.Code)
 	}
+	// anonymousConnectionsRequest 表示未登录用户尝试读取连接明细。
+	anonymousConnectionsRequest := httptest.NewRequest(http.MethodGet, "/api/server/connections", nil)
+	// anonymousConnectionsResponse 记录未登录连接明细响应。
+	anonymousConnectionsResponse := httptest.NewRecorder()
+	router.ServeHTTP(anonymousConnectionsResponse, anonymousConnectionsRequest)
+	if anonymousConnectionsResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous connections status=%d", anonymousConnectionsResponse.Code)
+	}
 	// anonymousTerminalRequest 表示未登录用户尝试打开 SSH 终端。
 	anonymousTerminalRequest := httptest.NewRequest(http.MethodGet, "/api/server/terminal", nil)
 	// anonymousTerminalResponse 记录未登录终端请求响应。
@@ -72,6 +80,20 @@ func TestServerMetricsAndTerminalAuthorization(t *testing.T) {
 	var metrics models.ServerMetrics
 	if err := json.Unmarshal(metricsResponse.Body.Bytes(), &metrics); err != nil || metrics.CPU.LogicalCores < 1 {
 		t.Fatalf("decode server metrics: metrics=%+v err=%v", metrics, err)
+	}
+	// connectionsRequest 表示系统管理员按需读取网络连接明细。
+	connectionsRequest := httptest.NewRequest(http.MethodGet, "/api/server/connections", nil)
+	connectionsRequest.AddCookie(&http.Cookie{Name: "sessionId", Value: systemCookie})
+	// connectionsResponse 记录连接明细接口响应。
+	connectionsResponse := httptest.NewRecorder()
+	router.ServeHTTP(connectionsResponse, connectionsRequest)
+	if connectionsResponse.Code != http.StatusOK {
+		t.Fatalf("system administrator connections status=%d body=%s", connectionsResponse.Code, connectionsResponse.Body.String())
+	}
+	// connectionDetails 保存连接明细接口返回的受限快照。
+	var connectionDetails models.ServerConnectionDetailsResource
+	if err := json.Unmarshal(connectionsResponse.Body.Bytes(), &connectionDetails); err != nil || connectionDetails.Connections == nil || connectionDetails.SampledAt.IsZero() {
+		t.Fatalf("decode server connections: details=%+v err=%v", connectionDetails, err)
 	}
 
 	// systemTerminalRequest 表示系统管理员到达 WebSocket 升级处理器的普通 HTTP 请求。

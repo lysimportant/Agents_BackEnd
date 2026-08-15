@@ -38,7 +38,7 @@
 - `app/layout.tsx`：全局布局、metadata、Ant Design registry 和全局样式入口。
 - `app/page.tsx`：管理后台客户端编排入口；未登录显示 `src/admin-pages/auth/AuthPage.tsx`，登录后按 `activePage` 挂载管理页面。
 - `app/chat/`：内部员工聊天真实路由；`app/socket/chat/`：Socket 客服访客聊天真实路由与兼容入口。
-- `src/admin-pages/`：认证、预览台、用户、部门、角色、菜单、文章、文件、资料和访问分析页面。
+- `src/admin-pages/`：认证、预览台、业务资源、用户、部门、角色、菜单、文章、文件、资料和访问分析页面。
 - `src/features/workspace/`：会话恢复、菜单驱动加载、CRUD、筛选和反馈等工作台状态；`src/features/chat/`：Socket 客服管理端与访客端业务。
 - `src/components/layout/MainLayout.tsx`：导航、响应式侧栏、主题、全局 SSH 入口和终端弹窗宿主。
 - `src/components/shared/` 与 `src/components/table/`：共享反馈、富文本、关联用户、3D 卡片和表格组件。
@@ -108,6 +108,8 @@
 ## 服务器监控与 SSH 工作区
 
 - 预览台通过 `src/services/serverApi.ts` 每 5 秒读取 `/api/server/metrics`，维护最近 5 分钟的网络与磁盘吞吐趋势；停止访问或组件卸载时必须清理采样计时器。
+- 工作台下的 `business-resources` 独立页面展示用户、菜单和文章的总量、有效量、构成与可用率；这些业务数据不得重新放回预览台长页面底部。
+- 预览台“活动连接”指标可点击，并通过 `/api/server/connections` 按需打开连接明细；明细页需保留状态筛选、当前结果搜索、刷新以及平台不支持时的结构化警告。
 - 监控值代表后端进程所在主机或容器可见资源。缺失温度、磁盘 I/O 等平台数据时展示 `collectionWarnings`，不能伪造为零或宿主机完整指标。
 - SSH 是 Header 全局功能，任意有效登录用户都可打开，不依赖当前管理页面或管理员角色。弹窗关闭行为是最小化：切换页面或再次打开时连接、多终端标签、目录和未关闭预览继续保留。
 - 只有退出登录、会话失效或浏览器页面卸载时才销毁全部 SSH 连接和敏感状态；密码、私钥、编辑内容不得写入 `localStorage`、`sessionStorage` 或日志。

@@ -12,5 +12,6 @@ func registerServerRoutes(routes *gin.RouterGroup, store middleware.UserStore, h
 	// requireDashboard 表示服务器资源快照沿用工作台菜单访问边界。
 	requireDashboard := middleware.RequireMenu(store, "dashboard")
 	routes.GET("/server/metrics", requireDashboard, middleware.RequireAction(store, permissions.DashboardView), handler.Metrics)
+	routes.GET("/server/connections", requireDashboard, middleware.RequireAction(store, permissions.DashboardView), handler.Connections)
 	routes.GET("/server/terminal", handler.Terminal)
 }

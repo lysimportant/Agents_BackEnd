@@ -69,6 +69,7 @@
 - 修改模型、路由或权限时，检查所有 handler、SQLite repository、前端调用方和 `README.md` 是否需要同步。
 - 文件删除默认是可恢复的软删除；未经用户明确授权，不得实现或执行永久物理清理。
 - `GET /api/server/metrics` 需要 `dashboard` 菜单和 `dashboard.view` 动作，使用 `gopsutil` 采集后端运行环境可见的 CPU、内存、磁盘、网络、进程和温度；Docker 中不得宣称为宿主机完整指标。
+- `GET /api/server/connections` 使用相同菜单和动作权限按需枚举活动连接，返回协议、地址族、端点、状态、PID 和可读取的进程名；枚举失败时返回 `available=false`、警告和空列表，不得以 500 或伪造零值掩盖平台限制。
 - `/api/server/terminal` 只要求有效登录会话，所有登录用户权限相同。SSH WebSocket 同时承载终端数据、主机指纹确认、SFTP 目录/搜索/读写以及 OSC 7 工作目录同步协议。
 - SSH 文本编辑仅允许不超过 1 MiB 的现有 UTF-8 普通文件；图片和 PDF 预览不超过 10 MiB；目录和递归搜索必须保留数量上限、路径清理及远端权限错误反馈。
 

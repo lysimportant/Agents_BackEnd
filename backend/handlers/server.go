@@ -61,6 +61,22 @@ func (h *ServerHandler) Metrics(c *gin.Context) {
 	c.JSON(http.StatusOK, snapshot)
 }
 
+// Connections 处理 GET /api/server/connections；要求登录、工作台菜单和查看动作，按需返回网络连接明细。
+func (h *ServerHandler) Connections(c *gin.Context) {
+	// snapshot、err 表示本次采集到的连接明细及其错误状态。
+	snapshot, err := collectServerConnectionDetails()
+	if err != nil {
+		c.JSON(http.StatusOK, models.ServerConnectionDetailsResource{
+			Available:   false,
+			Warning:     "当前平台或进程权限无法读取网络连接明细",
+			Connections: []models.ServerConnectionDetail{},
+			SampledAt:   time.Now().UTC(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, snapshot)
+}
+
 // Terminal 处理 GET /api/server/terminal；允许登录用户建立经主机指纹校验的 SSH 终端。
 func (h *ServerHandler) Terminal(c *gin.Context) {
 	// connection、err 表示升级后的浏览器 WebSocket 连接及其错误状态。
@@ -1133,17 +1149,27 @@ func collectServerInterfaces() ([]models.ServerNetworkInterface, error) {
 	return resources, nil
 }
 
+const (
+	// serverConnectionSampleLimit 限制单次系统连接枚举数量。
+	serverConnectionSampleLimit = 5000
+	// serverConnectionDetailLimit 限制按需接口返回的连接明细数量。
+	serverConnectionDetailLimit = 500
+)
+
 // collectServerConnections 汇总最多五千条网络连接的协议与 TCP 状态。
 func collectServerConnections() (models.ServerConnectionResource, error) {
-	// sampleLimit 限制连接枚举开销和响应体大小。
-	const sampleLimit = 5000
 	// connections、err 表示系统网络连接列表及其错误状态。
-	connections, err := gonet.ConnectionsMax("inet", sampleLimit)
+	connections, err := gonet.ConnectionsMax("inet", serverConnectionSampleLimit)
 	if err != nil {
 		return models.ServerConnectionResource{}, err
 	}
+	return summarizeServerConnections(connections), nil
+}
+
+// summarizeServerConnections 汇总系统连接列表的协议和常见 TCP 状态。
+func summarizeServerConnections(connections []gonet.ConnectionStat) models.ServerConnectionResource {
 	// resource 保存协议和连接状态汇总，不返回远端地址或端口。
-	resource := models.ServerConnectionResource{Available: true, Sampled: len(connections), Truncated: len(connections) >= sampleLimit}
+	resource := models.ServerConnectionResource{Available: true, Sampled: len(connections), Truncated: len(connections) >= serverConnectionSampleLimit}
 	for _, connection := range connections {
 		switch connection.Type {
 		case 1:
@@ -1162,7 +1188,104 @@ func collectServerConnections() (models.ServerConnectionResource, error) {
 			resource.CloseWait++
 		}
 	}
-	return resource, nil
+	return resource
+}
+
+// collectServerConnectionDetails 采集受限数量的网络端点、状态和所属进程。
+func collectServerConnectionDetails() (models.ServerConnectionDetailsResource, error) {
+	// connections、err 表示系统网络连接列表及其错误状态。
+	connections, err := gonet.ConnectionsMax("inet", serverConnectionSampleLimit)
+	if err != nil {
+		return models.ServerConnectionDetailsResource{}, err
+	}
+	// processNames 缓存同一 PID 的进程名，避免重复读取进程元数据。
+	processNames := make(map[int32]string)
+	// details 保存由系统连接转换后的稳定 API 字段。
+	details := make([]models.ServerConnectionDetail, 0, len(connections))
+	for _, connection := range connections {
+		// processName 保存权限允许时读取到的套接字所属进程名称。
+		processName, cached := processNames[connection.Pid]
+		if !cached && connection.Pid > 0 {
+			if ownerProcess, processErr := process.NewProcess(connection.Pid); processErr == nil {
+				processName, _ = ownerProcess.Name()
+			}
+			processNames[connection.Pid] = processName
+		}
+		details = append(details, serverConnectionDetail(connection, processName))
+	}
+	sortServerConnectionDetails(details)
+	// detailsTruncated 表示明细响应因五百条上限被截断。
+	detailsTruncated := len(details) > serverConnectionDetailLimit
+	if detailsTruncated {
+		details = details[:serverConnectionDetailLimit]
+	}
+	return models.ServerConnectionDetailsResource{
+		Available:        true,
+		Sampled:          len(connections),
+		Truncated:        len(connections) >= serverConnectionSampleLimit,
+		DetailsTruncated: detailsTruncated,
+		Summary:          summarizeServerConnections(connections),
+		Connections:      details,
+		SampledAt:        time.Now().UTC(),
+	}, nil
+}
+
+// serverConnectionDetail 将 gopsutil 套接字记录转换为前端使用的稳定结构。
+func serverConnectionDetail(connection gonet.ConnectionStat, processName string) models.ServerConnectionDetail {
+	// protocol 保存传输层协议名称。
+	protocol := "OTHER"
+	switch connection.Type {
+	case 1:
+		protocol = "TCP"
+	case 2:
+		protocol = "UDP"
+	}
+	// addressFamily 保存 IP 地址族名称。
+	addressFamily := "UNKNOWN"
+	switch connection.Family {
+	case 2:
+		addressFamily = "IPv4"
+	case 10, 23:
+		addressFamily = "IPv6"
+	}
+	// status 保存大写连接状态；无状态的 UDP 套接字使用 NONE。
+	status := strings.ToUpper(strings.TrimSpace(connection.Status))
+	if status == "" {
+		status = "NONE"
+	}
+	return models.ServerConnectionDetail{
+		Protocol: protocol, AddressFamily: addressFamily,
+		LocalAddress: connection.Laddr.IP, LocalPort: connection.Laddr.Port,
+		RemoteAddress: connection.Raddr.IP, RemotePort: connection.Raddr.Port,
+		Status: status, PID: connection.Pid, ProcessName: processName,
+	}
+}
+
+// sortServerConnectionDetails 将活跃连接优先展示，并稳定排列端点和进程。
+func sortServerConnectionDetails(details []models.ServerConnectionDetail) {
+	// statusPriority 保存常见连接状态的诊断优先级。
+	statusPriority := map[string]int{"ESTABLISHED": 0, "LISTEN": 1, "CLOSE_WAIT": 2, "TIME_WAIT": 3, "NONE": 4}
+	sort.Slice(details, func(left, right int) bool {
+		// leftPriority、rightPriority 表示左右连接状态排序值。
+		leftPriority, leftKnown := statusPriority[details[left].Status]
+		rightPriority, rightKnown := statusPriority[details[right].Status]
+		if !leftKnown {
+			leftPriority = 5
+		}
+		if !rightKnown {
+			rightPriority = 5
+		}
+		if leftPriority != rightPriority {
+			return leftPriority < rightPriority
+		}
+		// leftEndpoint、rightEndpoint 保存用于稳定排序的本地与远端端点文本。
+		leftEndpoint := fmt.Sprintf("%s:%d-%s:%d", details[left].LocalAddress, details[left].LocalPort, details[left].RemoteAddress, details[left].RemotePort)
+		rightEndpoint := fmt.Sprintf("%s:%d-%s:%d", details[right].LocalAddress, details[right].LocalPort, details[right].RemoteAddress, details[right].RemotePort)
+		if leftEndpoint != rightEndpoint {
+			return leftEndpoint < rightEndpoint
+		}
+		return details[left].PID < details[right].PID
+	})
 }
 
 // collectServerTemperatures 读取合理范围内的硬件温度传感器值。

@@ -5,11 +5,7 @@ import dynamic from 'next/dynamic';
 import type { EChartsOption } from 'echarts';
 import CountUp from 'react-countup';
 import {
-  ApartmentOutlined,
-  FileDoneOutlined,
   ReloadOutlined,
-  SafetyCertificateOutlined,
-  TeamOutlined,
 } from '@ant-design/icons';
 import { Alert, Button, Empty, Progress, Switch, Tag, Tooltip } from 'antd';
 import {
@@ -26,8 +22,8 @@ import {
   Server,
   Thermometer,
 } from 'lucide-react';
-import { API_BASE_URL } from '@/src/config/constants';
 import type { ServerMetrics } from '@/src/types/admin';
+import { ConnectionDetailsModal } from '@/src/admin-pages/dashboard/ConnectionDetailsModal';
 import {
   ADMIN_THEME_EVENT,
   DEFAULT_THEME_ID,
@@ -44,26 +40,10 @@ const SERVER_SAMPLE_INTERVAL_MS = 5_000;
 const SERVER_HISTORY_LIMIT = 60;
 
 type DashboardPageProps = {
-  /** usersCount 表示平台用户总数。 */
-  usersCount: number;
-  /** activeUsers 表示当前可登录用户数。 */
-  activeUsers: number;
-  /** menusCount 表示平台菜单总数。 */
-  menusCount: number;
-  /** enabledMenus 表示已启用菜单数。 */
-  enabledMenus: number;
-  /** articlesCount 表示平台文章总数。 */
-  articlesCount: number;
-  /** publishedArticles 表示已发布文章数。 */
-  publishedArticles: number;
-  /** isLoading 表示平台业务数据是否正在加载。 */
-  isLoading: boolean;
   /** serverMetrics 表示后端实际运行环境的资源快照。 */
   serverMetrics: ServerMetrics | null;
   /** isLoadingServerMetrics 表示服务器资源快照是否正在更新。 */
   isLoadingServerMetrics: boolean;
-  /** onRefresh 表示同步刷新平台和服务器数据的回调。 */
-  onRefresh: () => void;
   /** onRefreshMetrics 表示仅刷新服务器指标的回调。 */
   onRefreshMetrics: () => void | Promise<unknown>;
 };
@@ -83,6 +63,8 @@ type StatCardProps = {
   suffix?: string;
   /** decimals 表示指标数字保留的小数位。 */
   decimals?: number;
+  /** onClick 表示指标卡可触发的明细操作。 */
+  onClick?: () => void;
 };
 
 type MetricHistoryPoint = {
@@ -119,16 +101,8 @@ type PartialDeep<T> = {
 
 /** DashboardPage 展示服务器监控和平台业务概览。 */
 export function DashboardPage({
-  usersCount,
-  activeUsers,
-  menusCount,
-  enabledMenus,
-  articlesCount,
-  publishedArticles,
-  isLoading,
   serverMetrics: rawServerMetrics,
   isLoadingServerMetrics,
-  onRefresh,
   onRefreshMetrics,
 }: DashboardPageProps) {
   /** theme 保存当前管理端主题。 */
@@ -139,18 +113,12 @@ export function DashboardPage({
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   /** metricHistory、setMetricHistory 保存当前页面最近五分钟指标样本。 */
   const [metricHistory, setMetricHistory] = useState<MetricHistoryPoint[]>([]);
+  /** connectionDetailsOpen、setConnectionDetailsOpen 表示活动连接明细弹窗是否展开。 */
+  const [connectionDetailsOpen, setConnectionDetailsOpen] = useState(false);
   /** refreshMetricsRef 保存最新的服务器指标刷新回调，避免重建定时器。 */
   const refreshMetricsRef = useRef(onRefreshMetrics);
-  /** totalResources 表示平台业务资源总数。 */
-  const totalResources = usersCount + menusCount + articlesCount;
-  /** enabledRatio 表示菜单启用率。 */
-  const enabledRatio = getRatio(enabledMenus, menusCount);
-  /** publishedRatio 表示文章发布率。 */
-  const publishedRatio = getRatio(publishedArticles, articlesCount);
-  /** accountRatio 表示账号可用率。 */
-  const accountRatio = getRatio(activeUsers, usersCount);
-  /** isRefreshing 表示平台数据或服务器指标是否正在刷新。 */
-  const isRefreshing = isLoading || isLoadingServerMetrics;
+  /** isRefreshing 表示服务器指标是否正在刷新。 */
+  const isRefreshing = isLoadingServerMetrics;
   /** serverScopeLabel 表示资源快照对应的运行边界。 */
   const serverScopeLabel = serverMetrics?.scope === 'container' ? '容器视角' : '宿主机视角';
   /** currentRate 保存最后一个样本计算出的网络和磁盘速率。 */
@@ -194,24 +162,6 @@ export function DashboardPage({
     () => createCoreUsageOption(theme, serverMetrics?.cpu.perCoreUsagePercent ?? []),
     [serverMetrics?.cpu.perCoreUsagePercent, theme],
   );
-  /** overviewOption 保存平台资源总量与有效量图表。 */
-  const overviewOption = useMemo<EChartsOption>(
-    () => createOverviewOption(theme, {
-      total: [usersCount, menusCount, articlesCount],
-      available: [activeUsers, enabledMenus, publishedArticles],
-    }),
-    [activeUsers, articlesCount, enabledMenus, menusCount, publishedArticles, theme, usersCount],
-  );
-  /** compositionOption 保存平台业务资源构成图表。 */
-  const compositionOption = useMemo<EChartsOption>(
-    () => createCompositionOption(theme, [
-      { name: '用户账号', value: usersCount },
-      { name: '菜单节点', value: menusCount },
-      { name: '文章内容', value: articlesCount },
-    ]),
-    [articlesCount, menusCount, theme, usersCount],
-  );
-
   return (
     <div className="dashboard-page">
       <section className="dashboard-hero">
@@ -224,7 +174,7 @@ export function DashboardPage({
           <Tooltip title="每 5 秒采样">
             <span className="dashboard-live-toggle"><Activity size={15} />实时<Switch size="small" checked={autoRefreshEnabled} onChange={setAutoRefreshEnabled} /></span>
           </Tooltip>
-          <Button type="primary" icon={<ReloadOutlined spin={isRefreshing} />} onClick={onRefresh} disabled={isRefreshing}>
+          <Button type="primary" icon={<ReloadOutlined spin={isRefreshing} />} onClick={() => void onRefreshMetrics()} disabled={isRefreshing}>
             {isRefreshing ? '正在同步' : '刷新数据'}
           </Button>
         </div>
@@ -238,7 +188,7 @@ export function DashboardPage({
         <DashboardStatCard label="实时下载" value={toMegabytes(currentRate?.download ?? 0)} decimals={2} suffix=" MB/s" note={`累计 ${formatBytes(serverMetrics?.network.bytesReceived ?? 0)}`} icon={<ArrowDownToLine size={21} />} tone="primary" />
         <DashboardStatCard label="实时上传" value={toMegabytes(currentRate?.upload ?? 0)} decimals={2} suffix=" MB/s" note={`累计 ${formatBytes(serverMetrics?.network.bytesSent ?? 0)}`} icon={<ArrowUpFromLine size={21} />} tone="accent" />
         <DashboardStatCard label="持续运行" value={Math.floor((serverMetrics?.uptimeSeconds ?? 0) / 86400)} suffix="天" note={formatDuration(serverMetrics?.uptimeSeconds ?? 0)} icon={<Server size={21} />} tone="accent" />
-        <DashboardStatCard label="活动连接" value={serverMetrics?.network.connections.established ?? 0} note={serverMetrics?.network.connections.available ? `${serverMetrics.network.connections.tcp} TCP · ${serverMetrics.network.connections.udp} UDP` : '当前环境不可读取'} icon={<Network size={21} />} tone="success" />
+        <DashboardStatCard label="活动连接" value={serverMetrics?.network.connections.established ?? 0} note={serverMetrics?.network.connections.available ? `${serverMetrics.network.connections.tcp} TCP · ${serverMetrics.network.connections.udp} UDP · 点击查看明细` : '当前环境不可读取'} icon={<Network size={21} />} tone="success" onClick={() => setConnectionDetailsOpen(true)} />
       </section>
 
       <section className="dashboard-health-band" aria-label="服务器健康状态">
@@ -450,37 +400,24 @@ export function DashboardPage({
         </article>
       </section>
 
-      <div className="dashboard-section-heading">
-        <div><p>平台概览</p><h2>业务资源与可用状态</h2></div>
-        <Tag>{API_BASE_URL}</Tag>
-      </div>
-      <section className="dashboard-stat-grid" aria-label="平台核心指标">
-        <DashboardStatCard label="用户总数" value={usersCount} note={`${activeUsers} 个账号可登录`} icon={<TeamOutlined />} tone="primary" />
-        <DashboardStatCard label="可登录账号" value={activeUsers} note={`账号可用率 ${accountRatio}%`} icon={<SafetyCertificateOutlined />} tone="success" />
-        <DashboardStatCard label="启用菜单" value={enabledMenus} note={`共 ${menusCount} 个菜单节点`} icon={<ApartmentOutlined />} tone="warning" />
-        <DashboardStatCard label="已发布文章" value={publishedArticles} note={`共 ${articlesCount} 篇内容`} icon={<FileDoneOutlined />} tone="accent" />
-      </section>
-      <section className="dashboard-chart-grid" aria-label="平台资源图表">
-        <DashboardChartPanel eyebrow="资源状态" title="总量与有效资源" tag="实时快照" option={overviewOption} ariaLabel="用户、菜单和文章的总量与有效资源柱状图" />
-        <DashboardChartPanel eyebrow="资源构成" title="平台数据分布" tag={formatInteger(totalResources)} option={compositionOption} ariaLabel="平台资源构成环形图" />
-      </section>
-      <section className="dashboard-panel dashboard-availability-panel" aria-label="平台可用率">
-        <DashboardProgress label="账号可用率" value={accountRatio} color={theme.palette.charts[0]} />
-        <DashboardProgress label="菜单启用率" value={enabledRatio} color={theme.palette.charts[1]} />
-        <DashboardProgress label="文章发布率" value={publishedRatio} color={theme.palette.charts[2]} />
-      </section>
+      <ConnectionDetailsModal open={connectionDetailsOpen} onClose={() => setConnectionDetailsOpen(false)} />
     </div>
   );
 }
 
 /** DashboardStatCard 展示一个固定尺寸的核心指标。 */
-function DashboardStatCard({ label, value, note, icon, tone, suffix, decimals = 0 }: StatCardProps) {
-  return (
-    <article className={`dashboard-stat-card is-${tone}`}>
+function DashboardStatCard({ label, value, note, icon, tone, suffix, decimals = 0, onClick }: StatCardProps) {
+  /** cardContent 保存普通卡片与可点击卡片共享的指标内容。 */
+  const cardContent = (
+    <>
       <div className="dashboard-stat-icon">{icon}</div>
       <div><span>{label}</span><strong><CountUp end={value} decimals={decimals} duration={0.7} preserveValue separator="," suffix={suffix} /></strong><small title={note}>{note}</small></div>
-    </article>
+    </>
   );
+  if (onClick) {
+    return <button type="button" className={`dashboard-stat-card dashboard-stat-button is-${tone}`} onClick={onClick} aria-label={`${label}，${note}`}>{cardContent}</button>;
+  }
+  return <article className={`dashboard-stat-card is-${tone}`}>{cardContent}</article>;
 }
 
 /** DashboardChartPanel 展示统一标题和尺寸的监控图表面板。 */
@@ -515,11 +452,6 @@ function UsageMeter({ value }: { value: number }) {
   /** statusClass 表示当前使用率对应的视觉状态。 */
   const statusClass = percent >= 92 ? 'is-critical' : percent >= 80 ? 'is-warning' : '';
   return <div className={`dashboard-table-meter ${statusClass}`}><span>{percent.toFixed(1)}%</span><i><b style={{ width: `${percent}%` }} /></i></div>;
-}
-
-/** DashboardProgress 展示平台业务资源可用率。 */
-function DashboardProgress({ label, value, color }: { label: string; value: number; color: string }) {
-  return <div className="dashboard-progress-row"><div><span>{label}</span><strong>{value}%</strong></div><Progress percent={value} showInfo={false} strokeColor={color} railColor="var(--surface-active)" /></div>;
 }
 
 /** normalizeServerMetrics 为热更新期间残留的旧版资源快照补齐新增字段。 */
@@ -654,12 +586,6 @@ function isSameMountPath(left: string, right?: string) {
   return right !== undefined && normalize(left) === normalize(right);
 }
 
-/** getRatio 返回限制在 0 到 100 的整数百分比。 */
-function getRatio(value: number, total: number) {
-  if (total <= 0) return 0;
-  return Math.min(100, Math.max(0, Math.round((value / total) * 100)));
-}
-
 /** clampPercent 将浮点使用率限制在图表可展示范围。 */
 function clampPercent(value: number) {
   return Math.min(100, Math.max(0, Number.isFinite(value) ? value : 0));
@@ -790,37 +716,5 @@ function createCoreUsageOption(theme: AdminTheme, values: number[]): EChartsOpti
     yAxis: { type: 'category', data: visibleValues.map((_, index) => `CPU ${index}`), axisLabel: { color: theme.palette.textSecondary }, axisTick: { show: false }, axisLine: { show: false } },
     dataZoom: visibleValues.length > 12 ? [{ type: 'inside', yAxisIndex: 0 }, { type: 'slider', yAxisIndex: 0, width: 8, right: 2, showDetail: false }] : undefined,
     series: [{ name: '使用率', type: 'bar', data: visibleValues.map((value) => Number(value.toFixed(1))), barMaxWidth: 14, showBackground: true, backgroundStyle: { color: theme.palette.active }, itemStyle: { color: theme.palette.charts[0], borderRadius: [0, 3, 3, 0] } }],
-  };
-}
-
-/** createOverviewOption 创建平台总量与有效资源柱状图。 */
-function createOverviewOption(theme: AdminTheme, values: { total: number[]; available: number[] }): EChartsOption {
-  /** axisStyle 保存坐标轴文字样式。 */
-  const axisStyle = { color: theme.palette.textSecondary };
-  return {
-    animationDuration: 500,
-    color: [theme.palette.charts[0], theme.palette.charts[1]],
-    tooltip: { trigger: 'axis', confine: true, backgroundColor: theme.palette.panel, borderColor: theme.palette.border, textStyle: { color: theme.palette.text }, formatter: '{b}<br/>{a0}：{c0}<br/>{a1}：{c1}' },
-    legend: { top: 2, right: 0, itemWidth: 10, itemHeight: 10, textStyle: axisStyle },
-    grid: { top: 54, right: 12, bottom: 30, left: 42, containLabel: true },
-    xAxis: { type: 'category', data: ['用户', '菜单', '文章'], axisTick: { show: false }, axisLine: { lineStyle: { color: theme.palette.border } }, axisLabel: axisStyle },
-    yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: theme.palette.border, type: 'dashed' } }, axisLabel: axisStyle },
-    series: [
-      { name: '资源总量', type: 'bar', data: values.total, barMaxWidth: 34, itemStyle: { borderRadius: [4, 4, 0, 0] } },
-      { name: '有效资源', type: 'bar', data: values.available, barMaxWidth: 34, itemStyle: { borderRadius: [4, 4, 0, 0] } },
-    ],
-  };
-}
-
-/** createCompositionOption 创建平台业务资源构成环形图。 */
-function createCompositionOption(theme: AdminTheme, resources: Array<{ name: string; value: number }>): EChartsOption {
-  /** hasResources 表示是否存在可展示的业务资源。 */
-  const hasResources = resources.some((resource) => resource.value > 0);
-  return {
-    animationDuration: 500,
-    color: [...theme.palette.charts],
-    tooltip: { trigger: 'item', confine: true, backgroundColor: theme.palette.panel, borderColor: theme.palette.border, textStyle: { color: theme.palette.text }, formatter: '{b}<br/>{c} 项 · {d}%' },
-    legend: { bottom: 0, left: 'center', icon: 'circle', itemWidth: 9, itemHeight: 9, textStyle: { color: theme.palette.textSecondary } },
-    series: [{ name: '资源构成', type: 'pie', radius: ['48%', '70%'], center: ['50%', '43%'], itemStyle: { borderColor: theme.palette.panel, borderWidth: 3, borderRadius: 4 }, label: { show: false }, data: hasResources ? resources : [{ name: '暂无资源', value: 1, itemStyle: { color: theme.palette.active } }] }],
   };
 }

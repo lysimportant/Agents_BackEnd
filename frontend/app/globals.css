@@ -3622,6 +3622,27 @@ tbody tr:hover,
   font-size: 12px;
 }
 
+.dashboard-stat-button {
+  appearance: none;
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.dashboard-stat-button:hover,
+.dashboard-stat-button:focus-visible {
+  border-color: var(--theme-primary);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--theme-primary) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.dashboard-stat-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .dashboard-chart-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.85fr);
@@ -4051,6 +4072,101 @@ tbody tr:hover,
   font-weight: 600;
   overflow-wrap: anywhere;
   text-align: right;
+}
+
+.business-resources-page .dashboard-hero-actions .ant-tag {
+  max-width: min(42vw, 420px);
+  margin: 0;
+  overflow: hidden;
+  border-color: rgba(255, 255, 255, 0.38);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-details-content {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.connection-details-summary,
+.connection-details-toolbar {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.connection-details-summary .ant-tag {
+  margin: 0;
+}
+
+.connection-details-summary > span:last-child {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.connection-details-toolbar .ant-select {
+  width: 170px;
+}
+
+.connection-details-toolbar .ant-input-affix-wrapper {
+  flex: 1 1 280px;
+  min-width: 220px;
+}
+
+.connection-details-table-scroll {
+  max-height: 56vh;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+}
+
+.connection-details-table {
+  min-width: 920px;
+}
+
+.connection-details-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.connection-details-table code {
+  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.connection-details-table .ant-tag {
+  margin: 0;
+}
+
+.connection-details-table-scroll > .ant-empty {
+  min-width: 100%;
+  margin: 32px auto;
+}
+
+@media (max-width: 768px) {
+  .connection-details-summary > span:last-child {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .connection-details-toolbar .ant-select,
+  .connection-details-toolbar .ant-input-affix-wrapper,
+  .connection-details-toolbar .ant-btn {
+    width: 100%;
+  }
+
+  .business-resources-page .dashboard-hero-actions .ant-tag {
+    max-width: 100%;
+  }
 }
 
 .ssh-terminal-title {

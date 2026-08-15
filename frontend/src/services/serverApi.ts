@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '@/src/config/constants';
-import type { ServerMetrics } from '@/src/types/admin';
+import type { ServerConnectionDetailsResponse, ServerMetrics } from '@/src/types/admin';
 import { requestWithSession } from '@/src/services/api';
 
 /** parseServerError 从服务器管理接口响应中提取可显示错误。 */
@@ -21,6 +21,16 @@ export async function fetchServerMetrics() {
     throw new Error(await parseServerError(response, '加载服务器资源失败'));
   }
   return await response.json() as ServerMetrics;
+}
+
+/** fetchServerConnections 按需读取服务器网络连接的端点、状态和所属进程。 */
+export async function fetchServerConnections() {
+  /** response 保存网络连接明细接口响应。 */
+  const response = await requestWithSession(`${API_BASE_URL}/api/server/connections`, { cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error(await parseServerError(response, '加载网络连接明细失败'));
+  }
+  return await response.json() as ServerConnectionDetailsResponse;
 }
 
 /** serverTerminalWebSocketURL 返回携带当前会话 Cookie 的 SSH 终端 WebSocket 地址。 */

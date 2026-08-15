@@ -98,6 +98,7 @@ type InternalChatEnvelope = {
 const menuIconByCode: Record<string, ReactNode> = {
   dashboard: <DashboardOutlined />,
   workspace: <DashboardOutlined />,
+  'business-resources': <AppstoreOutlined />,
   'socket-support': <MessageOutlined />,
   'visitor-analytics': <LineChartOutlined />,
   system: <SettingOutlined />,
@@ -119,6 +120,7 @@ function resolvePageKey(menu: AdminMenu): PageKey | null {
   /** pageByCode、Partial、Record、string、PageKey 保存页码编码、变量 Partial、记录等关联值。 */
   const pageByCode: Partial<Record<string, PageKey>> = {
     dashboard: 'dashboard',
+    'business-resources': 'business-resources',
     'socket-support': 'socket-support',
     'visitor-analytics': 'visitor-analytics',
     users: 'users',

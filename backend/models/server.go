@@ -255,6 +255,46 @@ type ServerConnectionResource struct {
 	CloseWait   int `json:"closeWait"`
 }
 
+// ServerConnectionDetailsResource 表示按需查询的网络连接明细快照。
+type ServerConnectionDetailsResource struct {
+	// Available 表示当前平台和进程权限是否允许枚举连接明细。
+	Available bool `json:"available"`
+	// Warning 表示连接明细不可用时的用户可见原因。
+	Warning string `json:"warning"`
+	// Sampled 表示本次从系统枚举到的套接字数量。
+	Sampled int `json:"sampled"`
+	// Truncated 表示系统枚举结果是否达到五千条采集上限。
+	Truncated bool `json:"truncated"`
+	// DetailsTruncated 表示返回明细是否达到五百条响应上限。
+	DetailsTruncated bool `json:"detailsTruncated"`
+	// Summary 表示同一次系统枚举得到的协议与常见状态总数。
+	Summary ServerConnectionResource `json:"summary"`
+	// Connections 表示排序后的连接端点、状态和所属进程。
+	Connections []ServerConnectionDetail `json:"connections"`
+	// SampledAt 表示连接明细采样时间。
+	SampledAt time.Time `json:"sampledAt"`
+}
+
+// ServerConnectionDetail 表示一个系统网络套接字的可诊断字段。
+type ServerConnectionDetail struct {
+	// Protocol 表示 TCP、UDP 或系统返回的其他传输协议。
+	Protocol string `json:"protocol"`
+	// AddressFamily 表示 IPv4、IPv6 或未知地址族。
+	AddressFamily string `json:"addressFamily"`
+	// LocalAddress、LocalPort 表示本地监听或连接端点。
+	LocalAddress string `json:"localAddress"`
+	LocalPort    uint32 `json:"localPort"`
+	// RemoteAddress、RemotePort 表示远端端点；监听套接字可能为空和零。
+	RemoteAddress string `json:"remoteAddress"`
+	RemotePort    uint32 `json:"remotePort"`
+	// Status 表示 ESTABLISHED、LISTEN、TIME_WAIT 等系统连接状态。
+	Status string `json:"status"`
+	// PID 表示拥有套接字的进程标识；权限不足时可能为零。
+	PID int32 `json:"pid"`
+	// ProcessName 表示可读取到的进程名称；权限不足时为空。
+	ProcessName string `json:"processName"`
+}
+
 // ServerProcessResource 表示后端进程自身的运行状态。
 type ServerProcessResource struct {
 	// PID 表示后端进程标识。

@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 
 /** 使用不受可编辑菜单名称影响的稳定编码标识工作台页面。 */
-export type PageKey = 'dashboard' | 'socket-support' | 'visitor-analytics' | 'users' | 'departments' | 'roles' | 'menus' | 'articles' | 'files' | 'profile';
+export type PageKey = 'dashboard' | 'business-resources' | 'socket-support' | 'visitor-analytics' | 'users' | 'departments' | 'roles' | 'menus' | 'articles' | 'files' | 'profile';
 
 /** 会话 API 可安全返回的已登录用户数据。 */
 export type AuthUser = {
@@ -548,6 +548,60 @@ export type ServerNetworkInterface = {
   dropsOut: number;
 };
 
+/** ServerConnectionSummary 表示网络套接字协议与常见状态汇总。 */
+export type ServerConnectionSummary = {
+  /** available 表示当前平台和权限是否允许读取连接信息。 */
+  available: boolean;
+  /** sampled 表示系统枚举的连接数量。 */
+  sampled: number;
+  /** truncated 表示系统枚举是否达到采集上限。 */
+  truncated: boolean;
+  /** tcp、udp 表示传输协议数量。 */
+  tcp: number;
+  udp: number;
+  /** established、listen、timeWait、closeWait 表示常见连接状态数量。 */
+  established: number;
+  listen: number;
+  timeWait: number;
+  closeWait: number;
+};
+
+/** ServerConnectionDetail 表示一个网络套接字的端点、状态和进程信息。 */
+export type ServerConnectionDetail = {
+  /** protocol、addressFamily 表示传输协议与 IP 地址族。 */
+  protocol: string;
+  addressFamily: string;
+  /** localAddress、localPort 表示本地端点。 */
+  localAddress: string;
+  localPort: number;
+  /** remoteAddress、remotePort 表示远端端点。 */
+  remoteAddress: string;
+  remotePort: number;
+  /** status 表示系统连接状态。 */
+  status: string;
+  /** pid、processName 表示套接字所属进程。 */
+  pid: number;
+  processName: string;
+};
+
+/** ServerConnectionDetailsResponse 表示按需查询的连接明细快照。 */
+export type ServerConnectionDetailsResponse = {
+  /** available、warning 表示当前环境能否读取明细及其降级原因。 */
+  available: boolean;
+  warning: string;
+  /** sampled 表示系统枚举数量。 */
+  sampled: number;
+  /** truncated、detailsTruncated 表示采集和响应数量是否被限制。 */
+  truncated: boolean;
+  detailsTruncated: boolean;
+  /** summary 表示同次采样的连接汇总。 */
+  summary: ServerConnectionSummary;
+  /** connections 表示受限数量的连接明细。 */
+  connections: ServerConnectionDetail[];
+  /** sampledAt 表示采样时间。 */
+  sampledAt: string;
+};
+
 /** ServerMetrics 表示后端实际运行环境的完整服务器监控快照。 */
 export type ServerMetrics = {
   /** scope 区分宿主机和容器运行环境。 */
@@ -637,17 +691,7 @@ export type ServerMetrics = {
     dropsIn: number;
     dropsOut: number;
     interfaces: ServerNetworkInterface[];
-    connections: {
-      available: boolean;
-      sampled: number;
-      truncated: boolean;
-      tcp: number;
-      udp: number;
-      established: number;
-      listen: number;
-      timeWait: number;
-      closeWait: number;
-    };
+    connections: ServerConnectionSummary;
   };
   /** process 表示后端进程和 Go 运行时状态。 */
   process: {

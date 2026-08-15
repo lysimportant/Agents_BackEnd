@@ -5,6 +5,7 @@ import type { ResourceActionAccess } from '@/src/utils/actionPermissions';
 import { isAdministratorRoleCode } from '@/src/utils/roleAccess';
 import { AuthPage } from '@/src/admin-pages/auth/AuthPage';
 import { DashboardPage } from '@/src/admin-pages/dashboard/DashboardPage';
+import { BusinessResourcesPage } from '@/src/admin-pages/dashboard/BusinessResourcesPage';
 import { DepartmentsPage } from '@/src/admin-pages/departments/DepartmentsPage';
 import { FilesPage } from '@/src/admin-pages/files/FilesPage';
 import { useAdminWorkspace } from '@/src/features/workspace/useAdminWorkspace';
@@ -90,6 +91,14 @@ export default function Home() {
     >
       {workspace.activePage === 'dashboard' && (
         <DashboardPage
+          serverMetrics={workspace.serverMetrics}
+          isLoadingServerMetrics={workspace.isLoadingServerMetrics}
+          onRefreshMetrics={workspace.loadServerMetrics}
+        />
+      )}
+
+      {workspace.activePage === 'business-resources' && (
+        <BusinessResourcesPage
           usersCount={workspace.users.length}
           activeUsers={workspace.users.filter((user) => user.canLogin && user.status !== '停用').length}
           menusCount={workspace.menus.length}
@@ -97,10 +106,7 @@ export default function Home() {
           articlesCount={workspace.articles.length}
           publishedArticles={workspace.articles.filter((article) => article.status === '已发布').length}
           isLoading={workspace.isLoading}
-          serverMetrics={workspace.serverMetrics}
-          isLoadingServerMetrics={workspace.isLoadingServerMetrics}
-          onRefresh={workspace.refreshDashboardData}
-          onRefreshMetrics={workspace.loadServerMetrics}
+          onRefresh={workspace.refreshData}
         />
       )}
 

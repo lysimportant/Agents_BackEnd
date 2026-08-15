@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	gonet "github.com/shirou/gopsutil/v4/net"
 )
 
 // TestCreateTerminalOriginChecker 验证 SSH WebSocket 只接受部署白名单或显式通配来源。
@@ -55,6 +57,41 @@ func TestCollectServerMetrics(t *testing.T) {
 	}
 	if snapshot.Network.PacketsReceived+snapshot.Network.PacketsSent == 0 && snapshot.Network.BytesReceived+snapshot.Network.BytesSent > 0 {
 		t.Fatalf("network counters are inconsistent: %+v", snapshot.Network)
+	}
+}
+
+// TestServerConnectionDetail 验证连接协议、地址族、端点和状态会转换为稳定字段。
+func TestServerConnectionDetail(t *testing.T) {
+	// connection 保存模拟的 IPv6 TCP 活动连接。
+	connection := gonet.ConnectionStat{
+		Family: 10,
+		Type:   1,
+		Laddr:  gonet.Addr{IP: "::1", Port: 8080},
+		Raddr:  gonet.Addr{IP: "2001:db8::2", Port: 443},
+		Status: "established",
+		Pid:    42,
+	}
+	// detail 保存转换后的 API 连接明细。
+	detail := serverConnectionDetail(connection, "collector-backend")
+	if detail.Protocol != "TCP" || detail.AddressFamily != "IPv6" || detail.Status != "ESTABLISHED" {
+		t.Fatalf("unexpected connection protocol fields: %+v", detail)
+	}
+	if detail.LocalAddress != "::1" || detail.LocalPort != 8080 || detail.RemotePort != 443 || detail.PID != 42 || detail.ProcessName != "collector-backend" {
+		t.Fatalf("unexpected connection endpoint fields: %+v", detail)
+	}
+}
+
+// TestSortServerConnectionDetails 验证活动连接会排在监听和等待状态之前。
+func TestSortServerConnectionDetails(t *testing.T) {
+	// details 保存乱序的连接状态样本。
+	details := []models.ServerConnectionDetail{
+		{Status: "TIME_WAIT", LocalAddress: "127.0.0.1", LocalPort: 9000},
+		{Status: "LISTEN", LocalAddress: "0.0.0.0", LocalPort: 8080},
+		{Status: "ESTABLISHED", LocalAddress: "127.0.0.1", LocalPort: 8080},
+	}
+	sortServerConnectionDetails(details)
+	if details[0].Status != "ESTABLISHED" || details[1].Status != "LISTEN" || details[2].Status != "TIME_WAIT" {
+		t.Fatalf("connection details were not sorted by diagnostic priority: %+v", details)
 	}
 }
 

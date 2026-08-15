@@ -875,6 +875,29 @@ func TestDefaultDashboardPermissionsAndBackfill(t *testing.T) {
 	}
 }
 
+// TestBusinessResourcesMenuSeed 验证业务资源页固定归属于工作台并使用稳定路径和排序。
+func TestBusinessResourcesMenuSeed(t *testing.T) {
+	// store 表示使用临时数据库的 SQLite 存储。
+	store, _ := openTempStore(t)
+	defer store.db.Close()
+	// workspace、businessResources 保存目标父菜单和业务资源菜单。
+	var workspace, businessResources models.Menu
+	for _, menu := range store.ListMenus() {
+		switch menu.Code {
+		case "workspace":
+			workspace = menu
+		case "business-resources":
+			businessResources = menu
+		}
+	}
+	if workspace.ID == 0 || businessResources.ID == 0 || businessResources.ParentID == nil {
+		t.Fatalf("business resources menu hierarchy missing: workspace=%+v business=%+v", workspace, businessResources)
+	}
+	if *businessResources.ParentID != workspace.ID || businessResources.Path != "business-resources" || businessResources.Sort != 12 || businessResources.Status != "启用" {
+		t.Fatalf("unexpected business resources menu seed: %+v", businessResources)
+	}
+}
+
 func sortedMenuIDs(menus []models.Menu) []int {
 	ids := make([]int, 0, len(menus))
 	for _, menu := range menus {
