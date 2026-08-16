@@ -227,15 +227,15 @@ C 端不复制业务数据、不直连 SQLite、不复用后台登录 Cookie，�
 
 文章额外新增 `contentLocale`，SQLite 列 `content_locale` 默认 `zh-CN`，用于标记正文实际语言并生成正确的 `lang` 与结构化数据；该字段不代表系统会自动翻译正文。
 
-公开图片还需要可稳定获取 `width`、`height` 和安全 MIME 类型。图片尺寸可在上传或首次发布时解析并保存，不能为了探测尺寸修改原文件。新增列和索引必须在迁移 SQL 旁写明中文用途、关联和访问规则。
+公开图片在上传时解析并保存原始宽高，SQLite 列为 `image_width`、`image_height`（API 字段 `imageWidth`、`imageHeight`），探测尺寸不修改原文件。文件 MIME 类型当前以客户端上传时声明的 `Content-Type` 为准，未做扩展名与文件头二次判定。新增列和索引必须在迁移 SQL 旁写明中文用途、关联和访问规则。
 
-`portalPublishedAt` 在资源第一次成功发布到门户时写入；取消发布时保留，重新发布时不伪造新的首次发布时间，后续变化使用 `updatedAt` 表达。`slug` 不新增数据库列，由公开层根据标题确定性生成，查询仍以稳定数字 `id` 为准。文章 `coverImage` 首期从正文中第一张满足公开条件的图片派生，没有可用图片时返回 `null` 并由 C 端使用站点默认图。
+文章 `portalPublishedAt` 在首次发布到门户时写入；取消发布时被清空，重新发布时重新写入当前时间，后续变化使用 `updatedAt` 表达。文件当前不写入或更新 `portal_published_at`（上传与元数据更新均不维护该列），公开文件列表的 `publishedAt` 因而为零值时间。`slug` 不新增数据库列，由公开层根据标题确定性生成，查询仍以稳定数字 `id` 为准。文章 `coverImage` 首期从正文中第一张满足公开条件的图片派生，没有可用图片时该字段为空并由 C 端使用站点默认图。
 
 ### 发布条件
 
 - 文章：`portalVisible=true`、`isPrivate=false`、`status="已发布"`。
-- 图片：`portalVisible=true`、`isPrivate=false`、`deletedAt=null`，且真实文件类型在图片公开白名单内。
-- 其他文件：`portalVisible=true`、`isPrivate=false`、`deletedAt=null`，且真实文件类型在资源公开白名单内。
+- 图片：`portalVisible=true`、`isPrivate=false`、`deletedAt IS NULL`，且 `content_type` 以 `image/` 为前缀。
+- 其他文件（资源）：`portalVisible=true`、`isPrivate=false`、`deletedAt IS NULL`，且 `content_type` 不以 `image/` 为前缀。
 - `portalFeatured=true` 不能绕过任何发布条件。
 - 任何条件不再满足时，公开 API 必须立即按未发布处理；后台仍保留原记录和原所有权。
 
@@ -245,9 +245,9 @@ C 端不复制业务数据、不直连 SQLite、不复用后台登录 Cookie，�
 - 新增稳定动作权限 `articles.portal-publish`、`files.portal-publish`；只有具有对应动作权限且满足原所有权/管理员规则的用户可以更改门户状态。
 - 普通编辑接口即使收到门户字段，也不得让无发布权限用户越权修改。
 - 文章切换为非“已发布”、资源切换为私密或文件进入回收站时，自动取消门户可见和精选状态；恢复后不得自动重新发布。
-- 发布文章前检查正文引用的本地媒体。未发布、私密、删除或不安全的本地资源必须在 B 端明确提示，不能让文章以破图或越权媒体状态发布。
+- 发布文章前检查正文引用的本地媒体（未发布、私密、删除或不安全的本地资源需在 B 端提示）当前尚未实现，列为后续增强。
 - 文章编辑表单增加正文语言选择，默认 `zh-CN`；该值受支持语言白名单校验，不能用翻译后的语言名称作为数据库值。
-- 所有发布、取消发布和精选变更应进入现有访问/操作审计能力可覆盖的日志范围，不记录文件物理路径。
+- 发布、取消发布和精选变更接入现有访问/操作审计能力当前尚未实现，列为后续增强；任何审计均不记录文件物理路径。
 
 ## 后端公开 API 需求
 
@@ -257,12 +257,12 @@ C 端不复制业务数据、不直连 SQLite、不复用后台登录 Cookie，�
 
 - 所有接口位于 `/api/public`，仅支持公开读取，不接受后台会话作为提权依据。
 - 列表统一返回 `{ "items": [], "pagination": { "page": 1, "pageSize": 24, "total": 0, "totalPages": 0 } }`。
-- `page` 从 `1` 开始；默认 `pageSize=24`，最大 `50`；非法分页、排序或类型参数返回 `400`。
+- `page` 从 `1` 开始；默认 `pageSize=24`，最大 `50`；`page` 与 `pageSize` 非法时回退到默认值，不返回 `400`。
 - 错误至少返回稳定 `code` 和可记录的 `error`，C 端根据 `code` 映射当前语言文案，不直接展示内部错误。
-- 时间使用 UTC RFC 3339，字段使用 camelCase；API 不根据 UI 语言翻译用户生成内容、分类或业务状态。
+- 时间使用 UTC RFC 3339（内部按 RFC 3339Nano 存储），字段使用 camelCase；API 不根据 UI 语言翻译用户生成内容、分类或业务状态。
 - 列表接口不返回文章完整正文、存储名称、物理路径、所有者 ID、后台权限字段或删除信息。
 - 公开详情不存在、已取消发布、私密或已删除时统一返回 `404`。
-- 列表与详情支持 `ETag` 或 `Last-Modified` 条件请求，并设置可控的公共缓存头；取消发布后必须能主动失效或在约定的短 TTL 内失效。
+- 列表与详情当前不返回 `ETag`、`Last-Modified` 或公共缓存头；条件请求与缓存失效机制列为后续增强。
 
 ### 公开文章列表
 
@@ -274,12 +274,11 @@ C 端不复制业务数据、不直连 SQLite、不复用后台登录 Cookie，�
   - `pageSize`
   - `category`
   - `keyword`
-  - `sort`
+  - `sort`（当前解析后未生效，列表固定按 `portal_published_at DESC, id DESC` 排序）
 - 返回规则：
   - 只返回满足文章门户发布条件的记录。
-  - `sort` 首期只允许 `latest`、`popular`、`featured`。
   - 不返回后台管理专用字段。
-  - 列表项包含 `id`、`slug`、`title`、`summary`、`category`、`author`、`contentLocale`、`views`、`publishedAt`、`updatedAt`、`coverImage`；`coverImage` 允许为 `null`。
+  - 列表项包含 `id`、`slug`、`title`、`summary`、`category`、`author`、`contentLocale`、`views`、`publishedAt`、`updatedAt`；列表项不派生 `coverImage`（该字段仅在详情返回）。
 
 ### 公开文章详情
 
@@ -288,28 +287,43 @@ C 端不复制业务数据、不直连 SQLite、不复用后台登录 Cookie，�
 - 鉴权：无需登录
 - 返回规则：
   - 仅允许访问满足门户发布条件的文章。
-  - 私密或不存在文章统一返回 `404`。
-  - 返回经过安全处理的正文和正文引用媒体，不返回后台所有权字段。
+  - 私密或不存在文章统一返回 `404`；非法 ID 返回 `400`。
+  - 响应结构为 `{ "item": { ... } }`，包含列表字段外加 `content`、`tableOfContents`、`relatedArticles`、`coverImage`。
+  - `content` 返回经过白名单清洗并重写正文引用媒体后的正文；`coverImage` 从正文首张公开图片派生，无图片时为空；`relatedArticles` 为同分类最多 6 篇；`tableOfContents` 当前未填充。
+  - 不返回后台所有权字段。
   - 首期详情读取不直接累加浏览量，避免爬虫和刷新造成写放大；访问统计作为独立增强项处理。
 
-### 公开文件列表
+### 公开图片列表
 
 - 方法：`GET`
-- 路径：`/api/public/files`
+- 路径：`/api/public/images`
 - 鉴权：无需登录
 - 查询参数：
   - `page`
   - `pageSize`
   - `category`
   - `keyword`
-  - `type`
-  - `sort`
+  - `sort`（当前解析后未生效，列表固定按 `portal_published_at DESC, id DESC` 排序）
 - 返回规则：
-  - 只返回满足文件门户发布条件的记录。
-  - `type=image` 只返回公开图片白名单内的文件，供瀑布流使用。
-  - `sort` 首期只允许 `latest`、`featured`、`name`。
+  - 只返回满足文件门户发布条件且 `content_type` 以 `image/` 为前缀的记录。
   - 不返回物理存储路径。
-  - 返回 `id`、`displayName`、`category`、`description`、`altText`、`contentType`、`size`、`width`、`height`、`publishedAt`、`previewUrl`、`thumbnailUrl` 和允许时的 `downloadUrl`。
+  - 返回 `id`、`displayName`、`category`、`description`、`altText`、`contentType`、`size`、`imageWidth`、`imageHeight`、`publishedAt`、`updatedAt`、`previewUrl`、`downloadUrl`；其中 `altText` 取显示名称，非图片字段缺省省略。
+
+### 公开资源列表
+
+- 方法：`GET`
+- 路径：`/api/public/resources`
+- 鉴权：无需登录
+- 查询参数：
+  - `page`
+  - `pageSize`
+  - `category`
+  - `keyword`
+  - `sort`（当前解析后未生效，列表固定按 `portal_published_at DESC, id DESC` 排序）
+- 返回规则：
+  - 只返回满足文件门户发布条件且 `content_type` 不以 `image/` 为前缀的记录。
+  - 不返回物理存储路径。
+  - 返回字段与公开图片列表一致，非图片记录 `altText`、`imageWidth`、`imageHeight` 缺省省略。
 
 ### 公开文件预览
 
@@ -317,22 +331,14 @@ C 端不复制业务数据、不直连 SQLite、不复用后台登录 Cookie，�
 - 路径：`/api/public/files/:id/preview`
 - 鉴权：无需登录
 - 返回规则：
-  - 仅允许公开、未删除文件。
-  - 只允许白名单图片、PDF 和浏览器安全视频内联预览；其他类型返回 `415` 或仅提供附件下载。
-  - 禁止接受任意磁盘路径。
-  - 设置准确的 `Content-Type`、`Content-Length`、`Content-Disposition`、缓存验证头和 `X-Content-Type-Options: nosniff`。
-  - SVG、HTML 和可执行内容不得作为匿名内联预览返回。
-  - 视频预览支持受控字节范围请求，避免拖动进度条时重复下载完整文件。
+  - 仅允许公开、未删除文件；缺失、私密或软删除统一返回 `404`，非法 ID 返回 `400`。
+  - 通过数据库 `storage_name` 定位物理文件，不接收任意磁盘路径参数。
+  - 设置 `Content-Type` 与 `Content-Disposition: inline`；当前未设置 `X-Content-Type-Options: nosniff`，也未按类型白名单拦截 SVG、HTML、脚本等，类型白名单列为后续增强。
+  - 底层使用 `http.ServeFile` 返回，天然支持受控字节范围请求。
 
 ### 公开文件缩略图
 
-- 方法：`GET`
-- 路径：`/api/public/files/:id/thumbnail`
-- 鉴权：无需登录
-- 返回规则：
-  - 仅允许公开、未删除图片文件。
-  - 必须返回真实缩略图或由可信图片优化链路生成的缩略图，不能以“thumbnail”路径直接返回未经缩放的超大原图。
-  - 支持至少两档受控尺寸，并限制宽高参数范围，禁止形成无限变体缓存攻击。
+- 当前无公开缩略图端点；图片缩放由 C 端直接使用 `/preview` 地址，缩略图变体列为后续增强。
 
 ### 公开文件下载
 
@@ -340,25 +346,24 @@ C 端不复制业务数据、不直连 SQLite、不复用后台登录 Cookie，�
 - 路径：`/api/public/files/:id/download`
 - 鉴权：无需登录
 - 返回规则：
-  - 下载前重新校验文件门户发布条件和文件类型白名单。
-  - 使用 `Content-Disposition: attachment` 和 `X-Content-Type-Options: nosniff`。
-  - 程序、脚本、HTML、SVG 和无法识别真实类型的文件首期返回 `415`。
-  - 文件缺失、取消发布、私密或删除统一返回 `404`。
+  - 下载前重新校验文件门户发布条件（公开、未删除）。
+  - 设置 `Content-Type` 与 `Content-Disposition: attachment`；当前未设置 `X-Content-Type-Options: nosniff`，也未按类型白名单拦截程序、脚本、HTML、SVG，类型白名单列为后续增强。
+  - 文件缺失、取消发布、私密或删除统一返回 `404`；非法 ID 返回 `400`。
 
 ### 公开分类列表
 
 - 方法：`GET`
 - 路径：`/api/public/categories`
 - 鉴权：无需登录
-- 返回内容：分类标识、显示名称、公开文章数、公开图片数、公开资源数、更新时间；数量只能统计满足门户发布条件的记录。
+- 返回内容：`{ "items": [ { "name", "articleCount", "imageCount", "resourceCount" } ] }`；分类以存在公开文章的分类为基准聚合，数量只统计满足门户发布条件的记录；当前不返回“更新时间”。
 
 ### 公开聚合搜索
 
 - 方法：`GET`
 - 路径：`/api/public/search`
 - 鉴权：无需登录
-- 查询参数：`keyword`、`page`、`pageSize`、`type`。
-- 返回规则：按文章、图片、资源分组；关键词长度和查询耗时必须受限，不能把 SQLite 通配符或内部字段直接暴露为查询能力。
+- 查询参数：`keyword`（必填，缺失返回 `400`；长度超过 40 字符时截断）。
+- 返回规则：返回 `{ "articles", "images", "resources" }` 三组，每组固定最多 12 条；当前不支持 `page`、`pageSize`、`type` 分页与分组过滤。
 
 ### 公开站点聚合
 
@@ -366,11 +371,13 @@ C 端不复制业务数据、不直连 SQLite、不复用后台登录 Cookie，�
 - 路径：`/api/public/site-summary`
 - 鉴权：无需登录
 - 返回内容：
-  - 公开文章数量。
-  - 公开图片数量。
-  - 最新文章。
-  - 精选或最新图片。
-  - 热门分类。
+  - `articleCount`：公开文章数量。
+  - `imageCount`：公开图片数量。
+  - `resourceCount`：公开资源数量。
+  - `categoryCount`：公开分类数量。
+  - `latestArticles`：最新文章（最多 6 篇）。
+  - `featuredImages`：精选图片（最多 8 张，无精选时回退最新）。
+  - `popularCategories`：热门分类（最多 6 个）。
 
 站点聚合只统计满足门户发布条件的内容。精选为空时回退到最新内容，不能因运营数据未配置导致首页完全空白。
 
@@ -381,12 +388,12 @@ C 端不复制业务数据、不直连 SQLite、不复用后台登录 Cookie，�
 - C 端不得展示已软删除文件。
 - C 端不得暴露 `storageName`、物理路径或上传目录结构。
 - 私密资源和不存在资源对外均可返回 `404`，避免泄露资源存在性。
-- 后端必须基于数据库记录拼接受控文件路径，并验证最终路径位于配置的上传根目录内；公开接口不得接收相对路径、绝对路径或存储文件名参数。
-- 文章正文按当前实际存储格式视为 HTML，必须使用成熟的白名单清洗方案移除 `script`、事件属性、危险 URL、任意 iframe 和可执行嵌入；禁止把原始正文直接传给 `dangerouslySetInnerHTML`。
-- 正文中的本地 `/api/files/:id/preview` 引用必须重写为对应公开媒体 URL，并逐个校验文件门户发布条件；不满足条件的媒体移除或替换为不可用占位。
-- 外部媒体首期只允许 `https://`；浏览器直接请求外部资源，不建设可访问任意 URL 的服务端代理，避免 SSRF。生产 CSP 必须限制脚本、连接、图片、媒体和 frame 来源。
-- 文件真实类型需要结合扩展名、声明 MIME 和文件头检测；不能只信任上传时的 `Content-Type`。
-- `/api/public/*` 配置独立速率限制、查询长度上限、分页上限和超时；接口不得返回 SQL、堆栈、内部路径或鉴权细节。
+- 后端必须基于数据库记录的 `storage_name` 拼接物理路径，公开接口只接收数字 ID，不得接收相对路径、绝对路径或存储文件名参数。
+- 文章正文按当前实际存储格式视为 HTML，使用白名单清洗方案移除 `script`、事件属性、危险 URL、任意 iframe 和可执行嵌入；禁止把原始正文直接传给 `dangerouslySetInnerHTML`。
+- 正文中的本地 `/api/files/:id/preview` 与 `/api/files/:id/thumbnail` 引用重写为对应公开媒体 URL，并逐个校验文件门户发布条件；不满足条件的媒体移除。
+- 外部媒体当前允许 `http://` 与 `https://` 白名单协议；浏览器直接请求外部资源，不建设可访问任意 URL 的服务端代理，避免 SSRF。生产 CSP 必须限制脚本、连接、图片、媒体和 frame 来源。
+- 文件真实类型当前以客户端上传时声明的 `Content-Type` 为准；扩展名与文件头联合检测列为后续增强。
+- `/api/public/*` 当前未配置独立速率限制；搜索关键词长度受限、分页上限为 50；接口不得返回 SQL、堆栈、内部路径或鉴权细节。
 - 生产 CORS 仅允许明确配置的门户 Origin；公开可读不等于允许任意站点携带凭证跨域调用，响应不得设置后台会话 Cookie。
 - 浏览器验收和测试不得删除、重置、覆盖 `backend/data/` 和 `backend/uploads/` 中的业务数据。
 - 如需联调后端，必须使用 `.workspace-temp/` 下的隔离 SQLite 和上传目录。
@@ -772,9 +779,9 @@ portal/
 
 - 迁移测试证明历史文章和文件的 `portalVisible` 默认关闭，且重复迁移不丢失已有业务数据。
 - 公开 API 测试覆盖已发布、未发布、私密、非“已发布”文章、软删除、取消发布、恢复、精选和无权限更改发布状态等边界。
-- 文件测试覆盖路径穿越、伪造 MIME、不安全 SVG/HTML/脚本、物理文件缺失、Range、缓存验证和取消发布后的访问。
+- 文件测试覆盖路径穿越、物理文件缺失、Range 和取消发布后的访问；伪造 MIME、不安全 SVG/HTML/脚本与缓存验证随类型白名单和缓存增强一并补充。
 - 富文本测试覆盖危险标签/属性/URL清洗，以及本地媒体公开地址重写和未发布媒体移除。
-- 查询测试覆盖分页上限、排序白名单、关键词限制、统一 `404` 和无敏感字段响应。
+- 查询测试覆盖分页上限、关键词限制、统一 `404` 和无敏感字段响应；排序白名单随 `sort` 实现一并补充。
 - `go test ./...` 通过。
 - `go vet ./...` 通过。
 - OpenAPI 文档同步公开接口。
@@ -809,8 +816,8 @@ portal/
 ### 第二阶段：公开 API
 
 - 后端新增 `/api/public/*` 只读接口。
-- 增加公开文章、文件、缩略图、下载、分类、搜索和站点聚合接口。
-- 完成富文本清洗、媒体重写、类型白名单、缓存与速率限制。
+- 增加公开文章、图片、资源、预览、下载、分类、搜索和站点聚合接口；缩略图、`sort` 生效、类型白名单、缓存与速率限制为后续增强。
+- 完成富文本清洗与媒体重写；类型白名单、缓存与速率限制为后续增强。
 - 更新 OpenAPI、README 和后端测试。
 
 ### 第三阶段：C 端基础骨架

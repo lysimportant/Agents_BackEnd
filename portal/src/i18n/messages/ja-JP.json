@@ -1,0 +1,188 @@
+{
+  "common": {
+    "loading": "読み込み中…",
+    "retry": "再試行",
+    "backHome": "ホームへ戻る",
+    "viewAll": "すべて見る",
+    "readMore": "続きを読む",
+    "close": "閉じる",
+    "search": "検索",
+    "allCategories": "すべてのカテゴリ",
+    "category": "カテゴリ",
+    "sortBy": "並べ替え",
+    "cancel": "キャンセル",
+    "copyLink": "リンクをコピー",
+    "share": "共有",
+    "copied": "リンクをコピーしました",
+    "download": "ダウンロード",
+    "preview": "プレビュー",
+    "showMore": "もっと見る",
+    "showLess": "閉じる"
+  },
+  "navigation": {
+    "home": "ホーム",
+    "articles": "記事",
+    "images": "画像",
+    "resources": "リソース",
+    "categories": "カテゴリ",
+    "about": "概要",
+    "searchPlaceholder": "コンテンツを検索…",
+    "searchToggle": "検索",
+    "openMenu": "メニューを開く",
+    "closeMenu": "メニューを閉じる",
+    "skipToContent": "本文へスキップ"
+  },
+  "theme": {
+    "label": "テーマ",
+    "light": "ライト",
+    "dark": "ダーク",
+    "ocean": "オーシャン",
+    "system": "システム"
+  },
+  "language": {
+    "label": "言語",
+    "switch": "言語を切り替え"
+  },
+  "home": {
+    "subtitle": "公開された記事・画像・リソースを探す",
+    "statsImages": "公開画像",
+    "statsArticles": "公開記事",
+    "statsResources": "公開リソース",
+    "statsCategories": "カテゴリ",
+    "featuredImages": "注目の画像",
+    "latestArticles": "最新の記事",
+    "popularCategories": "人気のカテゴリ",
+    "viewAllImages": "すべての画像を見る",
+    "viewAllArticles": "すべての記事を見る"
+  },
+  "articles": {
+    "title": "記事",
+    "description": "公開された記事を閲覧",
+    "emptyTitle": "記事はまだありません",
+    "emptyDescription": "公開された記事はまだありません。",
+    "allCategories": "すべてのカテゴリ",
+    "filterCategory": "カテゴリで絞り込み",
+    "views": "回閲覧",
+    "related": "関連記事"
+  },
+  "sort": {
+    "label": "並べ替え",
+    "latest": "最新",
+    "popular": "人気",
+    "recommended": "おすすめ"
+  },
+  "images": {
+    "title": "画像",
+    "description": "公開画像を閲覧",
+    "emptyTitle": "画像はまだありません",
+    "emptyDescription": "公開された画像はまだありません。",
+    "zoomIn": "拡大",
+    "zoomOut": "縮小",
+    "previousImage": "前の画像",
+    "nextImage": "次の画像",
+    "closePreview": "プレビューを閉じる",
+    "category": "カテゴリ",
+    "size": "サイズ",
+    "publishedAt": "公開日時",
+    "dimensions": "寸法"
+  },
+  "resources": {
+    "title": "リソース",
+    "description": "公開ファイルを閲覧",
+    "emptyTitle": "リソースはまだありません",
+    "emptyDescription": "公開されたファイルはまだありません。",
+    "download": "ダウンロード",
+    "preview": "プレビュー",
+    "fileType": "ファイル種別",
+    "fileSize": "ファイルサイズ",
+    "publishedAt": "公開日時"
+  },
+  "categories": {
+    "title": "カテゴリ",
+    "description": "カテゴリ別に公開コンテンツを閲覧",
+    "emptyTitle": "カテゴリがありません",
+    "emptyDescription": "公開カテゴリはまだありません。",
+    "articlesCount": "記事",
+    "imagesCount": "画像",
+    "resourcesCount": "リソース"
+  },
+  "categoryDetail": {
+    "articles": "記事",
+    "images": "画像",
+    "resources": "リソース",
+    "emptyTitle": "まだコンテンツがありません",
+    "emptyDescription": "このカテゴリには公開コンテンツがまだありません。"
+  },
+  "search": {
+    "title": "検索",
+    "description": "公開記事・画像・リソースを検索",
+    "placeholder": "キーワードを入力…",
+    "submit": "検索",
+    "noResultsTitle": "結果が見つかりません",
+    "noResultsDescription": "別のキーワードをお試しください。",
+    "resultsFor": "「{keyword}」の検索結果",
+    "articles": "記事",
+    "images": "画像",
+    "resources": "リソース",
+    "recommended": "おすすめコンテンツ"
+  },
+  "about": {
+    "title": "概要",
+    "description": "このコンテンツポータルについて",
+    "introTitle": "プラットフォーム紹介",
+    "introBody": "HuaJian_AI コンテンツポータルは、審査を経て公開された記事・画像・ファイルを一般向けに紹介し、明快で集中できる閲覧体験を提供します。",
+    "scopeTitle": "公開コンテンツについて",
+    "scopeBody": "このポータルは明示的に公開されたコンテンツのみを表示し、非公開・未公開・削除済みのコンテンツは表示されません。",
+    "privacyTitle": "プライバシー",
+    "privacyBody": "必要な言語設定とテーマ設定のみを保存し、不要な訪問者識別情報は収集しません。",
+    "contactTitle": "お問い合わせとサポート",
+    "contactBody": "サポートが必要な場合は、有効になっている場合に限りカスタマーサポートからご連絡いただけます。"
+  },
+  "footer": {
+    "tagline": "公開コンテンツポータル",
+    "quickLinks": "クイックリンク",
+    "rights": "無断転載を禁じます",
+    "privacyNote": "公開されたコンテンツのみを表示します"
+  },
+  "errors": {
+    "notFoundTitle": "ページが見つかりません",
+    "notFoundDescription": "このコンテンツは存在しないか、公開が取り消されたか、アクセスできません。",
+    "serverErrorTitle": "サービスを一時的に利用できません",
+    "serverErrorDescription": "しばらくしてからお試しください。",
+    "offlineTitle": "オフラインです",
+    "offlineDescription": "接続を確認して再試行してください。",
+    "loadFailed": "コンテンツの読み込みに失敗しました"
+  },
+  "pagination": {
+    "previous": "前へ",
+    "next": "次へ",
+    "page": "{page} ページ"
+  },
+  "a11y": {
+    "themeToggle": "テーマを切り替え",
+    "languageSwitch": "言語を切り替え",
+    "searchToggle": "検索を開く",
+    "openArticle": "記事を読む",
+    "openImage": "画像を見る",
+    "articleToc": "目次",
+    "readingProgress": "読書の進捗"
+  },
+  "metadata": {
+    "siteTitle": "HuaJian_AI コンテンツポータル",
+    "siteDescription": "審査を経て公開された記事・画像・リソースを閲覧",
+    "homeTitle": "ホーム",
+    "homeDescription": "審査を経て公開された記事・画像・リソースを閲覧",
+    "articlesTitle": "記事",
+    "articlesDescription": "公開された記事を閲覧",
+    "imagesTitle": "画像",
+    "imagesDescription": "公開画像を閲覧",
+    "resourcesTitle": "リソース",
+    "resourcesDescription": "公開ファイルを閲覧",
+    "categoriesTitle": "カテゴリ",
+    "categoriesDescription": "カテゴリ別に公開コンテンツを閲覧",
+    "searchTitle": "検索",
+    "searchDescription": "公開記事・画像・リソースを検索",
+    "aboutTitle": "概要",
+    "aboutDescription": "このコンテンツポータルについて"
+  }
+}

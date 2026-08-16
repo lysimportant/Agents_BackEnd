@@ -85,6 +85,8 @@ type PublicFileListItem struct {
 	Size int64 `json:"size"`
 	// PreviewURL 文件预览地址。
 	PreviewURL string `json:"previewUrl,omitempty"`
+	// ThumbnailURL 图片缩略图地址，非图片时缺省。
+	ThumbnailURL string `json:"thumbnailUrl,omitempty"`
 	// DownloadURL 文件下载地址。
 	DownloadURL string `json:"downloadUrl,omitempty"`
 	// ImageWidth 图片宽度，非图片时为 0。

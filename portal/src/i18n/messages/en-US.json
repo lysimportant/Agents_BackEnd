@@ -1,0 +1,188 @@
+{
+  "common": {
+    "loading": "Loading…",
+    "retry": "Retry",
+    "backHome": "Back to home",
+    "viewAll": "View all",
+    "readMore": "Read more",
+    "close": "Close",
+    "search": "Search",
+    "allCategories": "All categories",
+    "category": "Category",
+    "sortBy": "Sort",
+    "cancel": "Cancel",
+    "copyLink": "Copy link",
+    "share": "Share",
+    "copied": "Link copied",
+    "download": "Download",
+    "preview": "Preview",
+    "showMore": "Show more",
+    "showLess": "Show less"
+  },
+  "navigation": {
+    "home": "Home",
+    "articles": "Articles",
+    "images": "Images",
+    "resources": "Resources",
+    "categories": "Categories",
+    "about": "About",
+    "searchPlaceholder": "Search content…",
+    "searchToggle": "Search",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "skipToContent": "Skip to content"
+  },
+  "theme": {
+    "label": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "ocean": "Ocean",
+    "system": "System"
+  },
+  "language": {
+    "label": "Language",
+    "switch": "Switch language"
+  },
+  "home": {
+    "subtitle": "Explore public articles, images and resources",
+    "statsImages": "Public images",
+    "statsArticles": "Public articles",
+    "statsResources": "Public resources",
+    "statsCategories": "Categories",
+    "featuredImages": "Featured images",
+    "latestArticles": "Latest articles",
+    "popularCategories": "Popular categories",
+    "viewAllImages": "View all images",
+    "viewAllArticles": "View all articles"
+  },
+  "articles": {
+    "title": "Articles",
+    "description": "Browse published public articles",
+    "emptyTitle": "No articles yet",
+    "emptyDescription": "There are no public articles here yet.",
+    "allCategories": "All categories",
+    "filterCategory": "Filter by category",
+    "views": "views",
+    "related": "Related articles"
+  },
+  "sort": {
+    "label": "Sort",
+    "latest": "Latest",
+    "popular": "Popular",
+    "recommended": "Recommended"
+  },
+  "images": {
+    "title": "Images",
+    "description": "Browse public images",
+    "emptyTitle": "No images yet",
+    "emptyDescription": "There are no public images here yet.",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "previousImage": "Previous image",
+    "nextImage": "Next image",
+    "closePreview": "Close preview",
+    "category": "Category",
+    "size": "Size",
+    "publishedAt": "Published",
+    "dimensions": "Dimensions"
+  },
+  "resources": {
+    "title": "Resources",
+    "description": "Browse public file resources",
+    "emptyTitle": "No resources yet",
+    "emptyDescription": "There are no public files here yet.",
+    "download": "Download",
+    "preview": "Preview",
+    "fileType": "File type",
+    "fileSize": "File size",
+    "publishedAt": "Published"
+  },
+  "categories": {
+    "title": "Categories",
+    "description": "Browse public content by category",
+    "emptyTitle": "No categories",
+    "emptyDescription": "There are no public categories yet.",
+    "articlesCount": "articles",
+    "imagesCount": "images",
+    "resourcesCount": "resources"
+  },
+  "categoryDetail": {
+    "articles": "Articles",
+    "images": "Images",
+    "resources": "Resources",
+    "emptyTitle": "Nothing here yet",
+    "emptyDescription": "There is no public content in this category yet."
+  },
+  "search": {
+    "title": "Search",
+    "description": "Search public articles, images and resources",
+    "placeholder": "Type a keyword…",
+    "submit": "Search",
+    "noResultsTitle": "No results found",
+    "noResultsDescription": "Try a different keyword.",
+    "resultsFor": "Results for {keyword}",
+    "articles": "Articles",
+    "images": "Images",
+    "resources": "Resources",
+    "recommended": "Recommended"
+  },
+  "about": {
+    "title": "About",
+    "description": "Learn about this content portal",
+    "introTitle": "About the platform",
+    "introBody": "The HuaJian_AI content portal showcases reviewed and published articles, images and files, focused on a clear reading and browsing experience.",
+    "scopeTitle": "Public content",
+    "scopeBody": "This portal only shows content that has been explicitly published; private, unpublished or deleted content never appears here.",
+    "privacyTitle": "Privacy",
+    "privacyBody": "We only store essential language and theme preferences and do not collect unnecessary visitor identifiers.",
+    "contactTitle": "Contact and support",
+    "contactBody": "If you need help, reach us through the customer service entry when it is enabled."
+  },
+  "footer": {
+    "tagline": "Public content portal",
+    "quickLinks": "Quick links",
+    "rights": "All rights reserved",
+    "privacyNote": "Only published public content is shown"
+  },
+  "errors": {
+    "notFoundTitle": "Page not found",
+    "notFoundDescription": "This content does not exist, has been unpublished or is not accessible.",
+    "serverErrorTitle": "Service temporarily unavailable",
+    "serverErrorDescription": "Please try again later.",
+    "offlineTitle": "You are offline",
+    "offlineDescription": "Check your connection and try again.",
+    "loadFailed": "Failed to load content"
+  },
+  "pagination": {
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page {page}"
+  },
+  "a11y": {
+    "themeToggle": "Toggle theme",
+    "languageSwitch": "Switch language",
+    "searchToggle": "Open search",
+    "openArticle": "Read article",
+    "openImage": "View image",
+    "articleToc": "Table of contents",
+    "readingProgress": "Reading progress"
+  },
+  "metadata": {
+    "siteTitle": "HuaJian_AI Content Portal",
+    "siteDescription": "Browse reviewed and published articles, images and resources",
+    "homeTitle": "Home",
+    "homeDescription": "Browse reviewed and published articles, images and resources",
+    "articlesTitle": "Articles",
+    "articlesDescription": "Browse published public articles",
+    "imagesTitle": "Images",
+    "imagesDescription": "Browse public images",
+    "resourcesTitle": "Resources",
+    "resourcesDescription": "Browse public file resources",
+    "categoriesTitle": "Categories",
+    "categoriesDescription": "Browse public content by category",
+    "searchTitle": "Search",
+    "searchDescription": "Search public articles, images and resources",
+    "aboutTitle": "About",
+    "aboutDescription": "Learn about this content portal"
+  }
+}

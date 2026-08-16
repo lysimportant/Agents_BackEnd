@@ -1,0 +1,188 @@
+{
+  "common": {
+    "loading": "加载中…",
+    "retry": "重试",
+    "backHome": "返回首页",
+    "viewAll": "查看全部",
+    "readMore": "阅读全文",
+    "close": "关闭",
+    "search": "搜索",
+    "allCategories": "全部分类",
+    "category": "分类",
+    "sortBy": "排序",
+    "cancel": "取消",
+    "copyLink": "复制链接",
+    "share": "分享",
+    "copied": "链接已复制",
+    "download": "下载",
+    "preview": "预览",
+    "showMore": "展开更多",
+    "showLess": "收起"
+  },
+  "navigation": {
+    "home": "首页",
+    "articles": "文章",
+    "images": "图片",
+    "resources": "资源",
+    "categories": "分类",
+    "about": "关于",
+    "searchPlaceholder": "搜索内容…",
+    "searchToggle": "搜索",
+    "openMenu": "打开菜单",
+    "closeMenu": "关闭菜单",
+    "skipToContent": "跳到主要内容"
+  },
+  "theme": {
+    "label": "主题",
+    "light": "浅色",
+    "dark": "深色",
+    "ocean": "海洋品牌",
+    "system": "跟随系统"
+  },
+  "language": {
+    "label": "语言",
+    "switch": "切换语言"
+  },
+  "home": {
+    "subtitle": "探索公开的文章、图片与资源",
+    "statsImages": "公开图片",
+    "statsArticles": "公开文章",
+    "statsResources": "公开资源",
+    "statsCategories": "内容分类",
+    "featuredImages": "精选图片",
+    "latestArticles": "最新文章",
+    "popularCategories": "热门分类",
+    "viewAllImages": "查看全部图片",
+    "viewAllArticles": "查看全部文章"
+  },
+  "articles": {
+    "title": "文章",
+    "description": "浏览已发布的公开文章",
+    "emptyTitle": "暂无文章",
+    "emptyDescription": "这里还没有公开文章，敬请期待。",
+    "allCategories": "全部分类",
+    "filterCategory": "按分类筛选",
+    "views": "次阅读",
+    "related": "相关文章"
+  },
+  "sort": {
+    "label": "排序",
+    "latest": "最新",
+    "popular": "热门",
+    "recommended": "推荐"
+  },
+  "images": {
+    "title": "图片",
+    "description": "浏览公开图片资源",
+    "emptyTitle": "暂无图片",
+    "emptyDescription": "这里还没有公开图片，敬请期待。",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "previousImage": "上一张",
+    "nextImage": "下一张",
+    "closePreview": "关闭预览",
+    "category": "分类",
+    "size": "大小",
+    "publishedAt": "发布时间",
+    "dimensions": "尺寸"
+  },
+  "resources": {
+    "title": "资源",
+    "description": "浏览公开文件资源",
+    "emptyTitle": "暂无资源",
+    "emptyDescription": "这里还没有公开文件，敬请期待。",
+    "download": "下载",
+    "preview": "预览",
+    "fileType": "文件类型",
+    "fileSize": "文件大小",
+    "publishedAt": "发布时间"
+  },
+  "categories": {
+    "title": "分类",
+    "description": "按分类浏览公开内容",
+    "emptyTitle": "暂无分类",
+    "emptyDescription": "暂时没有公开内容分类。",
+    "articlesCount": "文章",
+    "imagesCount": "图片",
+    "resourcesCount": "资源"
+  },
+  "categoryDetail": {
+    "articles": "文章",
+    "images": "图片",
+    "resources": "资源",
+    "emptyTitle": "该分类暂无内容",
+    "emptyDescription": "此分类下暂时没有公开内容。"
+  },
+  "search": {
+    "title": "搜索",
+    "description": "搜索公开的文章、图片与资源",
+    "placeholder": "输入关键词搜索…",
+    "submit": "搜索",
+    "noResultsTitle": "没有找到结果",
+    "noResultsDescription": "请尝试其他关键词。",
+    "resultsFor": "关于「{keyword}」的搜索结果",
+    "articles": "文章",
+    "images": "图片",
+    "resources": "资源",
+    "recommended": "推荐内容"
+  },
+  "about": {
+    "title": "关于",
+    "description": "了解本内容门户",
+    "introTitle": "平台介绍",
+    "introBody": "HuaJian_AI 内容门户面向公众展示经审核发布的文章、图片与文件资源，致力于清晰、专注的阅读与浏览体验。",
+    "scopeTitle": "公开资源说明",
+    "scopeBody": "本门户仅展示已明确发布到门户的公开内容；私密、未发布或已删除的内容不会出现在这里。",
+    "privacyTitle": "隐私说明",
+    "privacyBody": "我们仅保存必要的语言偏好与主题偏好，不收集不必要的访问者标识。",
+    "contactTitle": "联系与客服",
+    "contactBody": "如需帮助，可通过站内提供的客服入口与我们联系（若已启用）。"
+  },
+  "footer": {
+    "tagline": "公开内容门户",
+    "quickLinks": "快速导航",
+    "rights": "版权所有",
+    "privacyNote": "仅展示已公开发布的内容"
+  },
+  "errors": {
+    "notFoundTitle": "页面不存在",
+    "notFoundDescription": "该内容不存在、已取消发布或无权访问。",
+    "serverErrorTitle": "服务暂时不可用",
+    "serverErrorDescription": "请稍后重试。",
+    "offlineTitle": "网络不可用",
+    "offlineDescription": "请检查网络连接后重试。",
+    "loadFailed": "内容加载失败"
+  },
+  "pagination": {
+    "previous": "上一页",
+    "next": "下一页",
+    "page": "第 {page} 页"
+  },
+  "a11y": {
+    "themeToggle": "切换主题",
+    "languageSwitch": "切换语言",
+    "searchToggle": "打开搜索",
+    "openArticle": "阅读文章",
+    "openImage": "查看图片",
+    "articleToc": "文章目录",
+    "readingProgress": "阅读进度"
+  },
+  "metadata": {
+    "siteTitle": "HuaJian_AI 内容门户",
+    "siteDescription": "浏览经审核发布的公开文章、图片与资源",
+    "homeTitle": "首页",
+    "homeDescription": "浏览经审核发布的公开文章、图片与资源",
+    "articlesTitle": "文章",
+    "articlesDescription": "浏览已发布的公开文章",
+    "imagesTitle": "图片",
+    "imagesDescription": "浏览公开图片资源",
+    "resourcesTitle": "资源",
+    "resourcesDescription": "浏览公开文件资源",
+    "categoriesTitle": "分类",
+    "categoriesDescription": "按分类浏览公开内容",
+    "searchTitle": "搜索",
+    "searchDescription": "搜索公开的文章、图片与资源",
+    "aboutTitle": "关于",
+    "aboutDescription": "了解本内容门户"
+  }
+}

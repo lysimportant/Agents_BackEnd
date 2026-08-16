@@ -70,6 +70,34 @@ npm run dev
 门户页面只通过后端 `/api/public/*` 只读接口取数，不携带后台登录 Cookie，也不提供任何写能力。
 
 如需覆盖后端地址或站点地址，可设置 `NEXT_PUBLIC_API_BASE_URL` 与 `NEXT_PUBLIC_SITE_URL`；详见 `portal/README.md`。
+
+门户构建与验证：
+
+```powershell
+cd portal
+npm run typecheck
+npm run lint
+npm run build
+npm run docs
+```
+
+门户只消费后端公开只读接口，具体路由与契约见 `docs/api/openapi.yaml` 与 `docs/portal-requirements.md`。
+
+### 公开接口（C 端门户）
+
+以下接口无需登录，仅返回满足门户发布条件的内容，不返回存储路径、所有者或删除信息：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/public/articles` | 公开文章列表，支持 `page`、`pageSize`、`category`、`keyword` |
+| GET | `/api/public/articles/:id` | 公开文章详情 |
+| GET | `/api/public/images` | 公开图片列表 |
+| GET | `/api/public/resources` | 公开资源列表 |
+| GET | `/api/public/files/:id/preview` | 公开文件内联预览 |
+| GET | `/api/public/files/:id/download` | 公开文件下载 |
+| GET | `/api/public/categories` | 公开分类聚合 |
+| GET | `/api/public/site-summary` | 站点聚合概览 |
+| GET | `/api/public/search?keyword=` | 聚合搜索（文章/图片/资源） |
 ## API
 
 除 `GET /health`、`/api/auth/*` 和访客客服入口 `/api/socket/customer*` 外，`/api` 下接口都需要先登录并携带后端写入的 HttpOnly Cookie。访客客服使用服务端生成的随机会话 ID 与访客令牌，令牌只以哈希形式持久化。前端管理请求默认使用 `credentials: 'include'`。

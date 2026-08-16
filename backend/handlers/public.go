@@ -2,6 +2,12 @@ package handlers
 
 import (
 	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	_ "image/gif"
+	"image/jpeg"
+	_ "image/png"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -10,6 +16,7 @@ import (
 
 	"collector-backend/content"
 	"collector-backend/models"
+	"collector-backend/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -192,6 +199,57 @@ func (h *PublicHandler) PreviewFile(c *gin.Context) {
 // DownloadFile 处理 GET /api/public/files/:id/download 返回附件下载。
 func (h *PublicHandler) DownloadFile(c *gin.Context) {
 	h.servePublicFile(c, true)
+}
+
+// Thumbnail 处理 GET /api/public/files/:id/thumbnail 返回按需缩放的缩略图。
+func (h *PublicHandler) Thumbnail(c *gin.Context) {
+	// rawID 保存路由参数中的原始文件编号。
+	rawID := strings.TrimSpace(c.Param("id"))
+	// id、err 保存解析后的文件编号与解析错误。
+	id, err := strconv.Atoi(rawID)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_id", "error": "无效的文件 ID"})
+		return
+	}
+	// file、found 保存查询到的公开文件及是否存在，非图片不提供缩略图。
+	file, found := h.store.FindPublicFile(id)
+	if !found || !strings.HasPrefix(file.ContentType, "image/") {
+		c.JSON(http.StatusNotFound, gin.H{"code": "not_found", "error": "文件不存在"})
+		return
+	}
+	// storagePath 保存解析后的物理文件路径。
+	storagePath := h.resolvePublicStoragePath(id)
+	if storagePath == "" {
+		c.JSON(http.StatusNotFound, gin.H{"code": "not_found", "error": "文件不存在"})
+		return
+	}
+	// source 保存打开的物理文件，用于解码图片。
+	source, openErr := os.Open(storagePath)
+	if openErr != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": "not_found", "error": "文件不可用"})
+		return
+	}
+	// decoded、decodeErr 保存解码结果；未支持的格式回退为原文件预览。
+	decoded, _, decodeErr := image.Decode(source)
+	_ = source.Close()
+	if decodeErr != nil {
+		h.servePublicFile(c, false)
+		return
+	}
+	// thumbnail 保存缩放后的缩略图。
+	thumbnail := utils.ResizeToFit(decoded, 480, 480)
+	// 合成到白色背景，避免透明图片缩略图出现黑底。
+	bounds := thumbnail.Bounds()
+	background := image.NewRGBA(bounds)
+	draw.Draw(background, bounds, image.NewUniform(color.White), image.Point{}, draw.Src)
+	draw.Draw(background, bounds, thumbnail, image.Point{}, draw.Over)
+	// 输出 JPEG 缩略图，附带较长浏览器缓存。
+	c.Header("Content-Type", "image/jpeg")
+	c.Header("Content-Disposition", "inline")
+	c.Header("Cache-Control", "public, max-age=86400")
+	if encodeErr := jpeg.Encode(c.Writer, background, &jpeg.Options{Quality: 80}); encodeErr != nil {
+		c.Status(http.StatusInternalServerError)
+	}
 }
 
 // servePublicFile 校验公开文件存在性并按会话或下载方式返回文件内容。

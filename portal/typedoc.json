@@ -1,0 +1,15 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": [
+    "src/types/publicContent.ts",
+    "src/services/publicApi.ts",
+    "src/config/constants.ts",
+    "src/i18n/routing.ts",
+    "src/content/sanitizeArticle.ts"
+  ],
+  "out": "docs",
+  "readme": "none",
+  "entryPointStrategy": "resolve",
+  "excludeExternals": true,
+  "excludePrivate": true
+}

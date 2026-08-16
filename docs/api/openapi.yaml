@@ -69,6 +69,15 @@ paths:
       responses:
         '200': { description: 预览媒体内容 }
         '404': { description: 文件不存在或未公开 }
+  /api/public/files/{id}/thumbnail:
+    get:
+      tags: [公开门户]
+      summary: 获取公开图片缩略图
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: JPEG 缩略图流 }
+        '404': { description: 文件不存在、未公开或非图片 }
   /api/public/files/{id}/download:
     get:
       tags: [公开门户]

@@ -258,9 +258,10 @@ func scanPublicFile(row scanner) (models.PublicFileListItem, bool) {
 	// 使用相对公开地址，由 C 端结合基础地址拼接，不暴露存储结构。
 	item.PreviewURL = "/api/public/files/" + strconv.Itoa(item.ID) + "/preview"
 	item.DownloadURL = "/api/public/files/" + strconv.Itoa(item.ID) + "/download"
-	// 图片使用文件名作为替代文本。
+	// 图片使用文件名作为替代文本，并生成缩略图地址供 C 端省流量加载。
 	if strings.HasPrefix(item.ContentType, "image/") {
 		item.AltText = item.DisplayName
+		item.ThumbnailURL = "/api/public/files/" + strconv.Itoa(item.ID) + "/thumbnail"
 	}
 	return item, true
 }
