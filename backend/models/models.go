@@ -490,11 +490,9 @@ type Article struct {
 	OwnerName string `json:"ownerName"`
 	// IsPrivate 表示变量 IsPrivate。
 	IsPrivate bool `json:"isPrivate"`
-	// PortalVisible 是否允许匿名 C 端公开访问。
-	PortalVisible bool `json:"portalVisible"`
-	// PortalFeatured 是否作为门户首页或分类精选。
-	PortalFeatured bool `json:"portalFeatured"`
-	// PortalPublishedAt 表示首次发布到门户的时间，取消发布后保留。
+	// Is18R 是否开启 18R 限制。
+	Is18R bool `json:"is18r"`
+	// PortalPublishedAt 表示首次发布时间。
 	PortalPublishedAt *time.Time `json:"portalPublishedAt,omitempty"`
 	// ContentLocale 表示正文实际语言，用于 SEO 的 lang 与结构化数据。
 	ContentLocale string `json:"contentLocale"`
@@ -522,10 +520,8 @@ type ArticleRequest struct {
 	Views int `json:"views"`
 	// IsPrivate 表示变量 IsPrivate。
 	IsPrivate bool `json:"isPrivate"`
-	// PortalVisible 是否允许匿名 C 端公开访问。
-	PortalVisible bool `json:"portalVisible"`
-	// PortalFeatured 是否作为门户首页或分类精选。
-	PortalFeatured bool `json:"portalFeatured"`
+	// Is18R 是否开启 18R 限制。
+	Is18R bool `json:"is18r"`
 	// ContentLocale 表示正文实际语言，受支持语言白名单校验。
 	ContentLocale string `json:"contentLocale"`
 }
@@ -556,12 +552,8 @@ type ManagedFile struct {
 	OwnerName string `json:"ownerName"`
 	// IsPrivate 表示变量 IsPrivate。
 	IsPrivate bool `json:"isPrivate"`
-	// PortalVisible 是否允许匿名 C 端公开访问。
-	PortalVisible bool `json:"portalVisible"`
-	// PortalFeatured 是否作为门户首页或分类精选。
-	PortalFeatured bool `json:"portalFeatured"`
-	// PortalPublishedAt 表示首次发布到门户的时间，取消发布后保留。
-	PortalPublishedAt *time.Time `json:"portalPublishedAt,omitempty"`
+	// Is18R 是否开启 18R 限制，开启后仅登录且开启 18R 的用户可见。
+	Is18R bool `json:"is18r"`
 	// ImageWidth 表示公开图片原始宽度，首期用于瀑布流占位。
 	ImageWidth int `json:"imageWidth,omitempty"`
 	// ImageHeight 表示公开图片原始高度，首期用于瀑布流占位。
@@ -592,10 +584,8 @@ type FileMetadataRequest struct {
 	Description string `json:"description"`
 	// IsPrivate 表示变量 IsPrivate。
 	IsPrivate bool `json:"isPrivate"`
-	// PortalVisible 是否允许匿名 C 端公开访问。
-	PortalVisible bool `json:"portalVisible"`
-	// PortalFeatured 是否作为门户首页或分类精选。
-	PortalFeatured bool `json:"portalFeatured"`
+	// Is18R 是否开启 18R 限制。
+	Is18R bool `json:"is18r"`
 }
 
 // FileContentRequest 用于替换可编辑文件的文本内容。

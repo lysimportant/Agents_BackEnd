@@ -1062,8 +1062,7 @@ export function useAdminWorkspace() {
       summary: article.summary,
       content: article.content,
       isPrivate: Boolean(article.isPrivate),
-      portalVisible: Boolean(article.portalVisible),
-      portalFeatured: Boolean(article.portalFeatured),
+      is18r: Boolean(article.is18r),
       contentLocale: article.contentLocale || 'zh-CN',
     });
   };
@@ -1084,8 +1083,7 @@ export function useAdminWorkspace() {
         summary: nextArticle.summary,
         content: nextArticle.content,
         isPrivate: Boolean(nextArticle.isPrivate),
-        portalVisible: Boolean(nextArticle.portalVisible),
-        portalFeatured: Boolean(nextArticle.portalFeatured),
+        is18r: Boolean(nextArticle.is18r),
         contentLocale: nextArticle.contentLocale || 'zh-CN',
       }),
     });
@@ -1146,8 +1144,7 @@ export function useAdminWorkspace() {
         formData.append('category', fileForm.category);
         formData.append('description', fileForm.description);
         formData.append('isPrivate', fileForm.isPrivate ? 'true' : 'false');
-        formData.append('portalVisible', fileForm.portalVisible ? 'true' : 'false');
-        formData.append('portalFeatured', fileForm.portalFeatured ? 'true' : 'false');
+        formData.append('is18r', fileForm.is18r ? 'true' : 'false');
         response = await requestWithSession(`${API_BASE_URL}/api/files`, { method: 'POST', body: formData });
       }
       if (!response.ok) {
@@ -1174,8 +1171,7 @@ export function useAdminWorkspace() {
       category: file.category,
       description: file.description,
       isPrivate: Boolean(file.isPrivate),
-      portalVisible: Boolean(file.portalVisible),
-      portalFeatured: Boolean(file.portalFeatured),
+      is18r: Boolean(file.is18r),
     });
     setSelectedUploadFile(null);
   };

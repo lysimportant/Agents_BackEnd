@@ -1,5 +1,7 @@
+'use client';
+
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { getTranslations } from 'next-intl/server';
+import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
 import { cn } from '@/utils/cn';
 
@@ -46,7 +48,7 @@ function buildPageHref(
 }
 
 /** Pagination 渲染可分页、可索引的页码导航，保留现有筛选与排序参数。 */
-export async function Pagination({
+export function Pagination({
   page,
   totalPages,
   basePath,
@@ -57,7 +59,7 @@ export async function Pagination({
   basePath: string;
   queryParams: Record<string, string>;
 }) {
-  const t = await getTranslations('pagination');
+  const t = useTranslations('pagination');
   if (totalPages <= 1) {
     return null;
   }

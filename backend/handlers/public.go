@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"collector-backend/auth"
 	"collector-backend/content"
 	"collector-backend/models"
 	"collector-backend/utils"
@@ -29,25 +30,25 @@ const PublicDefaultPageSize = 24
 // PublicStore 定义 C 端公开接口所需的数据访问能力。
 type PublicStore interface {
 	// ListPublicArticles 返回公开文章列表及分页信息。
-	ListPublicArticles(keyword, category string, page, pageSize int) ([]models.PublicArticleListItem, int, int)
+	ListPublicArticles(keyword, category string, page, pageSize int, includeR18 bool) ([]models.PublicArticleListItem, int, int)
 	// FindPublicArticleDetail 返回公开文章详情。
-	FindPublicArticleDetail(id int) (models.PublicArticleDetail, bool)
+	FindPublicArticleDetail(id int, includeR18 bool) (models.PublicArticleDetail, bool)
 	// ListRelatedPublicArticles 返回相关文章列表。
-	ListRelatedPublicArticles(articleID int, category string, limit int) []models.PublicArticleListItem
+	ListRelatedPublicArticles(articleID int, category string, limit int, includeR18 bool) []models.PublicArticleListItem
 	// ListPublicFiles 返回公开文件列表及分页信息。
-	ListPublicFiles(isImageOnly bool, keyword, category string, page, pageSize int) ([]models.PublicFileListItem, int, int)
+	ListPublicFiles(isImageOnly bool, keyword, category string, page, pageSize int, includeR18 bool) ([]models.PublicFileListItem, int, int)
 	// FindPublicFile 返回公开文件摘要。
-	FindPublicFile(id int) (models.PublicFileListItem, bool)
-	// FeaturedPublicImages 返回精选公开图片列表。
-	FeaturedPublicImages(limit int) []models.PublicFileListItem
+	FindPublicFile(id int, includeR18 bool) (models.PublicFileListItem, bool)
+	// FeaturedPublicImages 返回最新公开图片列表。
+	FeaturedPublicImages(limit int, includeR18 bool) []models.PublicFileListItem
 	// ListPublicCategories 返回公开分类列表。
-	ListPublicCategories() []models.PublicCategory
+	ListPublicCategories(includeR18 bool) []models.PublicCategory
 	// SiteSummary 返回站点聚合概览数据。
-	SiteSummary() models.PublicSiteSummary
+	SiteSummary(includeR18 bool) models.PublicSiteSummary
 	// SearchPublic 返回聚合搜索结果。
-	SearchPublic(keyword string, limit int) models.PublicSearchResult
+	SearchPublic(keyword string, limit int, includeR18 bool) models.PublicSearchResult
 	// FindPublicFileStorageName 表示获取公开文件存储名。
-	FindPublicFileStorageName(id int) (string, bool)
+	FindPublicFileStorageName(id int, includeR18 bool) (string, bool)
 }
 
 // PublicHandler 处理 C 端公开只读接口。
@@ -56,11 +57,25 @@ type PublicHandler struct {
 	store PublicStore
 	// uploadDir 保存上传根目录。
 	uploadDir string
+	// sessionService 保存会话服务，用于判断是否登录以决定 18R 内容可见性。
+	sessionService *auth.Service
 }
 
 // NewPublicHandler 创建公开接口处理器。
-func NewPublicHandler(store PublicStore, uploadDir string) *PublicHandler {
-	return &PublicHandler{store: store, uploadDir: uploadDir}
+func NewPublicHandler(store PublicStore, uploadDir string, sessionService *auth.Service) *PublicHandler {
+	return &PublicHandler{store: store, uploadDir: uploadDir, sessionService: sessionService}
+}
+
+// includeR18 判断当前请求是否允许包含 18R 内容：需有效登录会话且开启 portal-r18 Cookie。
+func (h *PublicHandler) includeR18(c *gin.Context) bool {
+	if h.sessionService == nil {
+		return false
+	}
+	if _, ok := h.sessionService.UserIDFromRequest(c); !ok {
+		return false
+	}
+	cookie, err := c.Cookie("portal-r18")
+	return err == nil && cookie == "1"
 }
 
 // parsePageParams 从查询参数解析关键字、分类、排序与分页参数，并做安全校验。
@@ -104,7 +119,7 @@ func (h *PublicHandler) ListArticles(c *gin.Context) {
 	// items 保存接口响应的条目集合。
 	items := []interface{}{}
 	// articles 保存公开文章查询结果。
-	articles, total, totalPages := h.store.ListPublicArticles(keyword, category, page, pageSize)
+	articles, total, totalPages := h.store.ListPublicArticles(keyword, category, page, pageSize, h.includeR18(c))
 	for _, article := range articles {
 		items = append(items, article)
 	}
@@ -121,16 +136,20 @@ func (h *PublicHandler) GetArticle(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_id", "error": "无效的文章 ID"})
 		return
 	}
+	// includeR18 保存当前请求是否允许 18R 内容。
+	includeR18 := h.includeR18(c)
 	// article、found 保存查询到的文章详情及是否存在。
-	article, found := h.store.FindPublicArticleDetail(id)
+	article, found := h.store.FindPublicArticleDetail(id, includeR18)
 	if !found {
 		c.JSON(http.StatusNotFound, gin.H{"code": "not_found", "error": "文章不存在"})
 		return
 	}
 	// 填充关联文章推荐。
-	article.RelatedArticles = h.store.ListRelatedPublicArticles(id, article.Category, 6)
+	article.RelatedArticles = h.store.ListRelatedPublicArticles(id, article.Category, 6, includeR18)
 	// 清洗正文并将本地媒体引用重写为公开地址。
-	article.Content = content.RewriteLocalMedia(content.SanitizeArticleContent(article.Content), h.resolvePublicMediaURL)
+	article.Content = content.RewriteLocalMedia(content.SanitizeArticleContent(article.Content), func(id string) string {
+		return h.resolvePublicMediaURL(id, includeR18)
+	})
 	// 从清洗后的正文提取第一张公开图片作为封面。
 	article.CoverImage = extractFirstImage(article.Content)
 	c.JSON(http.StatusOK, gin.H{"item": article})
@@ -144,7 +163,7 @@ func (h *PublicHandler) ListImages(c *gin.Context) {
 	// items 保存接口响应的条目集合。
 	items := []interface{}{}
 	// files 保存公开图片查询结果。
-	files, total, totalPages := h.store.ListPublicFiles(true, keyword, category, page, pageSize)
+	files, total, totalPages := h.store.ListPublicFiles(true, keyword, category, page, pageSize, h.includeR18(c))
 	for _, file := range files {
 		items = append(items, file)
 	}
@@ -159,7 +178,7 @@ func (h *PublicHandler) ListResources(c *gin.Context) {
 	// items 保存接口响应的条目集合。
 	items := []interface{}{}
 	// files 保存公开资源查询结果。
-	files, total, totalPages := h.store.ListPublicFiles(false, keyword, category, page, pageSize)
+	files, total, totalPages := h.store.ListPublicFiles(false, keyword, category, page, pageSize, h.includeR18(c))
 	for _, file := range files {
 		items = append(items, file)
 	}
@@ -168,12 +187,12 @@ func (h *PublicHandler) ListResources(c *gin.Context) {
 
 // ListCategories handles GET /api/public/categories
 func (h *PublicHandler) ListCategories(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"items": h.store.ListPublicCategories()})
+	c.JSON(http.StatusOK, gin.H{"items": h.store.ListPublicCategories(h.includeR18(c))})
 }
 
 // SiteSummary handles GET /api/public/site-summary
 func (h *PublicHandler) SiteSummary(c *gin.Context) {
-	c.JSON(http.StatusOK, h.store.SiteSummary())
+	c.JSON(http.StatusOK, h.store.SiteSummary(h.includeR18(c)))
 }
 
 // Search handles GET /api/public/search
@@ -188,7 +207,7 @@ func (h *PublicHandler) Search(c *gin.Context) {
 	if len([]rune(keyword)) > 40 {
 		keyword = string([]rune(keyword)[:40])
 	}
-	c.JSON(http.StatusOK, h.store.SearchPublic(keyword, 12))
+	c.JSON(http.StatusOK, h.store.SearchPublic(keyword, 12, h.includeR18(c)))
 }
 
 // PreviewFile 处理 GET /api/public/files/:id/preview 返回内联文件预览。
@@ -211,14 +230,16 @@ func (h *PublicHandler) Thumbnail(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_id", "error": "无效的文件 ID"})
 		return
 	}
+	// includeR18 保存当前请求是否允许 18R 内容。
+	includeR18 := h.includeR18(c)
 	// file、found 保存查询到的公开文件及是否存在，非图片不提供缩略图。
-	file, found := h.store.FindPublicFile(id)
+	file, found := h.store.FindPublicFile(id, includeR18)
 	if !found || !strings.HasPrefix(file.ContentType, "image/") {
 		c.JSON(http.StatusNotFound, gin.H{"code": "not_found", "error": "文件不存在"})
 		return
 	}
 	// storagePath 保存解析后的物理文件路径。
-	storagePath := h.resolvePublicStoragePath(id)
+	storagePath := h.resolvePublicStoragePath(id, includeR18)
 	if storagePath == "" {
 		c.JSON(http.StatusNotFound, gin.H{"code": "not_found", "error": "文件不存在"})
 		return
@@ -262,8 +283,10 @@ func (h *PublicHandler) servePublicFile(c *gin.Context, asAttachment bool) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_id", "error": "无效的文件 ID"})
 		return
 	}
+	// includeR18 保存当前请求是否允许 18R 内容。
+	includeR18 := h.includeR18(c)
 	// file、found 保存查询到的公开文件及是否存在。
-	file, found := h.store.FindPublicFile(id)
+	file, found := h.store.FindPublicFile(id, includeR18)
 	if !found {
 		c.JSON(http.StatusNotFound, gin.H{"code": "not_found", "error": "文件不存在"})
 		return
@@ -273,7 +296,7 @@ func (h *PublicHandler) servePublicFile(c *gin.Context, asAttachment bool) {
 	path := filepath.Join(h.uploadDir, filepath.Base(filepath.Clean(file.DisplayName)))
 	// 解析真实的公开存储路径。
 	// storagePath 保存解析后的物理文件路径。
-	storagePath := h.resolvePublicStoragePath(file.ID)
+	storagePath := h.resolvePublicStoragePath(file.ID, includeR18)
 	_ = path
 	if storagePath == "" {
 		c.JSON(http.StatusNotFound, gin.H{"code": "not_found", "error": "文件不存在"})
@@ -297,9 +320,9 @@ func (h *PublicHandler) servePublicFile(c *gin.Context, asAttachment bool) {
 
 // resolvePublicStoragePath 根据公开文件 ID 解析对应的物理存储路径。
 // 先通过存储名定位，避免被显示文件名误导或路径穿越。
-func (h *PublicHandler) resolvePublicStoragePath(id int) string {
+func (h *PublicHandler) resolvePublicStoragePath(id int, includeR18 bool) string {
 	// storageName 保存查询到的物理存储文件名。
-	storageName, found := h.store.FindPublicFileStorageName(id)
+	storageName, found := h.store.FindPublicFileStorageName(id, includeR18)
 	if !found || storageName == "" {
 		return ""
 	}
@@ -308,14 +331,14 @@ func (h *PublicHandler) resolvePublicStoragePath(id int) string {
 }
 
 // resolvePublicMediaURL 根据媒体 ID 判断是否满足公开条件，满足时返回公开预览地址。
-func (h *PublicHandler) resolvePublicMediaURL(id string) string {
+func (h *PublicHandler) resolvePublicMediaURL(id string, includeR18 bool) string {
 	// fileID 保存解析后的文件编号。
 	fileID, err := strconv.Atoi(id)
 	if err != nil || fileID <= 0 {
 		return ""
 	}
 	// storageName、found 保存正文引用媒体的存储名及是否可公开。
-	storageName, found := h.store.FindPublicFileStorageName(fileID)
+	storageName, found := h.store.FindPublicFileStorageName(fileID, includeR18)
 	if !found || storageName == "" {
 		return ""
 	}

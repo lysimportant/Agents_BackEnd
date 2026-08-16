@@ -364,17 +364,10 @@ export function FilesPage(props: FilesPageProps) {
       </div>
       <div className="privacy-switch-row">
         <div>
-          <strong>发布到门户</strong>
-          <small>开启后，满足发布条件的文件可在 C 端内容门户展示</small>
+          <strong>18R 限制</strong>
+          <small>开启后仅登录且开启 18R 内容的用户可见</small>
         </div>
-        <Switch checked={Boolean(fileForm.portalVisible)} disabled={fileForm.isPrivate} onChange={(checked) => onFileFormChange({ ...fileForm, portalVisible: checked })} checkedChildren="已发布" unCheckedChildren="未发布" />
-      </div>
-      <div className="privacy-switch-row">
-        <div>
-          <strong>门户精选</strong>
-          <small>仅门户可见的文件可设为精选，用于首页与分类展示</small>
-        </div>
-        <Switch checked={Boolean(fileForm.portalFeatured)} disabled={!fileForm.portalVisible} onChange={(checked) => onFileFormChange({ ...fileForm, portalFeatured: checked })} />
+        <Switch checked={Boolean(fileForm.is18r)} onChange={(checked) => onFileFormChange({ ...fileForm, is18r: checked })} checkedChildren="开启" unCheckedChildren="关闭" />
       </div>
 
     </>;

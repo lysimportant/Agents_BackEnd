@@ -97,8 +97,7 @@ export const emptyArticleForm = {
   summary: '',
   content: '',
   isPrivate: false,
-  portalVisible: false,
-  portalFeatured: false,
+  is18r: false,
   contentLocale: 'zh-CN',
 };
 
@@ -108,6 +107,5 @@ export const emptyFileForm = {
   category: '',
   description: '',
   isPrivate: false,
-  portalVisible: false,
-  portalFeatured: false,
+  is18r: false,
 };

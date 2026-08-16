@@ -6,6 +6,7 @@ import { FileText, Folder, Images, Info, LayoutGrid, Menu, Search, X } from 'luc
 import { Link, usePathname } from '@/i18n/navigation';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { LanguageSwitcher } from '@/components/language/LanguageSwitcher';
+import { AuthControls } from '@/components/auth/AuthControls';
 import { cn } from '@/utils/cn';
 
 /** 顶部导航项，图片作为首页，故不单独列首页；每个项带图标美化。 */
@@ -75,7 +76,7 @@ export function SiteHeader() {
     <header className="pointer-events-none fixed inset-x-0 top-4 z-40 px-4">
       <nav
         className={cn(
-          'site-header pointer-events-auto mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-2 rounded-full border px-3 shadow-sm transition-all duration-300',
+          'site-header pointer-events-auto mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-2 rounded-full border px-3 shadow-sm transition-all duration-300',
           scrolled ? 'shadow-lg' : 'shadow-sm',
         )}
       >
@@ -126,6 +127,7 @@ export function SiteHeader() {
           </Link>
           <ThemeToggle />
           <LanguageSwitcher />
+          <AuthControls />
         </div>
       </nav>
 

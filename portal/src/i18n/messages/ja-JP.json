@@ -43,6 +43,16 @@
     "label": "言語",
     "switch": "言語を切り替え"
   },
+  "auth": {
+    "login": "ログイン",
+    "logout": "ログアウト",
+    "username": "アカウント",
+    "password": "パスワード",
+    "loginTitle": "ログイン",
+    "loginFailed": "ログインに失敗しました。アカウントとパスワードを確認してください",
+    "r18": "18R",
+    "r18Label": "18Rコンテンツを表示"
+  },
   "home": {
     "subtitle": "公開された記事・画像・リソースを探す",
     "statsImages": "公開画像",

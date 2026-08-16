@@ -395,16 +395,15 @@ func (s *SQLiteStore) migrate() error {
 		{"files", "owner_id", "ALTER TABLE files ADD COLUMN owner_id INTEGER NOT NULL DEFAULT 0"},
 		{"files", "is_private", "ALTER TABLE files ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0"},
 		{"socket_conversations", "title", "ALTER TABLE socket_conversations ADD COLUMN title TEXT NOT NULL DEFAULT ''"},
-		// 门户发布字段： portal_visible 默认 0，历史记录迁移后保持不发布。
-		{"articles", "portal_visible", "ALTER TABLE articles ADD COLUMN portal_visible INTEGER NOT NULL DEFAULT 0"},
-		{"articles", "portal_featured", "ALTER TABLE articles ADD COLUMN portal_featured INTEGER NOT NULL DEFAULT 0"},
+		// articles.portal_published_at 保存文章首次发布时间，由系统在发布时自动写入。
 		{"articles", "portal_published_at", "ALTER TABLE articles ADD COLUMN portal_published_at TEXT"},
 		{"articles", "content_locale", "ALTER TABLE articles ADD COLUMN content_locale TEXT NOT NULL DEFAULT 'zh-CN'"},
-		{"files", "portal_visible", "ALTER TABLE files ADD COLUMN portal_visible INTEGER NOT NULL DEFAULT 0"},
-		{"files", "portal_featured", "ALTER TABLE files ADD COLUMN portal_featured INTEGER NOT NULL DEFAULT 0"},
-		{"files", "portal_published_at", "ALTER TABLE files ADD COLUMN portal_published_at TEXT"},
 		{"files", "image_width", "ALTER TABLE files ADD COLUMN image_width INTEGER NOT NULL DEFAULT 0"},
 		{"files", "image_height", "ALTER TABLE files ADD COLUMN image_height INTEGER NOT NULL DEFAULT 0"},
+		// is_18r 表示 18R 分级限制，默认 0（不限制）。
+		{"files", "is_18r", "ALTER TABLE files ADD COLUMN is_18r INTEGER NOT NULL DEFAULT 0"},
+		// 文章同样支持 18R 分级限制。
+		{"articles", "is_18r", "ALTER TABLE articles ADD COLUMN is_18r INTEGER NOT NULL DEFAULT 0"},
 	}
 	// migration 表示当前循环中的索引、键或业务元素。
 	for _, migration := range columnMigrations {
@@ -452,10 +451,9 @@ func (s *SQLiteStore) migrate() error {
 		`CREATE INDEX IF NOT EXISTS idx_visitor_access_logs_created_at ON visitor_access_logs(created_at,id)`,
 		`CREATE INDEX IF NOT EXISTS idx_visitor_access_logs_ip ON visitor_access_logs(ip,created_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_visitor_access_logs_path ON visitor_access_logs(path,created_at)`,
-		// C 端门户列表按发布状态、精选和发布时间读取。
-		`CREATE INDEX IF NOT EXISTS idx_articles_portal ON articles(portal_visible,portal_featured,is_private,status,id)`,
-		`CREATE INDEX IF NOT EXISTS idx_files_portal ON files(portal_visible,portal_featured,is_private,deleted_at,id)`,
-		`CREATE INDEX IF NOT EXISTS idx_files_portal_published_at ON files(portal_published_at,id)`,
+		// C 端门户列表按私密与发布状态读取。
+		`CREATE INDEX IF NOT EXISTS idx_articles_public ON articles(is_private,status,id)`,
+		`CREATE INDEX IF NOT EXISTS idx_files_public ON files(is_private,deleted_at,id)`,
 	}
 	// statement 表示当前循环中的索引、键或业务元素。
 	for _, statement := range indexes {
@@ -602,9 +600,9 @@ func (s *SQLiteStore) ReconcileUploadFiles(uploadDir string) error {
 			ownerID = admin.ID
 		}
 		_, _ = s.db.Exec(
-			`INSERT INTO files (display_name,original_name,category,description,content_type,size,storage_name,owner_id,is_private,portal_visible,portal_featured,portal_published_at,image_width,image_height,created_at,updated_at,deleted_at)
-			 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
-			name, name, "未分类", "系统自动补录", "application/octet-stream", info.Size(), name, ownerID, 0, 0, 0, nil, 0, 0, timeText(now), timeText(now),
+			`INSERT INTO files (display_name,original_name,category,description,content_type,size,storage_name,owner_id,is_private,image_width,image_height,created_at,updated_at,deleted_at)
+			 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
+			name, name, "未分类", "系统自动补录", "application/octet-stream", info.Size(), name, ownerID, 0, 0, 0, timeText(now), timeText(now),
 		)
 	}
 	return nil
@@ -1257,7 +1255,7 @@ func (s *SQLiteStore) UpdateUserMenus(userID int, menuIDs []int) ([]int, string)
 func (s *SQLiteStore) ListArticles() []models.Article {
 	// rows、err 保存当前操作结果以及可能返回的错误状态。
 	rows, err := s.db.Query(`
-		SELECT a.id,a.title,a.category,a.author,a.status,a.summary,a.content,a.views,a.owner_id,COALESCE(u.name,''),a.is_private,a.portal_visible,a.portal_featured,a.portal_published_at,a.content_locale,a.created_at,a.updated_at
+		SELECT a.id,a.title,a.category,a.author,a.status,a.summary,a.content,a.views,a.owner_id,COALESCE(u.name,''),a.is_private,a.is_18r,a.portal_published_at,a.content_locale,a.created_at,a.updated_at
 		FROM articles a
 		LEFT JOIN users u ON u.id = a.owner_id
 		ORDER BY a.id DESC
@@ -1280,7 +1278,7 @@ func (s *SQLiteStore) ListArticles() []models.Article {
 // FindArticleByID 获取对应业务记录。
 func (s *SQLiteStore) FindArticleByID(id int) (models.Article, bool) {
 	return scanArticle(s.db.QueryRow(`
-		SELECT a.id,a.title,a.category,a.author,a.status,a.summary,a.content,a.views,a.owner_id,COALESCE(u.name,''),a.is_private,a.portal_visible,a.portal_featured,a.portal_published_at,a.content_locale,a.created_at,a.updated_at
+		SELECT a.id,a.title,a.category,a.author,a.status,a.summary,a.content,a.views,a.owner_id,COALESCE(u.name,''),a.is_private,a.is_18r,a.portal_published_at,a.content_locale,a.created_at,a.updated_at
 		FROM articles a
 		LEFT JOIN users u ON u.id = a.owner_id
 		WHERE a.id=?
@@ -1291,11 +1289,16 @@ func (s *SQLiteStore) FindArticleByID(id int) (models.Article, bool) {
 func (s *SQLiteStore) CreateArticle(article models.Article) models.Article {
 	// now 保存当前时间。
 	now := time.Now().UTC()
+	// portalPublishedAt 保存文章首次发布时间，创建即已发布时记录当前时间。
+	var portalPublishedAt *time.Time
+	if article.Status == "已发布" && !article.IsPrivate {
+		portalPublishedAt = &now
+	}
 	// result、err 保存当前操作结果以及可能返回的错误状态。
 	result, err := s.db.Exec(
-		`INSERT INTO articles (title,category,author,status,summary,content,views,owner_id,is_private,portal_visible,portal_featured,portal_published_at,content_locale,created_at,updated_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		article.Title, article.Category, article.Author, article.Status, article.Summary, article.Content, article.Views, article.OwnerID, boolToInt(article.IsPrivate), boolToInt(article.PortalVisible), boolToInt(article.PortalFeatured), nullableTimeText(article.PortalPublishedAt), article.ContentLocale, timeText(now), timeText(now),
+		`INSERT INTO articles (title,category,author,status,summary,content,views,owner_id,is_private,is_18r,portal_published_at,content_locale,created_at,updated_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		article.Title, article.Category, article.Author, article.Status, article.Summary, article.Content, article.Views, article.OwnerID, boolToInt(article.IsPrivate), boolToInt(article.Is18R), nullableTimeText(portalPublishedAt), article.ContentLocale, timeText(now), timeText(now),
 	)
 	if err != nil {
 		return models.Article{}
@@ -1319,29 +1322,20 @@ func (s *SQLiteStore) UpdateArticle(id int, request models.ArticleRequest) (mode
 	}
 	// now 表示当前 UTC 时间。
 	now := time.Now().UTC()
-	// portalVisible 保存文章是否可门户公开访问。
-	portalVisible := request.PortalVisible
-	// portalFeatured 保存文章是否为门户精选。
-	portalFeatured := request.PortalFeatured
-	// portalPublishedAt 保存文章首次发布到门户的时间。
+	// portalPublishedAt 保存文章首次发布时间。
 	var portalPublishedAt *time.Time
-	if portalVisible {
-		// 保留首次发布到门户的时间，重新发布时不伪造新的首次发布时间。
+	// 文章已发布且非私密时自动记录首次发布时间，重复保存保留原时间。
+	if request.Status == "已发布" && !request.IsPrivate {
 		if existing.PortalPublishedAt != nil {
 			portalPublishedAt = existing.PortalPublishedAt
 		} else {
 			portalPublishedAt = &now
 		}
 	}
-	// 文章非“已发布”状态或为私密时，自动取消门户可见与门户精选。
-	if request.Status != "已发布" || request.IsPrivate {
-		portalVisible = false
-		portalFeatured = false
-	}
 	// err 保存当前操作结果以及可能返回的错误状态。
 	if _, err := s.db.Exec(
-		`UPDATE articles SET title=?, category=?, author=?, status=?, summary=?, content=?, views=?, is_private=?, portal_visible=?, portal_featured=?, portal_published_at=?, content_locale=?, updated_at=? WHERE id=?`,
-		request.Title, request.Category, request.Author, request.Status, request.Summary, request.Content, request.Views, boolToInt(request.IsPrivate), boolToInt(portalVisible), boolToInt(portalFeatured), nullableTimeText(portalPublishedAt), request.ContentLocale, timeText(now), id,
+		`UPDATE articles SET title=?, category=?, author=?, status=?, summary=?, content=?, views=?, is_private=?, is_18r=?, portal_published_at=?, content_locale=?, updated_at=? WHERE id=?`,
+		request.Title, request.Category, request.Author, request.Status, request.Summary, request.Content, request.Views, boolToInt(request.IsPrivate), boolToInt(request.Is18R), nullableTimeText(portalPublishedAt), request.ContentLocale, timeText(now), id,
 	); err != nil {
 		return models.Article{}, false
 	}
@@ -1366,7 +1360,7 @@ func (s *SQLiteStore) DeleteArticle(id int) bool {
 func (s *SQLiteStore) ListFiles(includeDeleted bool) []models.ManagedFile {
 	// query 保存查询条件。
 	query := `
-		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.content_type,f.size,f.storage_name,f.owner_id,COALESCE(u.name,''),f.is_private,f.portal_visible,f.portal_featured,f.portal_published_at,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
+		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.content_type,f.size,f.storage_name,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
 		FROM files f
 		LEFT JOIN users u ON u.id = f.owner_id
 	`
@@ -1502,7 +1496,7 @@ func buildChatDataFile(file models.ManagedFile, source, description, storagePath
 // FindFileByID 获取对应业务记录。
 func (s *SQLiteStore) FindFileByID(id int) (models.ManagedFile, bool) {
 	return scanFile(s.db.QueryRow(`
-		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.content_type,f.size,f.storage_name,f.owner_id,COALESCE(u.name,''),f.is_private,f.portal_visible,f.portal_featured,f.portal_published_at,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
+		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.content_type,f.size,f.storage_name,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
 		FROM files f
 		LEFT JOIN users u ON u.id = f.owner_id
 		WHERE f.id=? AND f.deleted_at IS NULL
@@ -1512,7 +1506,7 @@ func (s *SQLiteStore) FindFileByID(id int) (models.ManagedFile, bool) {
 // FindDeletedFileByID 获取对应业务记录。
 func (s *SQLiteStore) FindDeletedFileByID(id int) (models.ManagedFile, bool) {
 	return scanFile(s.db.QueryRow(`
-		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.content_type,f.size,f.storage_name,f.owner_id,COALESCE(u.name,''),f.is_private,f.portal_visible,f.portal_featured,f.portal_published_at,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
+		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.content_type,f.size,f.storage_name,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
 		FROM files f
 		LEFT JOIN users u ON u.id = f.owner_id
 		WHERE f.id=? AND f.deleted_at IS NOT NULL
@@ -1525,9 +1519,9 @@ func (s *SQLiteStore) CreateFile(file models.ManagedFile) models.ManagedFile {
 	now := time.Now().UTC()
 	// result、err 保存当前操作结果以及可能返回的错误状态。
 	result, err := s.db.Exec(
-		`INSERT INTO files (display_name,original_name,category,description,content_type,size,storage_name,owner_id,is_private,portal_visible,portal_featured,portal_published_at,image_width,image_height,created_at,updated_at,deleted_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
-		file.DisplayName, file.OriginalName, file.Category, file.Description, file.ContentType, file.Size, file.StorageName, file.OwnerID, boolToInt(file.IsPrivate), boolToInt(file.PortalVisible), boolToInt(file.PortalFeatured), nullableTimeText(file.PortalPublishedAt), file.ImageWidth, file.ImageHeight, timeText(now), timeText(now),
+		`INSERT INTO files (display_name,original_name,category,description,content_type,size,storage_name,owner_id,is_private,is_18r,image_width,image_height,created_at,updated_at,deleted_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
+		file.DisplayName, file.OriginalName, file.Category, file.Description, file.ContentType, file.Size, file.StorageName, file.OwnerID, boolToInt(file.IsPrivate), boolToInt(file.Is18R), file.ImageWidth, file.ImageHeight, timeText(now), timeText(now),
 	)
 	if err != nil {
 		return models.ManagedFile{}
@@ -1547,19 +1541,10 @@ func (s *SQLiteStore) UpdateFileMetadata(id int, request models.FileMetadataRequ
 	}
 	// now 表示当前 UTC 时间。
 	now := time.Now().UTC()
-	// portalVisible 保存文件是否可门户公开访问。
-	portalVisible := request.PortalVisible
-	// portalFeatured 保存文件是否为门户精选。
-	portalFeatured := request.PortalFeatured
-	// 文件为私密时自动取消门户可见与门户精选。
-	if request.IsPrivate {
-		portalVisible = false
-		portalFeatured = false
-	}
 	// err 保存当前操作结果以及可能返回的错误状态。
 	if _, err := s.db.Exec(
-		`UPDATE files SET display_name=?, category=?, description=?, is_private=?, portal_visible=?, portal_featured=?, updated_at=? WHERE id=? AND deleted_at IS NULL`,
-		request.DisplayName, request.Category, request.Description, boolToInt(request.IsPrivate), boolToInt(portalVisible), boolToInt(portalFeatured), timeText(now), id,
+		`UPDATE files SET display_name=?, category=?, description=?, is_private=?, is_18r=?, updated_at=? WHERE id=? AND deleted_at IS NULL`,
+		request.DisplayName, request.Category, request.Description, boolToInt(request.IsPrivate), boolToInt(request.Is18R), timeText(now), id,
 	); err != nil {
 		return models.ManagedFile{}, false
 	}
@@ -1591,7 +1576,7 @@ func (s *SQLiteStore) SoftDeleteFile(id int) bool {
 	// now 表示当前 UTC 时间。
 	now := time.Now().UTC()
 	// result、err 保存软删除的执行结果及错误状态。
-	result, err := s.db.Exec(`UPDATE files SET deleted_at=?, updated_at=?, portal_visible=0, portal_featured=0, portal_published_at=NULL WHERE id=? AND deleted_at IS NULL`, timeText(now), timeText(now), id)
+	result, err := s.db.Exec(`UPDATE files SET deleted_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL`, timeText(now), timeText(now), id)
 	if err != nil {
 		return false
 	}
@@ -1742,20 +1727,19 @@ func scanArticle(row scanner) (models.Article, bool) {
 	var a models.Article
 	// isPrivate 保存文章私密状态的数据库布尔值。
 	var isPrivate int
-	// portalVisible、portalFeatured 保存门户可见与精选状态。
-	var portalVisible, portalFeatured int
-	// publishedAt 保存文章首次发布到门户时间的可空字符串。
+	// is18R 保存 18R 分级限制状态。
+	var is18R int
+	// publishedAt 保存文章首次发布时间。
 	var publishedAt sql.NullString
 	// c、up 保存文章的创建与更新时间文本。
 	var c, up string
 	// err 保存扫描过程中的错误状态。
-	err := row.Scan(&a.ID, &a.Title, &a.Category, &a.Author, &a.Status, &a.Summary, &a.Content, &a.Views, &a.OwnerID, &a.OwnerName, &isPrivate, &portalVisible, &portalFeatured, &publishedAt, &a.ContentLocale, &c, &up)
+	err := row.Scan(&a.ID, &a.Title, &a.Category, &a.Author, &a.Status, &a.Summary, &a.Content, &a.Views, &a.OwnerID, &a.OwnerName, &isPrivate, &is18R, &publishedAt, &a.ContentLocale, &c, &up)
 	if err != nil {
 		return models.Article{}, false
 	}
 	a.IsPrivate = intToBool(isPrivate)
-	a.PortalVisible = intToBool(portalVisible)
-	a.PortalFeatured = intToBool(portalFeatured)
+	a.Is18R = intToBool(is18R)
 	if publishedAt.Valid {
 		// publishedTime 保存解析后的首次发布时间。
 		publishedTime := parseTime(publishedAt.String)
@@ -1772,27 +1756,19 @@ func scanFile(row scanner) (models.ManagedFile, bool) {
 	var f models.ManagedFile
 	// isPrivate 保存文件私密状态的数据库布尔值。
 	var isPrivate int
-	// portalVisible、portalFeatured 保存门户可见与精选状态。
-	var portalVisible, portalFeatured int
-	// publishedAt 保存文件首次发布到门户时间的可空字符串。
-	var publishedAt sql.NullString
+	// is18R 保存 18R 分级限制状态。
+	var is18R int
 	// c、up 保存文件的创建与更新时间文本。
 	var c, up string
 	// deleted 保存文件删除时间的可空字符串。
 	var deleted sql.NullString
 	// err 保存扫描过程中的错误状态。
-	err := row.Scan(&f.ID, &f.DisplayName, &f.OriginalName, &f.Category, &f.Description, &f.ContentType, &f.Size, &f.StorageName, &f.OwnerID, &f.OwnerName, &isPrivate, &portalVisible, &portalFeatured, &publishedAt, &f.ImageWidth, &f.ImageHeight, &c, &up, &deleted)
+	err := row.Scan(&f.ID, &f.DisplayName, &f.OriginalName, &f.Category, &f.Description, &f.ContentType, &f.Size, &f.StorageName, &f.OwnerID, &f.OwnerName, &isPrivate, &is18R, &f.ImageWidth, &f.ImageHeight, &c, &up, &deleted)
 	if err != nil {
 		return models.ManagedFile{}, false
 	}
 	f.IsPrivate = intToBool(isPrivate)
-	f.PortalVisible = intToBool(portalVisible)
-	f.PortalFeatured = intToBool(portalFeatured)
-	if publishedAt.Valid {
-		// publishedTime 保存解析后的首次发布时间。
-		publishedTime := parseTime(publishedAt.String)
-		f.PortalPublishedAt = &publishedTime
-	}
+	f.Is18R = intToBool(is18R)
 	f.CreatedAt = parseTime(c)
 	f.UpdatedAt = parseTime(up)
 	if deleted.Valid {

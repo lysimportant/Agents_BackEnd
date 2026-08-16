@@ -247,11 +247,9 @@ export type Article = {
   ownerName?: string;
   /** isPrivate 表示私密状态。 */
   isPrivate?: boolean;
-  /** 是否允许匿名 C 端公开访问。 */
-  portalVisible?: boolean;
-  /** 是否作为门户首页或分类精选。 */
-  portalFeatured?: boolean;
-  /** 首次发布到门户的时间，取消发布后保留。 */
+  /** 是否开启 18R 限制。 */
+  is18r?: boolean;
+  /** 首次发布时间。 */
   portalPublishedAt?: string;
   /** 正文实际语言。 */
   contentLocale?: string;
@@ -287,12 +285,8 @@ export type ManagedFile = {
   ownerName?: string;
   /** isPrivate 表示私密状态。 */
   isPrivate?: boolean;
-  /** 是否允许匿名 C 端公开访问。 */
-  portalVisible?: boolean;
-  /** 是否作为门户首页或分类精选。 */
-  portalFeatured?: boolean;
-  /** 首次发布到门户的时间，取消发布后保留。 */
-  portalPublishedAt?: string;
+  /** 是否开启 18R 限制。 */
+  is18r?: boolean;
   /** 公开图片原始宽度。 */
   imageWidth?: number;
   /** 公开图片原始高度。 */
@@ -381,10 +375,8 @@ export type ArticleForm = {
   content: string;
   /** isPrivate 表示私密状态。 */
   isPrivate: boolean;
-  /** 是否允许匿名 C 端公开访问。 */
-  portalVisible: boolean;
-  /** 是否作为门户首页或分类精选。 */
-  portalFeatured: boolean;
+  /** 是否开启 18R 限制。 */
+  is18r: boolean;
   /** 正文实际语言。 */
   contentLocale: string;
 };
@@ -399,10 +391,8 @@ export type FileForm = {
   description: string;
   /** isPrivate 表示私密状态。 */
   isPrivate: boolean;
-  /** 是否允许匿名 C 端公开访问。 */
-  portalVisible: boolean;
-  /** 是否作为门户首页或分类精选。 */
-  portalFeatured: boolean;
+  /** 是否开启 18R 限制。 */
+  is18r: boolean;
 };
 
 /** 根据层级缩进菜单树行的 CSS 自定义属性。 */

@@ -43,6 +43,16 @@
     "label": "Language",
     "switch": "Switch language"
   },
+  "auth": {
+    "login": "Log in",
+    "logout": "Log out",
+    "username": "Username",
+    "password": "Password",
+    "loginTitle": "Log in",
+    "loginFailed": "Login failed, please check your username and password",
+    "r18": "18R",
+    "r18Label": "Show 18R content"
+  },
   "home": {
     "subtitle": "Explore public articles, images and resources",
     "statsImages": "Public images",

@@ -12,7 +12,6 @@ import (
 
 	"collector-backend/middleware"
 	"collector-backend/models"
-	"collector-backend/permissions"
 	"collector-backend/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -158,15 +157,8 @@ func (h *FileHandler) Upload(c *gin.Context) {
 	description := strings.TrimSpace(c.PostForm("description"))
 	// isPrivate 保存私密状态。
 	isPrivate := utils.ParseBool(c.PostForm("isPrivate"))
-	// portalVisible 保存门户可见状态。
-	portalVisible := utils.ParseBool(c.PostForm("portalVisible"))
-	// portalFeatured 保存门户精选状态。
-	portalFeatured := utils.ParseBool(c.PostForm("portalFeatured"))
-	// 无门户发布权限的用户不得越权发布门户。
-	if !canPortalPublishFile(h.store, user.ID) {
-		portalVisible = false
-		portalFeatured = false
-	}
+	// is18R 保存 18R 分级限制状态。
+	is18R := utils.ParseBool(c.PostForm("is18r"))
 
 	// ext 保存文件扩展名。
 	ext := filepath.Ext(fileHeader.Filename)
@@ -218,20 +210,19 @@ func (h *FileHandler) Upload(c *gin.Context) {
 	}
 	// created 保存创建时间。
 	created := h.store.CreateFile(models.ManagedFile{
-		DisplayName:    displayName,
-		OriginalName:   fileHeader.Filename,
-		Category:       category,
-		Description:    description,
-		ContentType:    contentType,
-		Size:           size,
-		StorageName:    storageName,
-		OwnerID:        user.ID,
-		OwnerName:      user.Name,
-		IsPrivate:      isPrivate,
-		PortalVisible:  portalVisible,
-		PortalFeatured: portalFeatured,
-		ImageWidth:     imageWidth,
-		ImageHeight:    imageHeight,
+		DisplayName:  displayName,
+		OriginalName: fileHeader.Filename,
+		Category:     category,
+		Description:  description,
+		ContentType:  contentType,
+		Size:         size,
+		StorageName:  storageName,
+		OwnerID:      user.ID,
+		OwnerName:    user.Name,
+		IsPrivate:    isPrivate,
+		Is18R:        is18R,
+		ImageWidth:   imageWidth,
+		ImageHeight:  imageHeight,
 	})
 	if created.ID == 0 {
 		_ = os.Remove(path)
@@ -266,12 +257,6 @@ func (h *FileHandler) UpdateMetadata(c *gin.Context) {
 	if !canMutateFile(user, file) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "没有权限修改该文件"})
 		return
-	}
-	// updated、found 保存业务值及其是否存在或处理成功的标记。
-	// 无门户发布权限的用户不得越权修改门户字段，保留原门户状态。
-	if !canPortalPublishFile(h.store, user.ID) {
-		request.PortalVisible = false
-		request.PortalFeatured = false
 	}
 	updated, found := h.store.UpdateFileMetadata(id, request)
 	if !found {
@@ -524,14 +509,4 @@ func canAccessFile(user models.User, file models.ManagedFile) bool {
 // canMutateFile 校验对应业务条件。
 func canMutateFile(user models.User, file models.ManagedFile) bool {
 	return file.OwnerID == user.ID || utils.IsAdmin(user)
-}
-
-// canPortalPublishFile 校验用户是否具有文件门户发布权限。
-func canPortalPublishFile(store FileStore, userID int) bool {
-	// codes、message 保存用户动作权限及查询状态。
-	codes, message := store.ListUserActionPermissions(userID)
-	if message != "" {
-		return false
-	}
-	return permissions.Contains(codes, permissions.FilesPortalPublish)
 }

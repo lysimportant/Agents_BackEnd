@@ -5,6 +5,7 @@ import { setRequestLocale } from 'next-intl/server';
 import { routing } from '@/i18n/routing';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { THEME_BOOTSTRAP_SCRIPT } from '@/theme/themeBootstrapScript';
+import { AuthProvider } from '@/features/auth/AuthProvider';
 import { SITE_BRAND_NAME, SITE_TAGLINE, SITE_URL } from '@/config/constants';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
@@ -65,13 +66,15 @@ export default async function LocaleLayout({
         <div id="header-sentinel" className="absolute left-0 top-0 h-px w-px" aria-hidden="true" />
         <ThemeProvider>
           <NextIntlClientProvider>
-            <LocaleCookieSync />
-            <SkipToContent />
-            <SiteHeader />
-            <main id="main-content" className="min-h-[70vh] pt-16">
-              {children}
-            </main>
-            <SiteFooter />
+            <AuthProvider>
+              <LocaleCookieSync />
+              <SkipToContent />
+              <SiteHeader />
+              <main id="main-content" className="min-h-[70vh] pt-16">
+                {children}
+              </main>
+              <SiteFooter />
+            </AuthProvider>
           </NextIntlClientProvider>
         </ThemeProvider>
       </body>

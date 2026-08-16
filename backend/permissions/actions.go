@@ -1,4 +1,4 @@
-﻿package permissions
+package permissions
 
 import "strings"
 
@@ -50,9 +50,6 @@ const (
 	FilesDelete          = "files.delete"
 	FilesRestore         = "files.restore"
 	FilesPermanentDelete = "files.permanent-delete"
-
-	ArticlesPortalPublish = "articles.portal-publish"
-	FilesPortalPublish = "files.portal-publish"
 
 	SocketQuery  = "socket.query"
 	SocketView   = "socket.view"
@@ -128,8 +125,6 @@ var definitions = []Definition{
 	{FilesDelete, "files", "delete", "删除文件", false},
 	{FilesRestore, "files", "restore", "恢复文件", false},
 	{FilesPermanentDelete, "files", "permanent-delete", "彻底删除文件", false},
-	{ArticlesPortalPublish, "articles", "portal-publish", "门户发布文章", false},
-	{FilesPortalPublish, "files", "portal-publish", "门户发布文件", false},
 	{SocketQuery, "socket", "query", "查询客服会话", true},
 	{SocketView, "socket", "view", "查看客服聊天", true},
 	{SocketSend, "socket", "send", "回复客服消息", false},

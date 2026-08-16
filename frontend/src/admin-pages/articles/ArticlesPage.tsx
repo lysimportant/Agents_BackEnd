@@ -156,19 +156,12 @@ export function ArticlesPage(props: ArticlesPageProps) {
           </div>
           <Switch checked={Boolean(articleForm.isPrivate)} onChange={(checked) => onArticleFormChange({ ...articleForm, isPrivate: checked })} checkedChildren="私密" unCheckedChildren="公开" />
         </div>
-                <div className="privacy-switch-row">
-          <div>
-            <strong>发布到门户</strong>
-            <small>开启后允许匿名访问者在 C 端查看；需状态为已发布且不设为仅自己可见。</small>
-          </div>
-          <Switch checked={Boolean(articleForm.portalVisible)} disabled={articleForm.status !== '已发布' || articleForm.isPrivate} onChange={(checked) => onArticleFormChange({ ...articleForm, portalVisible: checked })} checkedChildren="开启" unCheckedChildren="关闭" />
-        </div>
         <div className="privacy-switch-row">
           <div>
-            <strong>门户精选</strong>
-            <small>开启后优先展示在门户首页与对应分类的精选区域。</small>
+            <strong>18R 限制</strong>
+            <small>开启后仅登录且开启 18R 内容的用户可见</small>
           </div>
-          <Switch checked={Boolean(articleForm.portalFeatured)} disabled={!articleForm.portalVisible} onChange={(checked) => onArticleFormChange({ ...articleForm, portalFeatured: checked })} />
+          <Switch checked={Boolean(articleForm.is18r)} onChange={(checked) => onArticleFormChange({ ...articleForm, is18r: checked })} checkedChildren="开启" unCheckedChildren="关闭" />
         </div>
         <div className="privacy-switch-row">
           <div>

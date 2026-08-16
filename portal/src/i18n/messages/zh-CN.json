@@ -43,6 +43,16 @@
     "label": "语言",
     "switch": "切换语言"
   },
+  "auth": {
+    "login": "登录",
+    "logout": "退出",
+    "username": "账号",
+    "password": "密码",
+    "loginTitle": "登录",
+    "loginFailed": "登录失败，请检查账号和密码",
+    "r18": "18R",
+    "r18Label": "显示18R内容"
+  },
   "home": {
     "subtitle": "探索公开的文章、图片与资源",
     "statsImages": "公开图片",
