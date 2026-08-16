@@ -34,6 +34,7 @@ go run .
 | `SESSION_COOKIE_NAME` | `sessionId` | 会话 Cookie 名称 |
 | `SESSION_TTL_HOURS` | `8` | 会话有效小时数 |
 | `VISITOR_LOG_RETENTION_DAYS` | `90` | 访问分析日志保留天数；设为 `0` 可关闭自动清理 |
+| `HOST_AGENT_TOKEN` | 空 | 宿主机代理共享令牌；留空时禁用部署机直连，生产值至少使用 32 字节随机内容 |
 
 Docker 启动时默认读取仓库根目录的 `email.txt`，并将其只读挂载为容器内的 `/app/email.txt`；可通过 `EMAIL_CONFIG_FILE` 覆盖宿主机文件路径。也可直接设置 `EMAIL_HOST`、`EMAIL_PORT`、`EMAIL_SECURE`、`EMAIL_USER`、`EMAIL_PASS`、`EMAIL_FROM`，非空环境变量优先于文件配置。`email.txt` 已被 Git 忽略，不要把真实邮箱密码提交到仓库。
 
@@ -100,6 +101,39 @@ npm run dev
 - `GET /api/server/metrics`: 获取后端运行环境的 CPU/核心/负载、物理内存与交换区、文件系统与磁盘 I/O、总流量与网卡/连接、硬件温度、后端进程和即时健康告警；工作台默认每 5 秒采样并计算最近 5 分钟的网络及磁盘吞吐趋势。Docker 部署显示容器视角，平台或容器权限不支持的扩展项会通过 `collectionWarnings` 说明
 - `GET /api/server/connections`: 点击预览台“活动连接”后按需获取连接详情；返回 TCP/UDP、IPv4/IPv6、本地与远端端点、连接状态、PID 和权限允许时的进程名，最多枚举 5000 个套接字并返回前 500 条诊断明细
 - `GET /api/server/terminal`: 所有登录用户均可使用的 SSH WebSocket；全局 Header 可打开同一弹窗中的多终端标签，连接后支持 SFTP 目录逐层进入、返回上级、当前目录搜索、不超过 1 MiB 的 UTF-8 文本编辑保存，以及不超过 10 MiB 的常见图片和 PDF 只读预览。Bash/Zsh 终端执行 `cd`、`cd -`、`pushd` 等目录切换后会通过标准 OSC 7 报告实际工作目录，并自动同步左侧目录。连接密码、私钥和编辑内容仅在当前页面内存中使用，最小化弹窗或切换管理页面时保持，退出登录或关闭浏览器页面后全部清除；首次连接必须确认服务器 SHA256 主机指纹
+- `GET /api/server/host-terminal`: 仅超级管理员可使用的部署机直连 WebSocket；通过宿主机代理提供与 SSH 工作区一致的多终端、目录步进、文件编辑及媒体预览，不依赖 SSH 服务或 22 端口
+- `GET /api/server/host-agent`: Linux 宿主机代理使用 Bearer 共享令牌主动注册的 WebSocket；一个后端实例同时接受一个代理并复用最多 32 个临时终端会话
+
+### 部署机直连（无需 22 端口）
+
+部署机直连由宿主机上的独立低权限进程执行命令。Docker 后端只负责认证和转发，因此不会把容器 shell 误当成宿主机，也不需要给后端容器挂载 Docker Socket、宿主机根目录或特权模式。
+
+1. 生成共享令牌，并将同一值分别配置到仓库部署 `.env` 的 `HOST_AGENT_TOKEN` 和宿主机 `/etc/collector-host-agent.env`。令牌不得提交到 Git：
+
+```bash
+openssl rand -hex 32
+```
+
+2. 构建 Linux 宿主机代理。以下命令使用 Docker BuildKit 导出静态二进制，不会启动特权容器：
+
+```bash
+docker build --file backend/Dockerfile.host-agent --output type=local,dest=./dist backend
+```
+
+3. 创建专用系统账号并安装二进制、环境文件和 systemd 服务：
+
+```bash
+sudo useradd --system --create-home --shell /bin/bash collector-terminal
+sudo install -m 0755 dist/collector-host-agent /usr/local/bin/collector-host-agent
+sudo install -m 0600 deploy/host-agent/collector-host-agent.env.example /etc/collector-host-agent.env
+sudo install -m 0644 deploy/host-agent/collector-host-agent.service /etc/systemd/system/collector-host-agent.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now collector-host-agent
+```
+
+`HOST_AGENT_SERVER_URL` 应指向后端可访问的 `ws://` 或 `wss://.../api/server/host-agent`。反向代理必须为 `/api/server/host-agent` 和 `/api/server/host-terminal` 保留 WebSocket `Upgrade`，并关闭过短的读取超时。代理默认从 `/` 启动 shell，但实际命令和文件权限仅等于 `collector-terminal` 系统账号；需要管理权限时应在宿主机用最小范围 sudoers 规则授权，再在终端内显式执行 `sudo`，不要直接以 root 运行代理。
+
+代理令牌只用于代理到后端的注册认证；浏览器不会接触该令牌。部署机直连还会再次校验后台 HttpOnly 会话与不可变 `roleCode=super-admin`，系统管理员和普通用户即使直接请求接口也会收到 403。代理离线时前端会显示明确错误，现有 SSH 模式不受影响。
 
 ### 用户管理
 

@@ -45,6 +45,7 @@ _task-*/
 backend/*.exe~
 backend/.tmp-*/
 frontend/tsconfig.tsbuildinfo
+/dist/
 
 # Environment and editor files
 .env

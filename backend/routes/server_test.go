@@ -11,7 +11,7 @@ import (
 	"collector-backend/permissions"
 )
 
-// TestServerMetricsAndTerminalAuthorization 验证资源快照沿用工作台权限且 SSH 终端允许全部登录用户。
+// TestServerMetricsAndTerminalAuthorization 验证资源快照、SSH 与部署机直连各自保持正确权限边界。
 func TestServerMetricsAndTerminalAuthorization(t *testing.T) {
 	// router、store 表示隔离数据库上的测试路由和数据存储。
 	router, store, _ := setupTestRouter(t)
@@ -38,6 +38,22 @@ func TestServerMetricsAndTerminalAuthorization(t *testing.T) {
 	router.ServeHTTP(anonymousTerminalResponse, anonymousTerminalRequest)
 	if anonymousTerminalResponse.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous terminal status=%d", anonymousTerminalResponse.Code)
+	}
+	// anonymousHostTerminalRequest 表示未登录用户尝试打开部署机直连终端。
+	anonymousHostTerminalRequest := httptest.NewRequest(http.MethodGet, "/api/server/host-terminal", nil)
+	// anonymousHostTerminalResponse 记录未登录部署机终端响应。
+	anonymousHostTerminalResponse := httptest.NewRecorder()
+	router.ServeHTTP(anonymousHostTerminalResponse, anonymousHostTerminalRequest)
+	if anonymousHostTerminalResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous host terminal status=%d", anonymousHostTerminalResponse.Code)
+	}
+	// unconfiguredAgentRequest 表示未配置令牌时尝试注册宿主机代理。
+	unconfiguredAgentRequest := httptest.NewRequest(http.MethodGet, "/api/server/host-agent", nil)
+	// unconfiguredAgentResponse 记录代理功能未配置时的结构化响应。
+	unconfiguredAgentResponse := httptest.NewRecorder()
+	router.ServeHTTP(unconfiguredAgentResponse, unconfiguredAgentRequest)
+	if unconfiguredAgentResponse.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unconfigured host agent status=%d body=%s", unconfiguredAgentResponse.Code, unconfiguredAgentResponse.Body.String())
 	}
 
 	// systemRole 保存系统管理员角色种子。
@@ -105,6 +121,15 @@ func TestServerMetricsAndTerminalAuthorization(t *testing.T) {
 	if systemTerminalResponse.Code != http.StatusBadRequest {
 		t.Fatalf("system administrator did not reach terminal upgrader: status=%d body=%s", systemTerminalResponse.Code, systemTerminalResponse.Body.String())
 	}
+	// systemHostTerminalRequest 表示系统管理员尝试绕过前端打开部署机直连。
+	systemHostTerminalRequest := httptest.NewRequest(http.MethodGet, "/api/server/host-terminal", nil)
+	systemHostTerminalRequest.AddCookie(&http.Cookie{Name: "sessionId", Value: systemCookie})
+	// systemHostTerminalResponse 记录后端超级管理员边界的拒绝结果。
+	systemHostTerminalResponse := httptest.NewRecorder()
+	router.ServeHTTP(systemHostTerminalResponse, systemHostTerminalRequest)
+	if systemHostTerminalResponse.Code != http.StatusForbidden {
+		t.Fatalf("system administrator host terminal status=%d body=%s", systemHostTerminalResponse.Code, systemHostTerminalResponse.Body.String())
+	}
 
 	// superCookie 保存初始化超级管理员会话 Cookie。
 	superCookie := loginCookie(t, router, "MH", "123")
@@ -116,5 +141,14 @@ func TestServerMetricsAndTerminalAuthorization(t *testing.T) {
 	router.ServeHTTP(superTerminalResponse, superTerminalRequest)
 	if superTerminalResponse.Code != http.StatusBadRequest {
 		t.Fatalf("super administrator did not reach terminal upgrader: status=%d body=%s", superTerminalResponse.Code, superTerminalResponse.Body.String())
+	}
+	// superHostTerminalRequest 表示超级管理员到达部署机 WebSocket 升级器的普通 HTTP 请求。
+	superHostTerminalRequest := httptest.NewRequest(http.MethodGet, "/api/server/host-terminal", nil)
+	superHostTerminalRequest.AddCookie(&http.Cookie{Name: "sessionId", Value: superCookie})
+	// superHostTerminalResponse 记录缺少 WebSocket 升级头时的响应。
+	superHostTerminalResponse := httptest.NewRecorder()
+	router.ServeHTTP(superHostTerminalResponse, superHostTerminalRequest)
+	if superHostTerminalResponse.Code != http.StatusBadRequest {
+		t.Fatalf("super administrator did not reach host terminal upgrader: status=%d body=%s", superHostTerminalResponse.Code, superHostTerminalResponse.Body.String())
 	}
 }

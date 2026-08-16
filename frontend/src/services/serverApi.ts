@@ -33,10 +33,10 @@ export async function fetchServerConnections() {
   return await response.json() as ServerConnectionDetailsResponse;
 }
 
-/** serverTerminalWebSocketURL 返回携带当前会话 Cookie 的 SSH 终端 WebSocket 地址。 */
-export function serverTerminalWebSocketURL() {
-  /** url 保存由后端基地址转换得到的终端 WebSocket 地址。 */
-  const url = new URL('/api/server/terminal', API_BASE_URL);
-  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  return url.toString();
+/** serverTerminalWebSocketURL 返回 SSH 或部署机直连使用的鉴权 WebSocket 地址。 */
+export function serverTerminalWebSocketURL(mode: 'ssh' | 'host') {
+	/** url 保存由后端基地址转换得到的终端 WebSocket 地址。 */
+	const url = new URL(mode === 'host' ? '/api/server/host-terminal' : '/api/server/terminal', API_BASE_URL);
+	url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+	return url.toString();
 }

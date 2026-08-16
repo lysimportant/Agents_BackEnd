@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"collector-backend/models"
+	"collector-backend/terminalprotocol"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	gonet "github.com/shirou/gopsutil/v4/net"
 )
 
@@ -30,6 +32,64 @@ func TestCreateTerminalOriginChecker(t *testing.T) {
 	wildcardChecker := createTerminalOriginChecker([]string{"*"})
 	if !wildcardChecker(rejectedRequest) {
 		t.Fatal("wildcard terminal origin did not accept request")
+	}
+}
+
+// TestHostAgentTokenValidation 验证代理令牌解析、常量时间比较和空值拒绝规则。
+func TestHostAgentTokenValidation(t *testing.T) {
+	// expectedToken 表示测试后端配置的完整共享令牌。
+	expectedToken := "test-host-agent-token-32-bytes-long"
+	if token := bearerToken("Bearer " + expectedToken); token != expectedToken {
+		t.Fatalf("bearer token = %q", token)
+	}
+	if !constantTimeTokenEqual(expectedToken, expectedToken) {
+		t.Fatal("matching host agent token was rejected")
+	}
+	for _, invalidToken := range []string{"", "test-host-agent", "test-host-agent-token-32-bytes-long-extra"} {
+		if constantTimeTokenEqual(invalidToken, expectedToken) {
+			t.Fatalf("invalid host agent token was accepted: %q", invalidToken)
+		}
+	}
+	if token := bearerToken("Basic abc"); token != "" {
+		t.Fatalf("non-Bearer authorization was parsed: %q", token)
+	}
+}
+
+// TestHostAgentEndpointAuthorization 验证代理端点先校验共享令牌，再进入 WebSocket 升级流程。
+func TestHostAgentEndpointAuthorization(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	// handler、router 表示配置独立测试令牌的服务器处理器与最小路由。
+	handler := NewServerHandler([]string{"*"}, "configured-agent-token-at-least-32-bytes")
+	router := gin.New()
+	router.GET("/api/server/host-agent", handler.HostAgent)
+
+	// unauthorizedRequest 表示未提供代理令牌的普通 HTTP 请求。
+	unauthorizedRequest := httptest.NewRequest(http.MethodGet, "/api/server/host-agent", nil)
+	unauthorizedResponse := httptest.NewRecorder()
+	router.ServeHTTP(unauthorizedResponse, unauthorizedRequest)
+	if unauthorizedResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized host agent status=%d", unauthorizedResponse.Code)
+	}
+
+	// authorizedRequest 表示令牌正确但缺少 WebSocket 升级头的请求。
+	authorizedRequest := httptest.NewRequest(http.MethodGet, "/api/server/host-agent", nil)
+	authorizedRequest.Header.Set("Authorization", "Bearer configured-agent-token-at-least-32-bytes")
+	authorizedResponse := httptest.NewRecorder()
+	router.ServeHTTP(authorizedResponse, authorizedRequest)
+	if authorizedResponse.Code != http.StatusBadRequest {
+		t.Fatalf("authorized host agent did not reach upgrader: status=%d body=%s", authorizedResponse.Code, authorizedResponse.Body.String())
+	}
+}
+
+// TestSanitizeHostAgentInfo 验证代理展示身份会清除控制字符并限制字段长度。
+func TestSanitizeHostAgentInfo(t *testing.T) {
+	// sanitizedInfo 表示经过后端清理后的代理身份。
+	sanitizedInfo := sanitizeHostAgentInfo(terminalprotocol.AgentInfo{
+		Name: " deploy\nnode ", Hostname: "server\r01", Username: strings.Repeat("u", 200),
+		OperatingSystem: "linux", Architecture: "amd64",
+	})
+	if sanitizedInfo.Name != "deploynode" || sanitizedInfo.Hostname != "server01" || len(sanitizedInfo.Username) != 128 {
+		t.Fatalf("unexpected sanitized host agent info: %+v", sanitizedInfo)
 	}
 }
 

@@ -41,6 +41,8 @@ type Config struct {
 	PasswordCodeTTL time.Duration
 	// VisitorLogRetentionDays 表示访问者。
 	VisitorLogRetentionDays int
+	// HostAgentToken 表示宿主机代理连接后端时使用的共享认证令牌。
+	HostAgentToken string
 }
 
 // EmailConfig 保存密码验证码邮件使用的 SMTP 配置。
@@ -81,6 +83,7 @@ func Load() Config {
 		Email:                   emailConfig,
 		PasswordCodeTTL:         time.Duration(positiveIntEnv("PASSWORD_CODE_TTL_SECONDS", 180)) * time.Second,
 		VisitorLogRetentionDays: nonNegativeIntEnv("VISITOR_LOG_RETENTION_DAYS", 90),
+		HostAgentToken:          strings.TrimSpace(os.Getenv("HOST_AGENT_TOKEN")),
 	}
 }
 

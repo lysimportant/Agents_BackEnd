@@ -17,6 +17,14 @@ func TestLoadAllowsAnyDevelopmentOriginByDefault(t *testing.T) {
 	}
 }
 
+// TestLoadHostAgentToken 验证宿主机代理共享令牌只从环境变量读取并清理外层空白。
+func TestLoadHostAgentToken(t *testing.T) {
+	t.Setenv("HOST_AGENT_TOKEN", "  isolated-agent-token  ")
+	if token := Load().HostAgentToken; token != "isolated-agent-token" {
+		t.Fatalf("host agent token = %q", token)
+	}
+}
+
 func TestLoadEmailConfigAllowsEnvironmentOverrides(t *testing.T) {
 	// emailConfigPath 指向测试隔离目录中的 SMTP 配置文件。
 	emailConfigPath := filepath.Join(t.TempDir(), "email.txt")

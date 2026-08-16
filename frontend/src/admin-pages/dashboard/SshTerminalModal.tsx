@@ -16,6 +16,8 @@ const MAX_TERMINAL_SESSIONS = 8;
 type SshTerminalModalProps = {
   /** open 表示终端弹窗是否可见。 */
   open: boolean;
+  /** canUseHostAgent 表示当前用户是否为可使用部署机直连的超级管理员。 */
+  canUseHostAgent: boolean;
   /** onClose 在用户最小化终端时仅收起弹窗并保留全部连接。 */
   onClose: () => void;
 };
@@ -35,7 +37,7 @@ type TerminalSessionDefinition = {
 };
 
 /** SshTerminalModal 管理最多八个相互独立的 SSH 终端标签页。 */
-export function SshTerminalModal({ open, onClose }: SshTerminalModalProps) {
+export function SshTerminalModal({ open, canUseHostAgent, onClose }: SshTerminalModalProps) {
   /** sessions、setSessions 保存当前弹窗中的全部终端标签页。 */
   const [sessions, setSessions] = useState<TerminalSessionDefinition[]>([]);
   /** activeSessionID、setActiveSessionID 保存当前可见终端标签页标识。 */
@@ -94,26 +96,26 @@ export function SshTerminalModal({ open, onClose }: SshTerminalModalProps) {
   /** rememberConnectedSession 保存成功连接参数供当前弹窗内的新终端复用。 */
   const rememberConnectedSession = (sessionID: number, connection: SSHConnectionCredentials) => {
     setRememberedConnection(connection);
-    updateSessionStatus(sessionID, 'connected', `${connection.username}@${connection.host}`);
+    updateSessionStatus(sessionID, 'connected', connection.mode === 'host' ? connection.targetLabel || '部署机' : `${connection.username}@${connection.host}`);
   };
 
   return (
     <Modal
       title={(
         <div className="ssh-terminal-title">
-          <span><SquareTerminal size={18} />SSH 服务器终端</span>
-          <Tooltip title="最小化终端"><Button type="text" size="small" icon={<Minimize2 size={17} />} onClick={onClose} aria-label="最小化 SSH 服务器终端" /></Tooltip>
+          <span><SquareTerminal size={18} />服务器终端</span>
+          <Tooltip title="最小化终端"><Button type="text" size="small" icon={<Minimize2 size={17} />} onClick={onClose} aria-label="最小化服务器终端" /></Tooltip>
         </div>
       )}
       open={open}
       onCancel={onClose}
       closable={false}
       footer={null}
-      width={1240}
+      width={1480}
       mask={{ closable: false }}
       className="ssh-terminal-modal"
     >
-      <div className="ssh-terminal-tabs" role="tablist" aria-label="SSH 终端会话">
+      <div className="ssh-terminal-tabs" role="tablist" aria-label="服务器终端会话">
         <div className="ssh-terminal-tab-scroll">
           {sessions.map((session) => (
             <button
@@ -145,7 +147,7 @@ export function SshTerminalModal({ open, onClose }: SshTerminalModalProps) {
           ))}
         </div>
         <Tooltip title={sessions.length >= MAX_TERMINAL_SESSIONS ? `最多同时打开 ${MAX_TERMINAL_SESSIONS} 个终端` : rememberedConnection ? '新建并连接到当前服务器' : '新建终端'}>
-          <Button type="text" icon={<Plus size={16} />} onClick={addSession} disabled={sessions.length >= MAX_TERMINAL_SESSIONS} aria-label="新建 SSH 终端" />
+          <Button type="text" icon={<Plus size={16} />} onClick={addSession} disabled={sessions.length >= MAX_TERMINAL_SESSIONS} aria-label="新建服务器终端" />
         </Tooltip>
       </div>
       <div className="ssh-terminal-session-stack">
@@ -153,6 +155,7 @@ export function SshTerminalModal({ open, onClose }: SshTerminalModalProps) {
           <div key={session.id} hidden={session.id !== activeSessionID} className="ssh-terminal-session-panel" role="tabpanel">
             <SshTerminalSession
               visible={session.id === activeSessionID}
+              canUseHostAgent={canUseHostAgent}
               initialConnection={session.initialConnection}
               autoConnect={session.autoConnect}
               onConnected={(connection) => rememberConnectedSession(session.id, connection)}

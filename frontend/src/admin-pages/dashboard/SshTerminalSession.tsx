@@ -17,6 +17,7 @@ import {
   Save,
   Search,
   ShieldCheck,
+  ServerCog,
   SquareTerminal,
   Unplug,
   X,
@@ -29,11 +30,15 @@ const DEFAULT_SSH_HOST = 'lolicon.beer';
 
 /** SSHAuthenticationMode 表示当前 SSH 凭据类型。 */
 type SSHAuthenticationMode = 'password' | 'privateKey';
+/** TerminalConnectionMode 表示当前标签使用 SSH 或宿主机代理。 */
+export type TerminalConnectionMode = 'ssh' | 'host';
 /** SSHSessionStatus 表示标签页当前连接阶段。 */
 export type SSHSessionStatus = 'idle' | 'connecting' | 'connected' | 'error';
 
-/** SSHConnectionCredentials 表示仅在当前弹窗内存中使用的 SSH 连接参数。 */
+/** SSHConnectionCredentials 表示仅在当前弹窗内存中使用的服务器连接参数。 */
 export type SSHConnectionCredentials = {
+  /** mode 表示本标签连接 SSH 服务器或部署机代理。 */
+  mode: TerminalConnectionMode;
   /** host、port、username 表示 SSH 网络地址和登录账号。 */
   host: string;
   port: number;
@@ -46,6 +51,8 @@ export type SSHConnectionCredentials = {
   passphrase: string;
   /** hostKeyFingerprint 表示已由用户确认的服务端 SHA256 指纹。 */
   hostKeyFingerprint: string;
+  /** targetLabel 表示部署机直连实际使用的系统账号与主机。 */
+  targetLabel: string;
 };
 
 /** SSHFileEntry 表示远端文件树或搜索结果中的一个节点。 */
@@ -83,7 +90,7 @@ type SSHFilePreview = {
 /** TerminalServerMessage 表示后端 SSH WebSocket 返回的状态、目录或文件消息。 */
 type TerminalServerMessage = {
   /** type 表示服务端消息类型。 */
-  type: 'ready' | 'output' | 'host_key' | 'error' | 'exit' | 'directory' | 'file' | 'file_browser' | 'search_results' | 'file_saved';
+  type: 'ready' | 'output' | 'host_key' | 'error' | 'exit' | 'directory' | 'file' | 'file_browser' | 'search_results' | 'file_saved' | 'agent_info';
   /** data 表示远端终端输出。 */
   data?: string;
   /** error、operation 表示错误文案及对应操作。 */
@@ -107,12 +114,16 @@ type TerminalServerMessage = {
   base64Content?: string;
   /** query 表示搜索响应对应的关键词。 */
   query?: string;
+  /** targetLabel 表示部署机代理实际运行账号和主机名称。 */
+  targetLabel?: string;
 };
 
 /** SshTerminalSessionProps 定义一个独立 SSH 会话组件的输入与事件。 */
 type SshTerminalSessionProps = {
   /** visible 表示当前会话是否为可见标签页。 */
   visible: boolean;
+  /** canUseHostAgent 表示当前登录用户是否可以选择部署机直连。 */
+  canUseHostAgent: boolean;
   /** initialConnection 表示可选的弹窗内复用连接参数。 */
   initialConnection: SSHConnectionCredentials | null;
   /** autoConnect 表示 WebSocket 就绪后是否自动建立 SSH。 */
@@ -126,9 +137,11 @@ type SshTerminalSessionProps = {
 };
 
 /** SshTerminalSession 管理一个独立 WebSocket、PTY、文件树和文件预览。 */
-export function SshTerminalSession({ visible, initialConnection, autoConnect, onConnected, onStatusChange, onRequestClose }: SshTerminalSessionProps) {
+export function SshTerminalSession({ visible, canUseHostAgent, initialConnection, autoConnect, onConnected, onStatusChange, onRequestClose }: SshTerminalSessionProps) {
   /** feedbackMessage、feedbackModal 提供继承当前主题的全局反馈与确认弹窗。 */
   const { message: feedbackMessage, modal: feedbackModal } = App.useApp();
+  /** connectionMode、setConnectionMode 保存当前标签使用的服务器连接方式。 */
+  const [connectionMode, setConnectionMode] = useState<TerminalConnectionMode>(initialConnection?.mode === 'host' && canUseHostAgent ? 'host' : 'ssh');
   /** host、setHost 保存用户本次输入的 SSH 主机。 */
   const [host, setHost] = useState(initialConnection?.host ?? DEFAULT_SSH_HOST);
   /** port、setPort 保存用户本次输入的 SSH 端口。 */
@@ -145,12 +158,16 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
   const [passphrase, setPassphrase] = useState(initialConnection?.passphrase ?? '');
   /** socketReady、setSocketReady 表示终端 WebSocket 是否完成握手。 */
   const [socketReady, setSocketReady] = useState(false);
+  /** socketGeneration、setSocketGeneration 用于在代理稍后上线时重建当前标签的 WebSocket。 */
+  const [socketGeneration, setSocketGeneration] = useState(0);
   /** connected、setConnected 表示 SSH shell 是否已经启动。 */
   const [connected, setConnected] = useState(false);
   /** connectionError、setConnectionError 保存最新连接错误。 */
   const [connectionError, setConnectionError] = useState('');
   /** pendingFingerprint、setPendingFingerprint 保存待人工确认的服务端指纹。 */
   const [pendingFingerprint, setPendingFingerprint] = useState('');
+  /** targetLabel、setTargetLabel 保存部署机代理上报的实际系统账号与主机。 */
+  const [targetLabel, setTargetLabel] = useState(initialConnection?.targetLabel ?? '');
   /** fileBrowserAvailable、setFileBrowserAvailable 表示远端是否启用 SFTP。 */
   const [fileBrowserAvailable, setFileBrowserAvailable] = useState(false);
   /** fileBrowserLoading、setFileBrowserLoading 表示 SFTP 子系统是否仍在后台初始化。 */
@@ -197,7 +214,7 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
   const confirmedFingerprintRef = useRef(initialConnection?.hostKeyFingerprint ?? '');
   /** connectionFormRef 为 WebSocket 首次事件提供最新表单值，避免读取挂载时旧闭包。 */
   const connectionFormRef = useRef<Omit<SSHConnectionCredentials, 'hostKeyFingerprint'>>({
-    host, port, username, authenticationMode, password, privateKey, passphrase,
+    mode: connectionMode, host, port, username, authenticationMode, password, privateKey, passphrase, targetLabel,
   });
   /** autoConnectStartedRef 防止自动连接因重渲染重复发送。 */
   const autoConnectStartedRef = useRef(false);
@@ -206,10 +223,12 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
   /** savingContentRef 保存当前写入请求的内容，避免保存期间继续编辑被误判为已保存。 */
   const savingContentRef = useRef('');
 
-  connectionFormRef.current = { host, port, username, authenticationMode, password, privateKey, passphrase };
+  connectionFormRef.current = { mode: connectionMode, host, port, username, authenticationMode, password, privateKey, passphrase, targetLabel };
 
   /** visibleDirectoryEntries 保存按当前关键词过滤后的本层目录节点。 */
   const visibleDirectoryEntries = directoryEntries.filter((entry) => entry.name.toLocaleLowerCase().includes(searchQuery.trim().toLocaleLowerCase()));
+  /** terminalChannelOpening 表示 WebSocket 尚在首次握手且当前没有可重试错误。 */
+  const terminalChannelOpening = !socketReady && !connectionError;
 
   useEffect(() => {
     connectedRef.current = connected;
@@ -253,7 +272,7 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
       terminal.loadAddon(fitAddon);
       terminal.open(terminalContainerRef.current);
       fitAddon.fit();
-      terminal.writeln('\x1b[90mSSH 终端等待连接\x1b[0m');
+      terminal.writeln(`\x1b[90m${connectionMode === 'host' ? '部署机终端' : 'SSH 终端'}等待连接\x1b[0m`);
       if (pendingOutputRef.current) {
         terminal.write(pendingOutputRef.current);
         pendingOutputRef.current = '';
@@ -313,8 +332,9 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
   useEffect(() => {
     /** disposed 表示严格模式预挂载产生的旧 WebSocket 是否已经释放。 */
     let disposed = false;
+    setSocketReady(false);
     /** socket 保存本终端标签生命周期内的鉴权 WebSocket。 */
-    const socket = new WebSocket(serverTerminalWebSocketURL());
+    const socket = new WebSocket(serverTerminalWebSocketURL(connectionMode));
     socketRef.current = socket;
     onStatusChange(autoConnect ? 'connecting' : 'idle');
     socket.onopen = () => {
@@ -330,7 +350,7 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
     };
     socket.onerror = () => {
       if (disposed) return;
-      setConnectionError('服务器终端连接失败');
+      setConnectionError(connectionMode === 'host' ? '部署机直连通道连接失败' : '服务器终端连接失败');
       onStatusChange('error');
     };
     socket.onclose = () => {
@@ -345,13 +365,18 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
       socket.close();
       if (socketRef.current === socket) socketRef.current = null;
     };
-  }, []);
+  }, [connectionMode, socketGeneration]);
 
   /** receiveServerMessage 将服务端终端、目录和文件消息分发到当前会话状态。 */
   const receiveServerMessage = (message: TerminalServerMessage) => {
     if (message.type === 'output') {
       if (terminalRef.current) terminalRef.current.write(message.data ?? '');
       else pendingOutputRef.current += message.data ?? '';
+      return;
+    }
+    if (message.type === 'agent_info') {
+      setTargetLabel(message.targetLabel ?? '');
+      setConnectionError('');
       return;
     }
     if (message.type === 'host_key') {
@@ -361,6 +386,9 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
       return;
     }
     if (message.type === 'ready') {
+      /** connectedTargetLabel 表示 SSH 表单或部署机代理实际连接标签。 */
+      const connectedTargetLabel = connectionMode === 'host' ? message.targetLabel || targetLabel : `${username}@${host}`;
+      if (connectionMode === 'host') setTargetLabel(connectedTargetLabel);
       setConnected(true);
       connectedRef.current = true;
       setFileBrowserAvailable(false);
@@ -371,10 +399,10 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
       setPendingFingerprint('');
       setConnectionError('');
       onStatusChange('connected');
-      terminalRef.current?.writeln('\r\n\x1b[32mSSH 已连接\x1b[0m');
+      terminalRef.current?.writeln(`\r\n\x1b[32m${connectionMode === 'host' ? '部署机已连接' : 'SSH 已连接'}\x1b[0m`);
       terminalRef.current?.focus();
       /** connectedCredentials 保存包含已确认指纹的当前连接参数。 */
-      const connectedCredentials = currentCredentials(confirmedFingerprintRef.current);
+      const connectedCredentials = { ...currentCredentials(confirmedFingerprintRef.current), targetLabel: connectedTargetLabel };
       onConnected(connectedCredentials);
       return;
     }
@@ -385,12 +413,12 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
       if (message.fileBrowserAvailable) {
         setTreeError('');
         setDirectoryLoading(true);
-        /** initialDirectory 表示 SFTP 就绪后应显示的根目录或等待同步的终端目录。 */
+        /** initialDirectory 表示文件浏览就绪后应显示的根目录或等待同步的终端目录。 */
         const initialDirectory = pendingTerminalDirectoryRef.current || '/';
         pendingTerminalDirectoryRef.current = '';
         requestDirectory(initialDirectory);
       } else {
-        setTreeError(message.error || '远端服务器未启用 SFTP 文件浏览');
+        setTreeError(message.error || (connectionMode === 'host' ? '部署机文件浏览不可用' : '远端服务器未启用 SFTP 文件浏览'));
       }
       return;
     }
@@ -448,14 +476,14 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
         setTreeError(message.error || '读取远端文件系统失败');
         return;
       }
-      setConnectionError(message.error || 'SSH 连接失败');
+      setConnectionError(message.error || (connectionMode === 'host' ? '部署机连接失败' : 'SSH 连接失败'));
       onStatusChange('error');
-      terminalRef.current?.writeln(`\r\n\x1b[31m${message.error || 'SSH 连接失败'}\x1b[0m`);
+      terminalRef.current?.writeln(`\r\n\x1b[31m${message.error || (connectionMode === 'host' ? '部署机连接失败' : 'SSH 连接失败')}\x1b[0m`);
       return;
     }
     setConnected(false);
     connectedRef.current = false;
-    setConnectionError(message.error || 'SSH 会话已结束');
+    setConnectionError(message.error || (connectionMode === 'host' ? '部署机终端会话已结束' : 'SSH 会话已结束'));
     onStatusChange('error');
   };
 
@@ -480,10 +508,31 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
     }
     setConnectionError('');
     onStatusChange('connecting');
-    confirmedFingerprintRef.current = hostKeyFingerprint;
+    confirmedFingerprintRef.current = connectionMode === 'ssh' ? hostKeyFingerprint : '';
     terminalRef.current?.clear();
-    terminalRef.current?.writeln(`\x1b[90m正在连接 ${host}:${port} ...\x1b[0m`);
-    sendConnectionPayload(socket, currentCredentials(hostKeyFingerprint), terminalRef.current);
+    terminalRef.current?.writeln(`\x1b[90m${connectionMode === 'host' ? '正在连接部署机代理' : `正在连接 ${host}:${port}`} ...\x1b[0m`);
+    sendConnectionPayload(socket, currentCredentials(connectionMode === 'ssh' ? hostKeyFingerprint : ''), terminalRef.current);
+  };
+
+  /** changeConnectionMode 在未连接时切换 WebSocket 端点并清理上一种模式的临时状态。 */
+  const changeConnectionMode = (mode: TerminalConnectionMode) => {
+    if (connected || mode === connectionMode || (mode === 'host' && !canUseHostAgent)) return;
+    setConnectionMode(mode);
+    setSocketReady(false);
+    setConnectionError('');
+    setPendingFingerprint('');
+    setTargetLabel(mode === 'host' ? initialConnection?.targetLabel ?? '' : '');
+    autoConnectStartedRef.current = false;
+    terminalRef.current?.clear();
+    terminalRef.current?.writeln(`\x1b[90m${mode === 'host' ? '部署机终端' : 'SSH 终端'}等待连接\x1b[0m`);
+  };
+
+  /** retryTerminalChannel 在代理离线或网络中断后重新建立当前模式的鉴权通道。 */
+  const retryTerminalChannel = () => {
+    setConnectionError('');
+    setSocketReady(false);
+    autoConnectStartedRef.current = false;
+    setSocketGeneration((currentGeneration) => currentGeneration + 1);
   };
 
   /** requestDirectory 请求读取一个远端目录。 */
@@ -582,12 +631,12 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
   return (
     <div className="ssh-terminal-layout" data-tilt-disabled="true">
       {connected ? (
-        <aside className="ssh-file-browser" aria-label="远端文件浏览器">
+        <aside className="ssh-file-browser" aria-label={connectionMode === 'host' ? '部署机文件浏览器' : '远端文件浏览器'}>
           <div className="ssh-file-browser-header">
             <div><FolderOpen size={17} /><strong title={currentDirectory}>{currentDirectory}</strong><Tag color="processing">当前目录</Tag></div>
             <div>
               <Tooltip title="刷新当前目录"><Button type="text" size="small" icon={<RefreshCw size={14} />} onClick={refreshDirectory} disabled={!fileBrowserAvailable || directoryLoading} aria-label="刷新当前目录" /></Tooltip>
-              <Tooltip title="断开当前终端"><Button type="text" danger size="small" icon={<Unplug size={14} />} onClick={onRequestClose} aria-label="断开当前 SSH 终端" /></Tooltip>
+              <Tooltip title="断开当前终端"><Button type="text" danger size="small" icon={<Unplug size={14} />} onClick={onRequestClose} aria-label="断开当前服务器终端" /></Tooltip>
             </div>
           </div>
           {fileBrowserAvailable && (
@@ -620,12 +669,16 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
                 </div>
               ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={searchQuery.trim() ? '当前目录没有匹配项' : '当前目录为空'} />}
             </div>
-          ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="SFTP 文件浏览不可用" />}
+          ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={connectionMode === 'host' ? '部署机文件浏览不可用' : 'SFTP 文件浏览不可用'} />}
         </aside>
       ) : (
         <Form className="ssh-terminal-form" layout="vertical" onFinish={() => sendConnectRequest()}>
           <div className="ssh-terminal-status-row"><Tag color={socketReady ? 'processing' : 'default'}>{socketReady ? '等待连接' : '正在建立通道'}</Tag></div>
-          <Form.Item label="服务器地址" required>
+          {canUseHostAgent && <Form.Item label="连接方式"><Segmented className="ssh-terminal-segmented" block value={connectionMode} onChange={(value) => changeConnectionMode(value as TerminalConnectionMode)} options={[
+            { label: 'SSH', value: 'ssh', icon: <SquareTerminal size={14} /> },
+            { label: '部署机直连', value: 'host', icon: <ServerCog size={14} /> },
+          ]} /></Form.Item>}
+          {connectionMode === 'ssh' ? <><Form.Item label="服务器地址" required>
             <Input
               className="ssh-server-input"
               value={host}
@@ -640,7 +693,7 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
             <Form.Item label="用户名" required><Input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="off" /></Form.Item>
           </div>
           <Form.Item label="认证方式">
-            <Segmented block value={authenticationMode} onChange={(value) => setAuthenticationMode(value as SSHAuthenticationMode)} options={[
+            <Segmented className="ssh-terminal-segmented" block value={authenticationMode} onChange={(value) => setAuthenticationMode(value as SSHAuthenticationMode)} options={[
               { label: '密码', value: 'password', icon: <KeyRound size={14} /> },
               { label: '私钥', value: 'privateKey', icon: <ShieldCheck size={14} /> },
             ]} />
@@ -649,23 +702,23 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
             <Form.Item label="密码" required><Input.Password value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" /></Form.Item>
           ) : (
             <><Form.Item label="私钥" required><Input.TextArea value={privateKey} onChange={(event) => setPrivateKey(event.target.value)} autoSize={{ minRows: 5, maxRows: 8 }} /></Form.Item><Form.Item label="私钥口令"><Input.Password value={passphrase} onChange={(event) => setPassphrase(event.target.value)} autoComplete="new-password" /></Form.Item></>
-          )}
-          {pendingFingerprint && <Alert type="warning" showIcon title="确认 SSH 主机指纹" description={<code>{pendingFingerprint}</code>} action={<Button size="small" icon={<ShieldCheck size={14} />} onClick={() => sendConnectRequest(pendingFingerprint)}>确认并连接</Button>} />}
+          )}</> : <div className="host-agent-target"><ServerCog size={20} /><div><strong>{targetLabel || '部署机代理'}</strong><span>{targetLabel ? '代理在线' : '等待代理连接'}</span></div></div>}
+          {connectionMode === 'ssh' && pendingFingerprint && <Alert type="warning" showIcon title="确认 SSH 主机指纹" description={<code>{pendingFingerprint}</code>} action={<Button size="small" icon={<ShieldCheck size={14} />} onClick={() => sendConnectRequest(pendingFingerprint)}>确认并连接</Button>} />}
           {connectionError && <Alert type="error" showIcon title={connectionError} />}
-          <div className="ssh-terminal-form-actions"><Button type="primary" htmlType="submit" icon={<PlugZap size={15} />} disabled={!socketReady || !host.trim() || !username.trim() || (authenticationMode === 'password' ? !password : !privateKey.trim())}>获取主机指纹</Button></div>
+          <div className="ssh-terminal-form-actions"><Button type="primary" htmlType={socketReady ? 'submit' : 'button'} icon={<PlugZap size={15} />} onClick={!socketReady && connectionError ? retryTerminalChannel : undefined} disabled={terminalChannelOpening || (socketReady && connectionMode === 'ssh' && (!host.trim() || !username.trim() || (authenticationMode === 'password' ? !password : !privateKey.trim())))}>{socketReady ? connectionMode === 'host' ? '连接部署机' : '获取主机指纹' : connectionError ? '重新连接通道' : '正在建立通道'}</Button></div>
         </Form>
       )}
-      <section className="ssh-terminal-workbench" aria-label="SSH 终端和文件预览">
+      <section className="ssh-terminal-workbench" aria-label="服务器终端和文件预览">
         <div className="ssh-terminal-view-tabs">
           <button type="button" className={activeView === 'terminal' ? 'is-active' : ''} onClick={() => setActiveView('terminal')}><SquareTerminal size={14} />终端</button>
           {filePreview && <button type="button" className={activeView === 'file' ? 'is-active' : ''} onClick={() => setActiveView('file')}><FileCode2 size={14} /><span title={filePreview.path}>{fileName(filePreview.path)}{filePreview.content !== filePreview.originalContent ? ' *' : ''}</span><X size={12} onClick={(event) => { event.stopPropagation(); closeFilePreview(); }} /></button>}
-          <span className={`ssh-terminal-connection-label${connected ? ' is-connected' : ''}`}>{connected ? `${username}@${host}` : '未连接'}</span>
+          <span className={`ssh-terminal-connection-label${connected ? ' is-connected' : ''}`}>{connected ? connectionMode === 'host' ? targetLabel || '部署机' : `${username}@${host}` : '未连接'}</span>
         </div>
-        <div className={`ssh-terminal-screen${activeView !== 'terminal' ? ' is-hidden' : ''}`} aria-label="SSH 服务器终端输出">
+        <div className={`ssh-terminal-screen${activeView !== 'terminal' ? ' is-hidden' : ''}`} aria-label="服务器终端输出">
           <div ref={terminalContainerRef} className="ssh-terminal-xterm" />
         </div>
         {activeView === 'file' && (
-          <div className="ssh-file-preview" aria-label="远端文件预览与编辑">
+          <div className="ssh-file-preview" aria-label="服务器文件预览与编辑">
             {fileLoading ? <Spin tip="正在读取远端文件"><div className="ssh-file-preview-loading" /></Spin> : filePreview ? (
               <><div className="ssh-file-preview-header"><div>{filePreview.mimeType.startsWith('image/') ? <FileImage size={16} /> : <FileCode2 size={16} />}<strong>{filePreview.path}</strong>{fileSaving ? <Tag color="processing">保存中</Tag> : !filePreview.binary && filePreview.content !== filePreview.originalContent ? <Tag color="warning">未保存</Tag> : fileSaveSucceeded ? <Tag color="success">已保存</Tag> : null}</div><div><span>{formatBytes(filePreview.size)}{filePreview.truncated ? ` · 超过 ${filePreview.mimeType ? '10 MiB' : '1 MiB'}` : ''}</span>{!filePreview.binary && <Tooltip title="保存远端文件"><Button type="text" size="small" icon={<Save size={15} />} loading={fileSaving} disabled={filePreview.truncated || filePreview.content === filePreview.originalContent} onClick={saveRemoteFile} aria-label="保存远端文件" /></Tooltip>}</div></div>{filePreview.truncated && filePreview.mimeType ? <Alert type="warning" showIcon title="文件超过 10 MiB，无法在浏览器中预览" /> : filePreview.mimeType.startsWith('image/') && filePreview.base64Content ? <div className="ssh-file-media-preview"><img src={fileDataURL(filePreview)} alt={fileName(filePreview.path)} /></div> : filePreview.mimeType === 'application/pdf' && filePreview.base64Content ? <iframe className="ssh-file-pdf-preview" src={fileDataURL(filePreview)} title={fileName(filePreview.path)} /> : filePreview.binary ? <Empty image={<FileWarning size={46} />} description="该二进制文件暂不支持预览" /> : <>{filePreview.truncated && <Alert type="warning" showIcon title="文件超过 1 MiB，仅显示前 1 MiB，不能保存" />}<Input.TextArea className="ssh-file-editor" value={filePreview.content} readOnly={filePreview.truncated} onKeyDown={saveRemoteFileFromKeyboard} onChange={(event) => { setFileSaveSucceeded(false); setFilePreview((currentPreview) => currentPreview ? { ...currentPreview, content: event.target.value } : currentPreview); }} spellCheck={false} /></>}</>
             ) : <Empty image={<File size={46} />} description="从左侧当前目录选择文件" />}
@@ -678,6 +731,10 @@ export function SshTerminalSession({ visible, initialConnection, autoConnect, on
 
 /** sendConnectionPayload 将连接参数和当前终端尺寸发送给后端。 */
 function sendConnectionPayload(socket: WebSocket, connection: SSHConnectionCredentials, terminal: XtermTerminal | null) {
+  if (connection.mode === 'host') {
+    socket.send(JSON.stringify({ type: 'connect', rows: terminal?.rows ?? 24, columns: terminal?.cols ?? 80 }));
+    return;
+  }
   socket.send(JSON.stringify({
     type: 'connect', host: connection.host, port: connection.port, username: connection.username,
     password: connection.authenticationMode === 'password' ? connection.password : '',

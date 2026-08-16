@@ -47,7 +47,7 @@ import { pageKeys, pageTitles } from '@/src/config/constants';
 import { internalChatWebSocketURL, listSocketConversations, socketNotificationWebSocketURL } from '@/src/features/chat/socketApi';
 import { getInternalChatUnreadTotal, internalChatUnreadStorageKey, markInternalChatUnread } from '@/src/features/chat/unreadStore';
 import type { SocketConversation, SocketEnvelope } from '@/src/features/chat/types';
-import { isAdministratorRoleCode } from '@/src/utils/roleAccess';
+import { isAdministratorRoleCode, isSuperAdminRoleCode } from '@/src/utils/roleAccess';
 import {
   adminThemes,
   applyAdminTheme,
@@ -542,8 +542,8 @@ export function MainLayout({
               />
             </div>
             <Space size={10} wrap className="antd-header-actions">
-              <Tooltip title="SSH 服务器终端">
-                <Button type="text" aria-label="打开 SSH 服务器终端" icon={<SquareTerminal size={18} />} onClick={() => setTerminalOpen(true)} />
+              <Tooltip title="服务器终端">
+                <Button type="text" aria-label="打开服务器终端" icon={<SquareTerminal size={18} />} onClick={() => setTerminalOpen(true)} />
               </Tooltip>
               <Tooltip title="内部聊天">
                 <Badge count={internalUnreadCount} overflowCount={99} size="small">
@@ -636,7 +636,7 @@ export function MainLayout({
           </Content>
         </Layout>
       </Layout>
-      <SshTerminalModal open={terminalOpen} onClose={() => setTerminalOpen(false)} />
+      <SshTerminalModal open={terminalOpen} canUseHostAgent={isSuperAdminRoleCode(authUser.roleCode)} onClose={() => setTerminalOpen(false)} />
     </ConfigProvider>
   );
 }

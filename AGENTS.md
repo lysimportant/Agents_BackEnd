@@ -34,7 +34,7 @@
 
 | 目录 | 当前状态 | 技术栈与职责 | 默认地址 |
 | --- | --- | --- | --- |
-| `backend/` | 可运行 | Go 1.26、Gin、SQLite、Redis；认证、权限、内容、文件、聊天、监控与 SSH | `http://localhost:8080` |
+| `backend/` | 可运行 | Go 1.26、Gin、SQLite、Redis；认证、权限、内容、文件、聊天、监控、SSH 与宿主机代理 | `http://localhost:8080` |
 | `frontend/` | 可运行 | Next.js 16 App Router、React、strict TypeScript、Ant Design、Tailwind CSS 4 | `http://localhost:3000` |
 | `portal/` | 仅有 `AGENTS.md`，尚无 `package.json` 和源码 | 规划中的公开内容门户；需求基线为 `docs/portal-requirements.md` | 规划为 `http://localhost:3001` |
 
@@ -104,6 +104,8 @@
 - `GET /api/server/connections` 使用相同权限按需返回活动连接明细；平台或进程权限不支持枚举时必须返回结构化不可用状态，不能把权限限制伪装成零连接。
 - “业务资源”是工作台下独立的 `business-resources` 页面，展示用户、菜单和文章的总量、有效量、构成及可用率，不得重新塞回预览台底部长页面。
 - `/api/server/terminal` 是任意有效登录用户可用的 SSH WebSocket，不得重新加入管理员限定。
+- `/api/server/host-agent` 使用 `HOST_AGENT_TOKEN` 接受单个 Linux 宿主机代理主动注册；`/api/server/host-terminal` 只允许 `roleCode=super-admin`，不得向系统管理员或普通用户开放。
+- 部署机直连命令和文件权限必须等于代理进程系统账号；禁止通过特权容器、Docker Socket 或挂载宿主机根目录替代独立低权限代理，也不得把容器 shell 标记为宿主机终端。
 - SSH 凭据、私钥、文件内容和连接状态只保存在当前浏览器页面内存；弹窗最小化和页面切换保持连接，退出登录或关闭浏览器页面时销毁。
 - 多终端、主机指纹确认、SFTP 步进目录、当前目录搜索、终端路径同步、文本编辑保存、图片/PDF 预览属于同一协议能力，修改一端时必须同步检查后端协议、前端会话状态和 OpenAPI。
 
@@ -119,7 +121,7 @@
 | SQLite 迁移 | `backend/repository/sqlite_store.go`、相关 repository、扫描顺序、迁移幂等测试、`docs/database/schema.md` |
 | 文件与聊天附件 | routes、handlers、repository、`frontend/src/services/fileApi.ts`、文件页、聊天调用方、回收站语义 |
 | 公开门户能力 | `/api/public/*`、B 端发布控制、OpenAPI、`docs/portal-requirements.md`、未来 `portal/` 调用方 |
-| 服务器与 SSH | `backend/handlers/server.go`、`backend/routes/server.go`、`frontend/src/services/serverApi.ts`、Dashboard 与 SSH 组件、OpenAPI |
+| 服务器与终端 | `backend/handlers/server.go`、`backend/handlers/host_agent.go`、`backend/cmd/host-agent/`、`backend/routes/server.go`、`frontend/src/services/serverApi.ts`、终端组件、OpenAPI |
 | 主题、布局或交互 | `frontend/src/theme/`、`frontend/app/globals.css`、相关 CSS/组件、桌面和移动浏览器验收 |
 
 ## 八、数据与秘密保护
@@ -134,6 +136,7 @@
 
 - 沿用现有 Ant Design、Lucide、shadcn/ui、Tailwind 和原生 CSS 体系；常见工具操作优先使用已有图标库。
 - 卡片圆角默认不超过 8px，不创建卡片嵌套卡片或装饰性光斑；文字、按钮和固定格式控件必须有稳定响应式尺寸。
+- 同一工具区或分段控件内的按钮必须使用统一高度和视觉中心线，图标与文字作为一个 flex 整体居中；Header、Dialog、Segmented 等场景混用 Ant Design 与 Lucide 图标时统一包装器、行高和 SVG 显示方式，禁止用单个图标的 `top`、margin 或 `translateY` 掩盖结构性偏移。
 - 修改侧栏、折叠、抽屉或内容显隐时提供平滑过渡，并在 `prefers-reduced-motion` 下关闭或弱化动画。
 - 涉及视觉和交互时使用当前环境的官方 Browser 能力检查桌面与移动端、控制台错误、横向溢出、遮挡、焦点和真实交互结果。
 

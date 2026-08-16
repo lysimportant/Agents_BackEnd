@@ -3,6 +3,7 @@ module collector-backend
 go 1.26
 
 require (
+	github.com/creack/pty v1.1.24
 	github.com/gin-gonic/gin v1.11.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/pkg/sftp v1.13.7
@@ -10,6 +11,7 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.2
 	golang.org/x/crypto v0.53.0
 	golang.org/x/net v0.56.0
+	golang.org/x/sys v0.46.0
 	modernc.org/sqlite v1.53.0
 )
 
@@ -53,7 +55,6 @@ require (
 	golang.org/x/arch v0.20.0 // indirect
 	golang.org/x/mod v0.37.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/tools v0.47.0 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect

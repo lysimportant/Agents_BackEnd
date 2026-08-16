@@ -40,7 +40,7 @@
 - `app/chat/`：内部员工聊天真实路由；`app/socket/chat/`：Socket 客服访客聊天真实路由与兼容入口。
 - `src/admin-pages/`：认证、预览台、业务资源、用户、部门、角色、菜单、文章、文件、资料和访问分析页面。
 - `src/features/workspace/`：会话恢复、菜单驱动加载、CRUD、筛选和反馈等工作台状态；`src/features/chat/`：Socket 客服管理端与访客端业务。
-- `src/components/layout/MainLayout.tsx`：导航、响应式侧栏、主题、全局 SSH 入口和终端弹窗宿主。
+- `src/components/layout/MainLayout.tsx`：导航、响应式侧栏、主题、全局服务器终端入口和终端弹窗宿主。
 - `src/components/shared/` 与 `src/components/table/`：共享反馈、富文本、关联用户、3D 卡片和表格组件。
 - `src/services/`：认证业务请求、文件、访问分析和服务器/SSH API；`src/types/`：共享业务类型。
 - `src/config/`、`src/utils/`、`src/theme/`、`src/styles/`：常量、权限/导出/菜单工具、主题和全局增强样式。
@@ -92,6 +92,7 @@
 - 全站卡片效果由根布局中的 `TiltCardEffects` 通过事件委托和单个 `requestAnimationFrame` 自动增强；显式新卡可使用 `TiltCard/TiltCardLayer`。通过 `data-tilt-disabled="true"` 排除表单或交互密集容器。
 - 3D 卡片只更新 CSS 变量和 transform；保持触摸设备与 `prefers-reduced-motion` 禁用逻辑。文件管理外层 `.file-browser-panel` 必须保持普通静态 Card，内部 `.file-card` 才启用效果。
 - 弹窗和折叠权限区域要检查文字截断、Tooltip、左右留白以及 390px 移动端无横向溢出。
+- Header、Dialog、Segmented 等同组工具按钮统一使用稳定高度和中心线；图标与文字必须处于同一个横向 flex 布局，`.ant-space-item`、`.ant-badge`、`.ant-btn-icon`、`.ant-segmented-item-icon` 与 SVG 使用紧凑行高。混用 Ant Design 与 Lucide 时需量测按钮、图标和文字中心线，禁止仅对某个图标添加 `top`、margin 或 `translateY` 补偿。
 - 所有新增或修改的折叠面板、侧栏（sidebar）及展开/收起交互都必须为宽度、位移或内容显隐提供平滑过渡，禁止无动画瞬间跳变；动画不得造成遮挡或横向溢出，并必须在 `prefers-reduced-motion: reduce` 下关闭或显著弱化。
 - 内部聊天 `/chat` 与客服聊天页面的主内容区应优先填满可用宽度，避免桌面端两侧产生不必要的大留白；调整一侧页面时保持另一侧的 API、状态和鉴权边界独立即可。
 - 使用 Ant Design Modal 时遵循当前版本 API，禁止新增已弃用的 `maskClosable`，应使用 `mask={{ closable: ... }}`。
@@ -112,6 +113,8 @@
 - 预览台“活动连接”指标可点击，并通过 `/api/server/connections` 按需打开连接明细；明细页需保留状态筛选、当前结果搜索、刷新以及平台不支持时的结构化警告。
 - 监控值代表后端进程所在主机或容器可见资源。缺失温度、磁盘 I/O 等平台数据时展示 `collectionWarnings`，不能伪造为零或宿主机完整指标。
 - SSH 是 Header 全局功能，任意有效登录用户都可打开，不依赖当前管理页面或管理员角色。弹窗关闭行为是最小化：切换页面或再次打开时连接、多终端标签、目录和未关闭预览继续保留。
+- 只有 `roleCode=super-admin` 的用户可看到“部署机直连”选项，并连接 `/api/server/host-terminal`；系统管理员和普通用户仍只使用现有 SSH。前端隐藏只是体验边界，后端 403 才是安全边界。
+- 部署机直连必须显示代理上报的 `系统账号@主机名`，代理离线时显示明确错误；不得退回后端容器 shell，也不得把代理共享令牌发送给浏览器。
 - 只有退出登录、会话失效或浏览器页面卸载时才销毁全部 SSH 连接和敏感状态；密码、私钥、编辑内容不得写入 `localStorage`、`sessionStorage` 或日志。
 - `SshTerminalModal.tsx` 管理多会话与弹窗生命周期，`SshTerminalSession.tsx` 管理单连接终端、SFTP 步进目录、当前目录搜索、文件编辑/保存和图片/PDF预览。终端 OSC 7 路径变化必须同步刷新左侧当前目录。
 - 主机地址使用普通可编辑 Input，默认值为 `lolicon.beer`；用户名默认 `root`。文件保存成功必须同时显示 message、清除待保存状态并保留明确的已保存反馈。

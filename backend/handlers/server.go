@@ -37,17 +37,25 @@ import (
 type ServerHandler struct {
 	// upgrader 将经过鉴权的终端请求升级为 WebSocket。
 	upgrader websocket.Upgrader
+	// hostAgentToken 保存宿主机代理连接时必须提供的共享令牌。
+	hostAgentToken string
+	// hostAgentHub 负责在超级管理员浏览器终端与单个宿主机代理之间转发会话。
+	hostAgentHub *hostAgentHub
 }
 
 // NewServerHandler 使用部署允许来源创建服务器管理 handler。
-func NewServerHandler(allowedOrigins []string) *ServerHandler {
+func NewServerHandler(allowedOrigins []string, hostAgentToken string) *ServerHandler {
 	// originAllowed 校验 WebSocket Origin 是否符合当前 CORS 部署配置。
 	originAllowed := createTerminalOriginChecker(allowedOrigins)
-	return &ServerHandler{upgrader: websocket.Upgrader{
-		ReadBufferSize:  4096,
-		WriteBufferSize: 4096,
-		CheckOrigin:     originAllowed,
-	}}
+	return &ServerHandler{
+		upgrader: websocket.Upgrader{
+			ReadBufferSize:  4096,
+			WriteBufferSize: 4096,
+			CheckOrigin:     originAllowed,
+		},
+		hostAgentToken: strings.TrimSpace(hostAgentToken),
+		hostAgentHub:   newHostAgentHub(),
+	}
 }
 
 // Metrics 处理 GET /api/server/metrics；要求登录、工作台菜单和查看动作，返回后端运行环境资源快照。
@@ -275,6 +283,8 @@ type terminalServerMessage struct {
 	Base64Content string `json:"base64Content,omitempty"`
 	// Query 表示搜索结果对应的原始关键词，用于前端丢弃过期响应。
 	Query string `json:"query,omitempty"`
+	// TargetLabel 表示部署机直连实际使用的系统账号与主机名称。
+	TargetLabel string `json:"targetLabel,omitempty"`
 }
 
 // terminalFileEntry 表示远端目录中的一个只读文件系统节点。

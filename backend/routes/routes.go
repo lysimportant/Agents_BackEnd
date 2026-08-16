@@ -49,6 +49,9 @@ func Setup(router *gin.Engine, appStore Store, authService *auth.Service, passwo
 	registerAuthRoutes(api, handlers.NewAuthHandler(appStore, authService, socketHandler))
 	registerPublicSocketRoutes(api, socketHandler)
 	registerPublicRoutes(api, handlers.NewPublicHandler(appStore, cfg.UploadDir))
+	// serverHandler 由公开代理通道和登录用户终端共享同一个会话转发中心。
+	serverHandler := handlers.NewServerHandler(cfg.AllowedOrigins, cfg.HostAgentToken)
+	registerHostAgentRoute(api, serverHandler)
 
 	// protected 保存变量 protected。
 	protected := api.Group("")
@@ -63,5 +66,5 @@ func Setup(router *gin.Engine, appStore Store, authService *auth.Service, passwo
 	registerProtectedSocketRoutes(protected, appStore, socketHandler)
 	registerInternalChatRoutes(protected, handlers.NewInternalChatHandler(appStore, cfg.UploadDir))
 	registerVisitorAnalyticsRoutes(protected, appStore, handlers.NewVisitorAnalyticsHandler(appStore))
-	registerServerRoutes(protected, appStore, handlers.NewServerHandler(cfg.AllowedOrigins))
+	registerServerRoutes(protected, appStore, serverHandler)
 }

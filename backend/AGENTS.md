@@ -8,7 +8,7 @@
 ## 适用范围与当前能力
 
 - 本文件适用于 `backend/` 及其所有子目录，并补充仓库根目录的 `AGENTS.md`。
-- 当前后端已实现后台认证和权限、文章与文件、门户公开读取、内部聊天、Socket 客服、访问分析、服务器资源监控及 SSH/SFTP 工作区；新增功能时先确认应落入现有业务边界，而不是建立重复接口或第二套存储。
+- 当前后端已实现后台认证和权限、文章与文件、门户公开读取、内部聊天、Socket 客服、访问分析、服务器资源监控、SSH/SFTP 工作区及 Linux 宿主机终端代理；新增功能时先确认应落入现有业务边界，而不是建立重复接口或第二套存储。
 
 ## 代码文档与命名
 
@@ -30,7 +30,9 @@
 - `main.go`：程序入口与依赖组装，负责加载配置、打开数据库、迁移和初始化数据、补录上传文件并启动 Gin。
 - `config/`：环境变量和默认配置。
 - `database/`：SQLite 连接初始化及连接级设置。
-- `handlers/`：HTTP 与 WebSocket handler，覆盖认证、数据点、用户、部门、角色、菜单、文章、文件、公开门户、两套聊天、访问分析、服务器指标和 SSH/SFTP。
+- `handlers/`：HTTP 与 WebSocket handler，覆盖认证、数据点、用户、部门、角色、菜单、文章、文件、公开门户、两套聊天、访问分析、服务器指标、SSH/SFTP 和宿主机代理转发。
+- `cmd/host-agent/`：部署在 Linux 宿主机的低权限终端代理；主动连接后端并按临时会话提供 PTY、本地目录、搜索、读取和文本保存。
+- `terminalprotocol/`：浏览器终端、后端转发层与宿主机代理共享的 JSON 协议类型。
 - `repository/`：当前生产路径使用的 SQLite 持久化实现，包含增量迁移、幂等种子、权限合并、内容、文件、聊天和访问日志查询。
 - `store/`：保留的内存存储实现；`main.go` 当前不使用它，不要把新功能只实现于此。
 - `routes/`：所有路由注册；`routes.go` 负责总装配，各业务文件负责本域的路径和权限绑定。
@@ -71,6 +73,9 @@
 - `GET /api/server/metrics` 需要 `dashboard` 菜单和 `dashboard.view` 动作，使用 `gopsutil` 采集后端运行环境可见的 CPU、内存、磁盘、网络、进程和温度；Docker 中不得宣称为宿主机完整指标。
 - `GET /api/server/connections` 使用相同菜单和动作权限按需枚举活动连接，返回协议、地址族、端点、状态、PID 和可读取的进程名；枚举失败时返回 `available=false`、警告和空列表，不得以 500 或伪造零值掩盖平台限制。
 - `/api/server/terminal` 只要求有效登录会话，所有登录用户权限相同。SSH WebSocket 同时承载终端数据、主机指纹确认、SFTP 目录/搜索/读写以及 OSC 7 工作目录同步协议。
+- `/api/server/host-agent` 只接受与后端 `HOST_AGENT_TOKEN` 常量时间匹配的 Bearer 令牌，并限制一个后端实例同时连接一个代理；令牌为空时接口必须禁用。
+- `/api/server/host-terminal` 必须同时要求有效后台会话和稳定 `roleCode=super-admin`；系统管理员及普通用户均为 403。代理断开、浏览器关闭或页面退出时必须释放对应 PTY，会话标识不得持久化。
+- 宿主机代理必须以独立低权限系统账号运行，不得要求后端容器使用 privileged、Docker Socket 或宿主机根目录挂载。代理日志不得包含共享令牌、终端输入、文件内容或后台 Cookie。
 - SSH 文本编辑仅允许不超过 1 MiB 的现有 UTF-8 普通文件；图片和 PDF 预览不超过 10 MiB；目录和递归搜索必须保留数量上限、路径清理及远端权限错误反馈。
 
 ## 鉴权层次
@@ -112,6 +117,7 @@
 - `EMAIL_CONFIG_PATH=email.txt`（默认依次检查当前目录与上级项目目录；Docker Compose 将仓库根目录的 `email.txt` 只读挂载到 `/app/email.txt`）
 - `PASSWORD_CODE_TTL_SECONDS=180`
 - `VISITOR_LOG_RETENTION_DAYS=90`（设为 `0` 时关闭自动清理）
+- `HOST_AGENT_TOKEN=`（空值禁用宿主机代理；生产值至少使用 32 字节随机内容）
 
 邮箱文件按 `KEY=VALUE` 读取：`EMAIL_HOST`、`EMAIL_PORT`、`EMAIL_SECURE`、`EMAIL_USER`、`EMAIL_PASS`、`EMAIL_FROM`；`EMAIL_FROM` 空缺时使用 `EMAIL_USER`。密码验证码当前必须写入 Redis，没有内存降级；Redis 或 SMTP 不可用时接口应返回错误，不能把验证码打印到日志或响应。
 

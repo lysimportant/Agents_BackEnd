@@ -230,6 +230,26 @@ paths:
       responses:
         '101': { description: WebSocket 升级成功。 }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/server/host-terminal:
+    get:
+      tags: [服务器]
+      summary: 建立超级管理员部署机直连 WebSocket
+      description: 仅 roleCode=super-admin 的有效登录会话可升级；后端为每个浏览器标签分配临时会话，并通过已认证宿主机代理转发 PTY、目录、搜索、文件读取和文本保存消息。该模式不使用 SSH 或 22 端口，命令与文件权限等于运行代理的 Linux 系统账号，代理离线时返回明确错误。
+      security: [{ cookieSession: [] }]
+      responses:
+        '101': { description: WebSocket 升级成功。 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/server/host-agent:
+    get:
+      tags: [服务器]
+      summary: 注册 Linux 宿主机终端代理 WebSocket
+      description: 独立宿主机代理使用与后端 HOST_AGENT_TOKEN 一致的 Bearer 令牌主动连接；每个后端实例同时接受一个代理，并通过随机临时会话 ID 复用最多 32 个浏览器终端。令牌为空时功能禁用，令牌和终端内容不会写入日志或数据库。
+      security: [{ hostAgentBearer: [] }]
+      responses:
+        '101': { description: 宿主机代理注册成功。 }
+        '401': { description: 代理令牌无效。 }
+        '503': { description: 后端尚未配置宿主机代理令牌。 }
   /api/visitor-analytics:
     get:
       tags: [访问分析]
@@ -754,6 +774,10 @@ components:
       type: apiKey
       in: cookie
       name: sessionId
+    hostAgentBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque shared token
   parameters:
     NumericID:
       name: id
