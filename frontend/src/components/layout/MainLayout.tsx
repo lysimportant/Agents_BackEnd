@@ -557,8 +557,9 @@ export function MainLayout({
               </Tooltip>
               {canQuerySocketConversations && (
                 <Popover
+                  rootClassName="antd-header-popover antd-header-chat-popover"
                   trigger={['hover', 'click']}
-                  placement="bottomRight"
+                  placement={isMobile ? 'bottom' : 'bottomRight'}
                   title={`在线聊天（${headerConversations.length}）`}
                   content={(
                     <div className="header-chat-list" aria-label="聊天标题列表">
@@ -592,6 +593,7 @@ export function MainLayout({
                 </Popover>
               )}
               <Popover
+                rootClassName="antd-header-popover antd-header-theme-popover"
                 trigger={['hover', 'click']}
                 placement="bottomRight"
                 title="选择界面主题"

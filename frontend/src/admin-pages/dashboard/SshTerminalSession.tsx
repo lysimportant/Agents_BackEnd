@@ -336,13 +336,21 @@ export function SshTerminalSession({ visible, canUseHostAgent, initialConnection
     /** socket 保存本终端标签生命周期内的鉴权 WebSocket。 */
     const socket = new WebSocket(serverTerminalWebSocketURL(connectionMode));
     socketRef.current = socket;
-    onStatusChange(autoConnect ? 'connecting' : 'idle');
+    onStatusChange(autoConnect || connectionMode === 'host' ? 'connecting' : 'idle');
     socket.onopen = () => {
       if (disposed) return;
       setSocketReady(true);
       if (autoConnect && initialConnection && !autoConnectStartedRef.current) {
         autoConnectStartedRef.current = true;
         sendConnectionPayload(socket, initialConnection, terminalRef.current);
+      } else if (connectionMode === 'host' && !autoConnectStartedRef.current) {
+        // 部署机模式不需要浏览器凭据，通道就绪后立即申请一次终端会话。
+        autoConnectStartedRef.current = true;
+        setConnectionError('');
+        onStatusChange('connecting');
+        terminalRef.current?.clear();
+        terminalRef.current?.writeln('\x1b[90m正在连接部署机代理 ...\x1b[0m');
+        sendConnectionPayload(socket, currentCredentials(), terminalRef.current);
       }
     };
     socket.onmessage = (event) => {
