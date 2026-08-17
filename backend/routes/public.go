@@ -15,6 +15,7 @@ func registerPublicRoutes(routes *gin.RouterGroup, handler *handlers.PublicHandl
 	public.GET("/resources", handler.ListResources)
 	public.GET("/files/:id/preview", handler.PreviewFile)
 	public.GET("/files/:id/thumbnail", handler.Thumbnail)
+	public.GET("/files/:id/medium", handler.MediumImage)
 	public.GET("/files/:id/download", handler.DownloadFile)
 	public.GET("/categories", handler.ListCategories)
 	public.GET("/site-summary", handler.SiteSummary)

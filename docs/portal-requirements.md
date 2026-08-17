@@ -307,7 +307,7 @@ C 端不复制业务数据、不直连 SQLite、不复用后台登录 Cookie，�
 - 返回规则：
   - 只返回满足文件门户发布条件且 `content_type` 以 `image/` 为前缀的记录。
   - 不返回物理存储路径。
-  - 返回 `id`、`displayName`、`category`、`description`、`altText`、`contentType`、`size`、`imageWidth`、`imageHeight`、`publishedAt`、`updatedAt`、`previewUrl`、`downloadUrl`；其中 `altText` 取显示名称，非图片字段缺省省略。
+  - 返回 `id`、`displayName`、`category`、`description`、`altText`、`contentType`、`size`、`imageWidth`、`imageHeight`、`publishedAt`、`updatedAt`、`thumbnailUrl`、`mediumUrl`、`previewUrl`、`downloadUrl`；其中 `altText` 取显示名称，非图片字段缺省省略。
 
 ### 公开资源列表
 
@@ -338,7 +338,18 @@ C 端不复制业务数据、不直连 SQLite、不复用后台登录 Cookie，�
 
 ### 公开文件缩略图
 
-- 当前无公开缩略图端点；图片缩放由 C 端直接使用 `/preview` 地址，缩略图变体列为后续增强。
+- 方法：`GET`
+- 路径：`/api/public/files/:id/thumbnail`
+- 鉴权：无需登录
+- 返回规则：仅允许公开图片，按最大 `480×480` 等比缩放并输出质量 80 的 JPEG；私密、删除、非图片或不存在统一返回 `404`。
+
+### 公开文件屏幕适配中图
+
+- 方法：`GET`
+- 路径：`/api/public/files/:id/medium`
+- 鉴权：无需登录
+- 返回规则：仅允许公开图片，按最大宽度 `1280px` 等比缩放且不限制长图高度，输出质量 85 的 JPEG；用于瀑布流与未来纵向图片阅读，原图仍由 `/preview` 提供。
+- 缩略图与中图均设置长期浏览器缓存和 `X-Content-Type-Options: nosniff`，不能绕过公开状态与 18R 可见性校验。
 
 ### 公开文件下载
 

@@ -87,6 +87,8 @@ export interface PublicFileListItem {
   previewUrl?: string;
   /** 图片缩略图地址（相对路径），非图片时缺省。 */
   thumbnailUrl?: string;
+  /** 图片屏幕适配地址（相对路径），非图片时缺省。 */
+  mediumUrl?: string;
   /** 文件下载地址（相对路径）。 */
   downloadUrl?: string;
   /** 图片宽度，非图片时缺省。 */

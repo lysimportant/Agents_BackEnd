@@ -27,6 +27,12 @@ const PublicMaxPageSize = 50
 // PublicDefaultPageSize 表示公开列表的默认每页条目数。
 const PublicDefaultPageSize = 24
 
+// publicThumbnailMaxSize 表示公开缩略图允许的最大宽高。
+const publicThumbnailMaxSize = 480
+
+// publicMediumMaxWidth 表示瀑布流与未来长图阅读使用的最大图片宽度。
+const publicMediumMaxWidth = 1280
+
 // PublicStore 定义 C 端公开接口所需的数据访问能力。
 type PublicStore interface {
 	// ListPublicArticles 返回公开文章列表及分页信息。
@@ -222,6 +228,16 @@ func (h *PublicHandler) DownloadFile(c *gin.Context) {
 
 // Thumbnail 处理 GET /api/public/files/:id/thumbnail 返回按需缩放的缩略图。
 func (h *PublicHandler) Thumbnail(c *gin.Context) {
+	h.serveScaledPublicImage(c, publicThumbnailMaxSize, publicThumbnailMaxSize, 80)
+}
+
+// MediumImage 处理 GET /api/public/files/:id/medium 返回最大宽度 1280 像素的屏幕适配图片。
+func (h *PublicHandler) MediumImage(c *gin.Context) {
+	h.serveScaledPublicImage(c, publicMediumMaxWidth, 0, 85)
+}
+
+// serveScaledPublicImage 校验公开图片后按指定边界缩放并输出 JPEG，maxHeight 为 0 时不限制高度。
+func (h *PublicHandler) serveScaledPublicImage(c *gin.Context, maxWidth, maxHeight, quality int) {
 	// rawID 保存路由参数中的原始文件编号。
 	rawID := strings.TrimSpace(c.Param("id"))
 	// id、err 保存解析后的文件编号与解析错误。
@@ -257,18 +273,24 @@ func (h *PublicHandler) Thumbnail(c *gin.Context) {
 		h.servePublicFile(c, false)
 		return
 	}
-	// thumbnail 保存缩放后的缩略图。
-	thumbnail := utils.ResizeToFit(decoded, 480, 480)
-	// 合成到白色背景，避免透明图片缩略图出现黑底。
-	bounds := thumbnail.Bounds()
+	// effectiveMaxHeight 保存实际高度上限；中图只限制宽度，以适配未来纵向长图阅读。
+	effectiveMaxHeight := maxHeight
+	if effectiveMaxHeight <= 0 {
+		effectiveMaxHeight = decoded.Bounds().Dy()
+	}
+	// scaledImage 保存按当前端点规格缩放后的图片。
+	scaledImage := utils.ResizeToFit(decoded, maxWidth, effectiveMaxHeight)
+	// 合成到白色背景，避免透明图片输出 JPEG 后出现黑底。
+	bounds := scaledImage.Bounds()
 	background := image.NewRGBA(bounds)
 	draw.Draw(background, bounds, image.NewUniform(color.White), image.Point{}, draw.Src)
-	draw.Draw(background, bounds, thumbnail, image.Point{}, draw.Over)
-	// 输出 JPEG 缩略图，附带较长浏览器缓存。
+	draw.Draw(background, bounds, scaledImage, bounds.Min, draw.Over)
+	// 输出 JPEG 图片变体，附带较长浏览器缓存并禁止 MIME 嗅探。
 	c.Header("Content-Type", "image/jpeg")
 	c.Header("Content-Disposition", "inline")
 	c.Header("Cache-Control", "public, max-age=86400")
-	if encodeErr := jpeg.Encode(c.Writer, background, &jpeg.Options{Quality: 80}); encodeErr != nil {
+	c.Header("X-Content-Type-Options", "nosniff")
+	if encodeErr := jpeg.Encode(c.Writer, background, &jpeg.Options{Quality: quality}); encodeErr != nil {
 		c.Status(http.StatusInternalServerError)
 	}
 }

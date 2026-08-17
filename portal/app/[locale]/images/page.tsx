@@ -37,7 +37,7 @@ export default async function ImagesPage({
   const { page } = parseListSearchParams(sp);
 
   return (
-    <div className="mx-auto w-[95%] max-w-6xl pb-8 pt-4 md:w-[85%] lg:w-[75%]">
+    <div className="w-full px-3 pb-4 pt-4 sm:px-4 lg:px-6">
       <h1 className="sr-only">{t('title')}</h1>
       <ImagesPageClient page={page} />
     </div>

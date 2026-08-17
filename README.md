@@ -105,6 +105,8 @@ docker compose up --build
 | GET | `/api/public/images` | 公开图片列表 |
 | GET | `/api/public/resources` | 公开资源列表 |
 | GET | `/api/public/files/:id/preview` | 公开文件内联预览 |
+| GET | `/api/public/files/:id/thumbnail` | 最大 `480×480`、质量 80 的 JPEG 缩略图 |
+| GET | `/api/public/files/:id/medium` | 最大宽度 `1280px`、质量 85 的 JPEG 屏幕适配图片 |
 | GET | `/api/public/files/:id/download` | 公开文件下载 |
 | GET | `/api/public/categories` | 公开分类聚合 |
 | GET | `/api/public/site-summary` | 站点聚合概览 |

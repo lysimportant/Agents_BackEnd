@@ -4,6 +4,8 @@ export interface GalleryImage {
   id: number;
   /** 浏览器可访问的绝对图片地址（完整预览）。 */
   src: string;
+  /** 浏览器可访问的屏幕适配图片地址，用于瀑布流渐进加载。 */
+  displaySrc?: string;
   /** 浏览器可访问的绝对缩略图地址，用于卡片省流量加载。 */
   thumbnailSrc?: string;
   /** 图片替代文本。 */

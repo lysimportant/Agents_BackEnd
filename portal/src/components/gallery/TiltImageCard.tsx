@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { LazyImage } from '@/components/common/LazyImage';
+import { ProgressiveImage } from '@/components/common/ProgressiveImage';
 import type { GalleryImage } from './types';
 
 /**
@@ -66,12 +66,15 @@ export function TiltImageCard({
         animationDelay: Math.min(index, 8) * 50 + 'ms',
       }}
     >
-      <LazyImage
-        src={image.thumbnailSrc ?? image.src}
+      <ProgressiveImage
+        key={image.displaySrc ?? image.thumbnailSrc ?? image.src}
+        src={image.displaySrc ?? image.thumbnailSrc ?? image.src}
+        placeholderSrc={image.thumbnailSrc}
         alt={image.alt}
         width={image.width}
         height={image.height}
         sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, (min-width: 480px) 50vw, 100vw"
+        priority={index === 0}
         imageClassName="transition-transform duration-300 group-hover:scale-[1.03]"
       />
     </button>

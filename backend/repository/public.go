@@ -281,6 +281,7 @@ func scanPublicFile(row scanner) (models.PublicFileListItem, bool) {
 	if strings.HasPrefix(item.ContentType, "image/") {
 		item.AltText = item.DisplayName
 		item.ThumbnailURL = "/api/public/files/" + strconv.Itoa(item.ID) + "/thumbnail"
+		item.MediumURL = "/api/public/files/" + strconv.Itoa(item.ID) + "/medium"
 	}
 	return item, true
 }

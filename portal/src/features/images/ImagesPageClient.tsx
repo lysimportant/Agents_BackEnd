@@ -64,6 +64,7 @@ export function ImagesPageClient({ page }: { page: number }) {
   const images: GalleryImage[] = result.items.map((file) => ({
     id: file.id,
     src: resolveMediaUrl(file.previewUrl),
+    displaySrc: file.mediumUrl ? resolveMediaUrl(file.mediumUrl) : undefined,
     thumbnailSrc: file.thumbnailUrl ? resolveMediaUrl(file.thumbnailUrl) : undefined,
     alt: file.altText || file.displayName || '',
     width: file.imageWidth ?? 0,

@@ -78,6 +78,15 @@ paths:
       responses:
         '200': { description: JPEG 缩略图流 }
         '404': { description: 文件不存在、未公开或非图片 }
+  /api/public/files/{id}/medium:
+    get:
+      tags: [公开门户]
+      summary: 获取公开图片屏幕适配中图
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: 最大宽度 1280 像素、质量 85 的 JPEG 图片流 }
+        '404': { description: 文件不存在、未公开或非图片 }
   /api/public/files/{id}/download:
     get:
       tags: [公开门户]

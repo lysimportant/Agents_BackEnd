@@ -8,7 +8,6 @@ import { THEME_BOOTSTRAP_SCRIPT } from '@/theme/themeBootstrapScript';
 import { AuthProvider } from '@/features/auth/AuthProvider';
 import { SITE_BRAND_NAME, SITE_TAGLINE, SITE_URL } from '@/config/constants';
 import { SiteHeader } from '@/components/layout/SiteHeader';
-import { SiteFooter } from '@/components/layout/SiteFooter';
 import { LocaleCookieSync } from '@/components/layout/LocaleCookieSync';
 import { SkipToContent } from '@/components/layout/SkipToContent';
 import { localizedPath } from '@/utils/seo';
@@ -42,7 +41,7 @@ export async function generateMetadata({
 }
 
 /**
- * [locale] 布局：渲染 html/body，校验语言，应用主题首屏脚本与 Provider，并挂载导航与页脚。
+ * [locale] 布局：渲染 html/body，校验语言，应用主题首屏脚本与 Provider，并挂载导航。
  */
 export default async function LocaleLayout({
   children,
@@ -73,7 +72,6 @@ export default async function LocaleLayout({
               <main id="main-content" className="min-h-[70vh] pt-16">
                 {children}
               </main>
-              <SiteFooter />
             </AuthProvider>
           </NextIntlClientProvider>
         </ThemeProvider>

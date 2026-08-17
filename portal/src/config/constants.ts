@@ -22,7 +22,7 @@ export const LOCALE_LABELS: Record<SupportedLocale, string> = {
 /** 品牌名与站点默认说明，后续可单点替换。 */
 export const SITE_BRAND_NAME = 'HuaJian_AI';
 
-/** 站点副标题，用于页面描述与页脚。 */
+/** 站点副标题，用于页面描述。 */
 export const SITE_TAGLINE = '内容门户';
 
 /** 保存语言偏好的 Cookie 名称。 */
