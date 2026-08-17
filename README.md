@@ -83,6 +83,17 @@ npm run docs
 
 门户只消费后端公开只读接口，具体路由与契约见 `docs/api/openapi.yaml` 与 `docs/portal-requirements.md`。
 
+## Docker Compose 启动
+
+根 `docker-compose.yml` 会同时启动 Redis、后端、管理前端和 C 端门户：
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
+
+默认访问地址为后端 `http://localhost:8080`、管理前端 `http://localhost:3000`、C 端门户 `http://localhost:3001`。`BACKEND_PORT`、`FRONTEND_PORT`、`PORTAL_PORT` 控制宿主机映射端口，`BACKEND_INTERNAL_PORT`、`PORTAL_INTERNAL_PORT` 控制对应容器的监听端口。修改门户映射端口时还需同步修改 `PORTAL_SITE_URL` 与 `CORS_ALLOWED_ORIGINS`，修改后端映射端口时需同步修改 `FRONTEND_API_BASE_URL` 与 `PORTAL_API_BASE_URL`；这些公开变量会写入前端构建产物，变更后必须重新构建镜像。
+
 ### 公开接口（C 端门户）
 
 以下接口无需登录，仅返回满足门户发布条件的内容，不返回存储路径、所有者或删除信息：

@@ -14,6 +14,9 @@ import type {
 /** 单次请求超时时间（毫秒）。 */
 const REQUEST_TIMEOUT_MS = 10000;
 
+/** 服务端公开 API 地址；容器内优先使用 Compose 提供的后端服务地址。 */
+const PUBLIC_API_REQUEST_BASE_URL = process.env.BACKEND_INTERNAL_URL || API_BASE_URL;
+
 /** 网络瞬时错误与 5xx 的最大重试次数。 */
 const MAX_RETRIES = 2;
 
@@ -100,7 +103,7 @@ async function requestPublicJson<T>(
   path: string,
   options: PublicFetchOptions = {},
 ): Promise<T> {
-  const url = API_BASE_URL + path;
+  const url = PUBLIC_API_REQUEST_BASE_URL + path;
   let attempt = 0;
   let lastError: unknown = null;
 

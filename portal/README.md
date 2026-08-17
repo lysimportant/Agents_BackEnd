@@ -20,6 +20,7 @@
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | <code>NEXT_PUBLIC_API_BASE_URL</code> | <code>http://localhost:8080</code> | 浏览器可访问的后端地址 |
+| <code>BACKEND_INTERNAL_URL</code> | <code>http://localhost:8080</code> | 服务端渲染访问后端的内部地址，Compose 中使用后端服务名 |
 | <code>NEXT_PUBLIC_SITE_URL</code> | <code>http://localhost:3001</code> | C 端绝对站点地址，生产必须是最终 HTTPS 域名 |
 | <code>NEXT_PUBLIC_ENABLE_CUSTOMER_CHAT</code> | <code>false</code> | 是否启用客服入口 |
 | <code>PORTAL_REVALIDATE_SECONDS</code> | <code>60</code> | 服务端内容缓存秒数，校验为合理正整数 |
@@ -34,6 +35,15 @@
     npm run typecheck  # 严格类型检查
     npm run lint       # ESLint 检查
     npm run docs       # 生成 TypeDoc 文档到 docs/
+
+## Docker 部署
+
+仓库根 <code>docker-compose.yml</code> 已包含门户服务，可在仓库根目录执行：
+
+    Copy-Item .env.example .env
+    docker compose up --build
+
+根 <code>.env</code> 中的 <code>PORTAL_PORT</code> 控制宿主机访问端口，<code>PORTAL_INTERNAL_PORT</code> 控制容器内监听端口，默认均为 <code>3001</code>。如修改 <code>PORTAL_PORT</code>，还需同步修改 <code>PORTAL_SITE_URL</code> 与 <code>CORS_ALLOWED_ORIGINS</code>；如修改后端对外端口，还需同步修改 <code>PORTAL_API_BASE_URL</code>。这些公开地址在镜像构建时写入客户端产物，修改后需要重新执行 <code>docker compose up --build</code>。
 
 ## 路由
 

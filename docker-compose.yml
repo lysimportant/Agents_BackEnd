@@ -27,7 +27,7 @@ services:
       SQLITE_PATH: /app/data/app.db
       UPLOAD_DIR: /app/uploads
       SERVER_ADDRESS: ":${BACKEND_INTERNAL_PORT:-8080}"
-      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-http://localhost:3000}"
+      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}"
       COOKIE_SAMESITE: "${COOKIE_SAMESITE:-Lax}"
       COOKIE_SECURE: "${COOKIE_SECURE:-false}"
       SESSION_COOKIE_NAME: "${SESSION_COOKIE_NAME:-sessionId}"
@@ -73,6 +73,30 @@ services:
     environment:
       NEXT_PUBLIC_API_BASE_URL: "${FRONTEND_API_BASE_URL:-http://localhost:8080}"
       NEXT_PUBLIC_SITE_URL: "${FRONTEND_SITE_URL:-http://localhost:3000}"
+
+  portal:
+    build:
+      context: ./portal
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: "${PORTAL_API_BASE_URL:-http://localhost:8080}"
+        NEXT_PUBLIC_SITE_URL: "${PORTAL_SITE_URL:-http://localhost:3001}"
+        NEXT_PUBLIC_ENABLE_CUSTOMER_CHAT: "${PORTAL_ENABLE_CUSTOMER_CHAT:-false}"
+        PORTAL_REVALIDATE_SECONDS: "${PORTAL_REVALIDATE_SECONDS:-60}"
+        PORTAL_INTERNAL_PORT: "${PORTAL_INTERNAL_PORT:-3001}"
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${PORTAL_PORT:-3001}:${PORTAL_INTERNAL_PORT:-3001}"
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: "${PORTAL_API_BASE_URL:-http://localhost:8080}"
+      NEXT_PUBLIC_SITE_URL: "${PORTAL_SITE_URL:-http://localhost:3001}"
+      NEXT_PUBLIC_ENABLE_CUSTOMER_CHAT: "${PORTAL_ENABLE_CUSTOMER_CHAT:-false}"
+      BACKEND_INTERNAL_URL: "http://backend:${BACKEND_INTERNAL_PORT:-8080}"
+      PORTAL_REVALIDATE_SECONDS: "${PORTAL_REVALIDATE_SECONDS:-60}"
+      PORT: "${PORTAL_INTERNAL_PORT:-3001}"
 
 volumes:
   redis-data:
