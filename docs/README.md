@@ -2,6 +2,8 @@
 
 第一次启动和使用平台，请先阅读[平台操作说明](./operations-guide.md)。
 
+Linux 生产部署、Docker Compose、Nginx、HTTPS 与宿主机代理安装，请阅读[生产部署手册](./deployment-guide.md)。
+
 新增业务页面和后端创建接口，请阅读[前后端页面/API 开发说明](./frontend-backend-page-api-guide.md)。
 
 本仓库按技术栈使用各自原生的文档格式：

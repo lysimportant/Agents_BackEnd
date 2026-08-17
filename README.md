@@ -1,6 +1,6 @@
 # 采集数据平台
 
-第一次运行或需要了解后台操作流程，请阅读[平台操作说明](./docs/operations-guide.md)。
+第一次运行或需要了解后台操作流程，请阅读[平台操作说明](./docs/operations-guide.md)。Linux 生产部署、反向代理和宿主机代理安装请阅读[生产部署手册](./docs/deployment-guide.md)。
 
 最小可运行版本：
 
