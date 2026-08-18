@@ -94,7 +94,10 @@
     "category": "Category",
     "size": "Size",
     "publishedAt": "Published",
-    "dimensions": "Dimensions"
+    "dimensions": "Dimensions",
+    "loadingMore": "Loading more images…",
+    "loadMoreFailed": "Failed to load more images",
+    "loadComplete": "All images loaded"
   },
   "resources": {
     "title": "Resources",

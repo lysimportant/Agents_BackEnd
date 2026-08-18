@@ -32,6 +32,8 @@ type PortalFetchInit = RequestInit & {
 export interface PublicFetchOptions {
   /** 客户端取消信号。 */
   signal?: AbortSignal;
+  /** 是否携带门户偏好 Cookie，让后端按当前访客设置筛选内容。 */
+  credentials?: RequestCredentials;
   /** 服务端内容缓存秒数，传入时启用 Next.js revalidation。 */
   revalidate?: number;
   /** 服务端缓存标签，便于后续主动失效。 */
@@ -119,7 +121,10 @@ async function requestPublicJson<T>(
     options.signal?.addEventListener('abort', handleExternalAbort, { once: true });
 
     try {
-      const init: PortalFetchInit = { signal: controller.signal };
+      const init: PortalFetchInit = {
+        signal: controller.signal,
+        credentials: options.credentials,
+      };
       if (options.revalidate !== undefined) {
         init.next = { revalidate: options.revalidate, tags: options.tags };
       } else {

@@ -9,9 +9,12 @@ import { Link } from '@/i18n/navigation';
 export function ErrorState({
   title,
   description,
+  onRetry,
 }: {
   title?: string;
   description?: string;
+  /** 可选的局部重试逻辑；未提供时仍刷新当前路由。 */
+  onRetry?: () => void;
 }) {
   const t = useTranslations('errors');
   const common = useTranslations('common');
@@ -29,7 +32,13 @@ export function ErrorState({
       <div className="flex gap-3">
         <button
           type="button"
-          onClick={() => router.refresh()}
+          onClick={() => {
+            if (onRetry) {
+              onRetry();
+              return;
+            }
+            router.refresh();
+          }}
           className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.02] active:scale-[0.98]"
         >
           <RotateCw className="h-4 w-4" aria-hidden="true" />

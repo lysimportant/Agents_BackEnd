@@ -94,7 +94,10 @@
     "category": "分类",
     "size": "大小",
     "publishedAt": "发布时间",
-    "dimensions": "尺寸"
+    "dimensions": "尺寸",
+    "loadingMore": "正在加载更多图片…",
+    "loadMoreFailed": "加载更多图片失败",
+    "loadComplete": "已加载全部图片"
   },
   "resources": {
     "title": "资源",

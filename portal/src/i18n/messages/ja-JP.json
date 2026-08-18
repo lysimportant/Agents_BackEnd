@@ -94,7 +94,10 @@
     "category": "カテゴリ",
     "size": "サイズ",
     "publishedAt": "公開日時",
-    "dimensions": "寸法"
+    "dimensions": "寸法",
+    "loadingMore": "画像をさらに読み込み中…",
+    "loadMoreFailed": "画像の追加読み込みに失敗しました",
+    "loadComplete": "すべての画像を読み込みました"
   },
   "resources": {
     "title": "リソース",
