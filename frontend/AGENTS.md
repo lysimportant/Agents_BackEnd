@@ -67,7 +67,7 @@
 - 仅在需要浏览器 API、状态或事件时使用 Client Component。业务状态和 API 流程优先集中在 `useAdminWorkspace`，纯展示逻辑保留在功能组件。
 - 共享业务类型、常量和请求逻辑分别放入 `src/types/`、`src/config/` 与 `src/services/`，不要在多个页面重复定义 API 结构。
 - 后端地址取自 `NEXT_PUBLIC_API_BASE_URL`，默认 `http://localhost:8080`。
-- 需要会话的请求复用 `requestWithSession`：固定 `credentials: 'include'`，单次超时 12 秒，仅 GET/HEAD/OPTIONS 在网络错误时按 350ms、900ms 重试；写请求禁止自动重试，以免产生重复副作用。
+- 需要会话的请求复用 `requestWithSession`：固定 `credentials: 'include'`，默认单次超时 12 秒，仅 GET/HEAD/OPTIONS 在网络错误时按 350ms、900ms 重试；写请求禁止自动重试，以免产生重复副作用。文件管理上传可显式设置 `timeoutMs: null`，避免大文件或慢速网络被前端主动中断。
 - API JSON 字段保持 camelCase。接口变更时同步检查后端模型、路由、权限以及 `README.md`。
 - 用户有效菜单是所属部门、所属角色和个人附加菜单的并集；部门权限在部门页维护，角色权限在角色页维护，个人额外权限保留在用户页维护。
 - 工作台图表使用 ECharts，数字动画使用 react-countup；图表颜色必须跟随当前主题变量。
@@ -102,7 +102,7 @@
 - 后端 `/api/articles/export` 是文章集合 CSV/PDF；前端 `articleExport.ts` 是单篇文章 CSV、打印/PDF、Word、PNG、Markdown、SEO HTML，两者不是同一实现。
 - Markdown 目录与锚点逻辑位于 `articleMarkdown.ts`：正文有标题时生成目录、显式锚点和重复标题唯一后缀；无标题时不生成目录。
 - 文章导出会处理跨源媒体、图片内联、分页画布和可见内容检查；修改时必须实际导出至少一个含标题和图片的样本验证文件内容。
-- 前端和后端上传限制均为 32 MiB。文件读取、元数据、文本内容和永久删除复用 `src/services/fileApi.ts`，业务编排仍位于 `useAdminWorkspace` 与 `FilesPage`。
+- 文件管理上传不设置应用层单文件大小上限，并由前端过滤同批重复选择、后端按同一所有者的内容哈希权威去重；聊天与文章附件仍遵循各自限制。文件读取、元数据、文本内容和永久删除复用 `src/services/fileApi.ts`，业务编排仍位于 `useAdminWorkspace` 与 `FilesPage`。
 - 文件删除默认移入回收站；永久删除按钮和请求只能在用户明确确认后触发，测试不能用正式业务 API 清理样本。
 - 文件管理页面必须保留刷新按钮和“设为登录背景”操作；聊天数据等新增分类只能扩展现有文件管理能力，不得覆盖或隐藏这些操作。
 

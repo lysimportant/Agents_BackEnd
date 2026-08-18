@@ -16,7 +16,7 @@
 | `user_action_permissions` | 用户个人附加的稳定 `resource.action` 权限。 | 有效动作是角色默认动作与个人附加动作的并集。 |
 | `sessions` | 不透明 HttpOnly 会话 ID 和过期时间。 | 前端存储中不暴露访问令牌。 |
 | `articles` | 知识库文章。 | `owner_id`、`is_private` 决定可见性和修改边界。 |
-| `files` | 文件管理上传和软删除元数据。 | `owner_id`、`is_private`、`deleted_at` 控制访问和回收站状态。 |
+| `files` | 文件管理上传和软删除元数据。 | `owner_id`、`is_private`、`deleted_at` 控制访问和回收站状态；`content_sha256` 仅供服务端过滤同一所有者的有效重复内容，不对外序列化。 |
 | `socket_conversations` | 客服聊天会话摘要。 | 与内部员工聊天严格区分。 |
 | `socket_messages` | 客服消息和附件元数据。 | 附件通过受保护的客服聊天接口读取。 |
 | `internal_chat_messages` | 内部员工私聊和群发消息。 | `recipient_id` 为空时表示群发消息。 |

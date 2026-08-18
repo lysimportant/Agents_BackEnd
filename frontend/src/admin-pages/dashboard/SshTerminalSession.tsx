@@ -85,6 +85,9 @@ type SSHFilePreview = {
   /** mimeType、base64Content 表示图片或 PDF 的只读预览内容。 */
   mimeType: string;
   base64Content: string;
+  /** saving、saveSucceeded 表示当前文件的写入状态。 */
+  saving: boolean;
+  saveSucceeded: boolean;
 };
 
 /** TerminalServerMessage 表示后端 SSH WebSocket 返回的状态、目录或文件消息。 */
@@ -180,14 +183,12 @@ export function SshTerminalSession({ visible, canUseHostAgent, initialConnection
   const [directoryLoading, setDirectoryLoading] = useState(false);
   /** treeError、setTreeError 保存目录或文件读取错误。 */
   const [treeError, setTreeError] = useState('');
-  /** filePreview、setFilePreview 保存当前远端文件预览。 */
-  const [filePreview, setFilePreview] = useState<SSHFilePreview | null>(null);
-  /** fileLoading、setFileLoading 表示文件内容是否正在读取。 */
-  const [fileLoading, setFileLoading] = useState(false);
-  /** fileSaving、setFileSaving 表示当前文本是否正在写回远端。 */
-  const [fileSaving, setFileSaving] = useState(false);
-  /** fileSaveSucceeded、setFileSaveSucceeded 表示最近一次远端写入已经成功。 */
-  const [fileSaveSucceeded, setFileSaveSucceeded] = useState(false);
+  /** filePreviews、setFilePreviews 保存当前终端已打开的全部远端文件标签。 */
+  const [filePreviews, setFilePreviews] = useState<SSHFilePreview[]>([]);
+  /** pendingFilePaths、setPendingFilePaths 保存尚未返回内容的文件标签路径。 */
+  const [pendingFilePaths, setPendingFilePaths] = useState<string[]>([]);
+  /** activeFilePath、setActiveFilePath 表示当前显示的文件标签路径。 */
+  const [activeFilePath, setActiveFilePath] = useState('');
   /** searchQuery、setSearchQuery 保存当前目录本地过滤关键词。 */
   const [searchQuery, setSearchQuery] = useState('');
   /** activeView、setActiveView 表示右侧当前显示终端或文件。 */
@@ -220,13 +221,21 @@ export function SshTerminalSession({ visible, canUseHostAgent, initialConnection
   const autoConnectStartedRef = useRef(false);
   /** pendingOutputRef 缓存 xterm 模块加载完成前收到的远端输出。 */
   const pendingOutputRef = useRef('');
-  /** savingContentRef 保存当前写入请求的内容，避免保存期间继续编辑被误判为已保存。 */
-  const savingContentRef = useRef('');
+  /** requestedFilePathsRef 保存等待读取的路径，避免关闭标签后迟到响应重新打开文件。 */
+  const requestedFilePathsRef = useRef(new Set<string>());
+  /** savingContentRef 按路径保存写入请求内容，避免并行保存时串错文件状态。 */
+  const savingContentRef = useRef(new Map<string, string>());
 
   connectionFormRef.current = { mode: connectionMode, host, port, username, authenticationMode, password, privateKey, passphrase, targetLabel };
 
   /** visibleDirectoryEntries 保存按当前关键词过滤后的本层目录节点。 */
   const visibleDirectoryEntries = directoryEntries.filter((entry) => entry.name.toLocaleLowerCase().includes(searchQuery.trim().toLocaleLowerCase()));
+  /** fileTabPaths 合并已加载和正在加载的路径，保证每个文件都有独立标签。 */
+  const fileTabPaths = [...filePreviews.map((preview) => preview.path), ...pendingFilePaths.filter((path) => !filePreviews.some((preview) => preview.path === path))];
+  /** activeFilePreview 表示当前活动标签对应的文件内容。 */
+  const activeFilePreview = filePreviews.find((preview) => preview.path === activeFilePath) ?? null;
+  /** activeFileLoading 表示当前活动标签是否仍在等待远端读取。 */
+  const activeFileLoading = pendingFilePaths.includes(activeFilePath) && !activeFilePreview;
   /** terminalChannelOpening 表示 WebSocket 尚在首次握手且当前没有可重试错误。 */
   const terminalChannelOpening = !socketReady && !connectionError;
 
@@ -441,45 +450,53 @@ export function SshTerminalSession({ visible, canUseHostAgent, initialConnection
       return;
     }
     if (message.type === 'file') {
-      setFileLoading(false);
+      const filePath = message.path || '';
+      if (!filePath) return;
+      const wasRequested = requestedFilePathsRef.current.has(filePath);
+      requestedFilePathsRef.current.delete(filePath);
+      setPendingFilePaths((currentPaths) => currentPaths.filter((path) => path !== filePath));
       setTreeError('');
-      setFileSaving(false);
-      setFileSaveSucceeded(false);
-      setFilePreview({
-        path: message.path || '', originalContent: message.content ?? '', content: message.content ?? '',
-        size: message.size ?? 0, truncated: Boolean(message.truncated), binary: Boolean(message.binary),
-        mimeType: message.mimeType ?? '', base64Content: message.base64Content ?? '',
+      setFilePreviews((currentPreviews) => {
+        const nextPreview: SSHFilePreview = {
+          path: filePath, originalContent: message.content ?? '', content: message.content ?? '',
+          size: message.size ?? 0, truncated: Boolean(message.truncated), binary: Boolean(message.binary),
+          mimeType: message.mimeType ?? '', base64Content: message.base64Content ?? '', saving: false, saveSucceeded: false,
+        };
+        const existingIndex = currentPreviews.findIndex((preview) => preview.path === filePath);
+        if (existingIndex < 0 && !wasRequested) return currentPreviews;
+        if (existingIndex < 0) return [...currentPreviews, nextPreview];
+        return currentPreviews.map((preview, index) => index === existingIndex ? nextPreview : preview);
       });
-      setActiveView('file');
       return;
     }
     if (message.type === 'file_saved') {
       /** savedContent 保存服务端本次确认写入的不可变文本版本。 */
-      const savedContent = savingContentRef.current;
-      savingContentRef.current = '';
-      setFileSaving(false);
-      setFileSaveSucceeded(true);
+      const savedPath = message.path || '';
+      const savedContent = savingContentRef.current.get(savedPath) ?? '';
+      savingContentRef.current.delete(savedPath);
       setTreeError('');
-      setFilePreview((currentPreview) => {
-        if (!currentPreview || currentPreview.path !== message.path) return currentPreview;
-        return { ...currentPreview, originalContent: savedContent, size: message.size ?? currentPreview.size };
-      });
-      void feedbackMessage.success(`文件已保存：${fileName(message.path || '')}`);
+      setFilePreviews((currentPreviews) => currentPreviews.map((preview) => preview.path === savedPath ? {
+        ...preview, originalContent: savedContent, size: message.size ?? preview.size, saving: false, saveSucceeded: true,
+      } : preview));
+      void feedbackMessage.success(`文件已保存：${fileName(savedPath)}`);
       return;
     }
     if (message.type === 'error') {
       if (message.operation === 'write_file') {
         /** saveErrorMessage 表示本次远端文件保存失败的可见原因。 */
         const saveErrorMessage = message.error || '保存远端文件失败';
-        setFileSaving(false);
-        setFileSaveSucceeded(false);
-        savingContentRef.current = '';
+        const failedPath = message.path || '';
+        if (failedPath) savingContentRef.current.delete(failedPath);
         setTreeError(saveErrorMessage);
+        setFilePreviews((currentPreviews) => currentPreviews.map((preview) => preview.path === failedPath ? { ...preview, saving: false, saveSucceeded: false } : preview));
         void feedbackMessage.error(saveErrorMessage);
         return;
       }
       if (message.operation === 'list_dir' || message.operation === 'read_file') {
-        setFileLoading(false);
+        if (message.path) {
+          requestedFilePathsRef.current.delete(message.path);
+          setPendingFilePaths((currentPaths) => currentPaths.filter((path) => path !== message.path));
+        }
         setDirectoryLoading(false);
         setTreeError(message.error || '读取远端文件系统失败');
         return;
@@ -562,15 +579,15 @@ export function SshTerminalSession({ visible, canUseHostAgent, initialConnection
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'input', data: `cd -- ${quoteShellPath(path)}\r` }));
   };
 
-  /** confirmDiscardChanges 在离开已修改文件前请求用户确认。 */
-  const confirmDiscardChanges = (nextAction: () => void) => {
-    if (!filePreview || filePreview.content === filePreview.originalContent) {
+  /** confirmDiscardChanges 在关闭已修改文件标签前请求用户确认。 */
+  const confirmDiscardChanges = (preview: SSHFilePreview | null, nextAction: () => void) => {
+    if (!preview || preview.content === preview.originalContent) {
       nextAction();
       return;
     }
     feedbackModal.confirm({
       title: '放弃未保存的修改？',
-      content: filePreview.path,
+      content: preview.path,
       okText: '放弃修改',
       cancelText: '继续编辑',
       okButtonProps: { danger: true },
@@ -578,38 +595,35 @@ export function SshTerminalSession({ visible, canUseHostAgent, initialConnection
     });
   };
 
-  /** openRemoteFile 读取远端文件，并在需要时保护当前未保存内容。 */
+  /** openRemoteFile 打开独立文件标签，已打开或正在读取的文件只切换当前标签。 */
   const openRemoteFile = (path: string) => {
-    if (filePreview?.path === path) {
-      setActiveView('file');
-      return;
-    }
-    confirmDiscardChanges(() => {
-      /** socket 保存接收文件读取请求的当前连接。 */
-      const socket = socketRef.current;
-      if (socket?.readyState !== WebSocket.OPEN) return;
-      setFileLoading(true);
-      setFileSaving(false);
-      setFileSaveSucceeded(false);
-      socket.send(JSON.stringify({ type: 'read_file', path }));
-    });
+    setActiveView('file');
+    setActiveFilePath(path);
+    if (filePreviews.some((preview) => preview.path === path) || requestedFilePathsRef.current.has(path)) return;
+    /** socket 保存接收文件读取请求的当前连接。 */
+    const socket = socketRef.current;
+    if (socket?.readyState !== WebSocket.OPEN) return;
+    requestedFilePathsRef.current.add(path);
+    setPendingFilePaths((currentPaths) => currentPaths.includes(path) ? currentPaths : [...currentPaths, path]);
+    setTreeError('');
+    socket.send(JSON.stringify({ type: 'read_file', path }));
   };
 
-  /** saveRemoteFile 将当前未截断的 UTF-8 文本完整写回远端文件。 */
-  const saveRemoteFile = () => {
-    if (fileSaving || !filePreview || filePreview.binary || filePreview.truncated || filePreview.content === filePreview.originalContent) return;
-    if (new TextEncoder().encode(filePreview.content).byteLength > 1 << 20) {
+  /** saveRemoteFile 将指定标签的未截断 UTF-8 文本完整写回远端文件。 */
+  const saveRemoteFile = (path = activeFilePath) => {
+    const preview = filePreviews.find((currentPreview) => currentPreview.path === path);
+    if (!preview || preview.saving || preview.binary || preview.truncated || preview.content === preview.originalContent) return;
+    if (new TextEncoder().encode(preview.content).byteLength > 1 << 20) {
       setTreeError('单个文件保存内容不能超过 1 MiB');
       return;
     }
     /** socket 保存接收文件写入请求的当前连接。 */
     const socket = socketRef.current;
     if (socket?.readyState !== WebSocket.OPEN) return;
-    setFileSaving(true);
-    setFileSaveSucceeded(false);
-    savingContentRef.current = filePreview.content;
+    setFilePreviews((currentPreviews) => currentPreviews.map((currentPreview) => currentPreview.path === path ? { ...currentPreview, saving: true, saveSucceeded: false } : currentPreview));
+    savingContentRef.current.set(path, preview.content);
     setTreeError('');
-    socket.send(JSON.stringify({ type: 'write_file', path: filePreview.path, content: filePreview.content }));
+    socket.send(JSON.stringify({ type: 'write_file', path: preview.path, content: preview.content }));
   };
 
   /** saveRemoteFileFromKeyboard 拦截编辑器的 Ctrl/Cmd+S 并触发远端保存。 */
@@ -619,15 +633,21 @@ export function SshTerminalSession({ visible, canUseHostAgent, initialConnection
     saveRemoteFile();
   };
 
-  /** closeFilePreview 关闭当前文件，并保护尚未保存的编辑内容。 */
-  const closeFilePreview = () => confirmDiscardChanges(() => {
-    setFilePreview(null);
-    setFileLoading(false);
-    setFileSaving(false);
-    setFileSaveSucceeded(false);
-    savingContentRef.current = '';
-    setActiveView('terminal');
-  });
+  /** closeFilePreview 关闭指定文件标签，并保护该标签尚未保存的编辑内容。 */
+  const closeFilePreview = (path: string) => {
+    const preview = filePreviews.find((currentPreview) => currentPreview.path === path) ?? null;
+    const closeTab = () => {
+      requestedFilePathsRef.current.delete(path);
+      savingContentRef.current.delete(path);
+      setPendingFilePaths((currentPaths) => currentPaths.filter((currentPath) => currentPath !== path));
+      const remainingPaths = fileTabPaths.filter((currentPath) => currentPath !== path);
+      const nextPath = activeFilePath === path ? remainingPaths[Math.min(fileTabPaths.indexOf(path), remainingPaths.length - 1)] ?? '' : activeFilePath;
+      setFilePreviews((currentPreviews) => currentPreviews.filter((currentPreview) => currentPreview.path !== path));
+      setActiveFilePath(nextPath);
+      if (!nextPath) setActiveView('terminal');
+    };
+    confirmDiscardChanges(preview, closeTab);
+  };
 
   /** refreshDirectory 重新读取步进浏览器当前目录。 */
   const refreshDirectory = () => {
@@ -719,7 +739,10 @@ export function SshTerminalSession({ visible, canUseHostAgent, initialConnection
       <section className="ssh-terminal-workbench" aria-label="服务器终端和文件预览">
         <div className="ssh-terminal-view-tabs">
           <button type="button" className={activeView === 'terminal' ? 'is-active' : ''} onClick={() => setActiveView('terminal')}><SquareTerminal size={14} />终端</button>
-          {filePreview && <button type="button" className={activeView === 'file' ? 'is-active' : ''} onClick={() => setActiveView('file')}><FileCode2 size={14} /><span title={filePreview.path}>{fileName(filePreview.path)}{filePreview.content !== filePreview.originalContent ? ' *' : ''}</span><X size={12} onClick={(event) => { event.stopPropagation(); closeFilePreview(); }} /></button>}
+          {fileTabPaths.map((path) => {
+            const preview = filePreviews.find((currentPreview) => currentPreview.path === path);
+            return <button key={path} type="button" className={activeView === 'file' && activeFilePath === path ? 'is-active' : ''} onClick={() => { setActiveFilePath(path); setActiveView('file'); }}><FileCode2 size={14} /><span title={path}>{fileName(path)}{preview && preview.content !== preview.originalContent ? ' *' : pendingFilePaths.includes(path) ? ' ...' : ''}</span><X size={12} onClick={(event) => { event.stopPropagation(); closeFilePreview(path); }} /></button>;
+          })}
           <span className={`ssh-terminal-connection-label${connected ? ' is-connected' : ''}`}>{connected ? connectionMode === 'host' ? targetLabel || '部署机' : `${username}@${host}` : '未连接'}</span>
         </div>
         <div className={`ssh-terminal-screen${activeView !== 'terminal' ? ' is-hidden' : ''}`} aria-label="服务器终端输出">
@@ -727,8 +750,8 @@ export function SshTerminalSession({ visible, canUseHostAgent, initialConnection
         </div>
         {activeView === 'file' && (
           <div className="ssh-file-preview" aria-label="服务器文件预览与编辑">
-            {fileLoading ? <Spin tip="正在读取远端文件"><div className="ssh-file-preview-loading" /></Spin> : filePreview ? (
-              <><div className="ssh-file-preview-header"><div>{filePreview.mimeType.startsWith('image/') ? <FileImage size={16} /> : <FileCode2 size={16} />}<strong>{filePreview.path}</strong>{fileSaving ? <Tag color="processing">保存中</Tag> : !filePreview.binary && filePreview.content !== filePreview.originalContent ? <Tag color="warning">未保存</Tag> : fileSaveSucceeded ? <Tag color="success">已保存</Tag> : null}</div><div><span>{formatBytes(filePreview.size)}{filePreview.truncated ? ` · 超过 ${filePreview.mimeType ? '10 MiB' : '1 MiB'}` : ''}</span>{!filePreview.binary && <Tooltip title="保存远端文件"><Button type="text" size="small" icon={<Save size={15} />} loading={fileSaving} disabled={filePreview.truncated || filePreview.content === filePreview.originalContent} onClick={saveRemoteFile} aria-label="保存远端文件" /></Tooltip>}</div></div>{filePreview.truncated && filePreview.mimeType ? <Alert type="warning" showIcon title="文件超过 10 MiB，无法在浏览器中预览" /> : filePreview.mimeType.startsWith('image/') && filePreview.base64Content ? <div className="ssh-file-media-preview"><img src={fileDataURL(filePreview)} alt={fileName(filePreview.path)} /></div> : filePreview.mimeType === 'application/pdf' && filePreview.base64Content ? <iframe className="ssh-file-pdf-preview" src={fileDataURL(filePreview)} title={fileName(filePreview.path)} /> : filePreview.binary ? <Empty image={<FileWarning size={46} />} description="该二进制文件暂不支持预览" /> : <>{filePreview.truncated && <Alert type="warning" showIcon title="文件超过 1 MiB，仅显示前 1 MiB，不能保存" />}<Input.TextArea className="ssh-file-editor" value={filePreview.content} readOnly={filePreview.truncated} onKeyDown={saveRemoteFileFromKeyboard} onChange={(event) => { setFileSaveSucceeded(false); setFilePreview((currentPreview) => currentPreview ? { ...currentPreview, content: event.target.value } : currentPreview); }} spellCheck={false} /></>}</>
+            {activeFileLoading ? <Spin tip="正在读取远端文件"><div className="ssh-file-preview-loading" /></Spin> : activeFilePreview ? (
+              <><div className="ssh-file-preview-header"><div>{activeFilePreview.mimeType.startsWith('image/') ? <FileImage size={16} /> : <FileCode2 size={16} />}<strong>{activeFilePreview.path}</strong>{activeFilePreview.saving ? <Tag color="processing">保存中</Tag> : !activeFilePreview.binary && activeFilePreview.content !== activeFilePreview.originalContent ? <Tag color="warning">未保存</Tag> : activeFilePreview.saveSucceeded ? <Tag color="success">已保存</Tag> : null}</div><div><span>{formatBytes(activeFilePreview.size)}{activeFilePreview.truncated ? ` · 超过 ${activeFilePreview.mimeType ? '10 MiB' : '1 MiB'}` : ''}</span>{!activeFilePreview.binary && <Tooltip title="保存远端文件"><Button type="text" size="small" icon={<Save size={15} />} loading={activeFilePreview.saving} disabled={activeFilePreview.truncated || activeFilePreview.content === activeFilePreview.originalContent} onClick={() => saveRemoteFile(activeFilePreview.path)} aria-label="保存远端文件" /></Tooltip>}</div></div>{activeFilePreview.truncated && activeFilePreview.mimeType ? <Alert type="warning" showIcon title="文件超过 10 MiB，无法在浏览器中预览" /> : activeFilePreview.mimeType.startsWith('image/') && activeFilePreview.base64Content ? <div className="ssh-file-media-preview"><img src={fileDataURL(activeFilePreview)} alt={fileName(activeFilePreview.path)} /></div> : activeFilePreview.mimeType === 'application/pdf' && activeFilePreview.base64Content ? <iframe className="ssh-file-pdf-preview" src={fileDataURL(activeFilePreview)} title={fileName(activeFilePreview.path)} /> : activeFilePreview.binary ? <Empty image={<FileWarning size={46} />} description="该二进制文件暂不支持预览" /> : <>{activeFilePreview.truncated && <Alert type="warning" showIcon title="文件超过 1 MiB，仅显示前 1 MiB，不能保存" />}<Input.TextArea className="ssh-file-editor" value={activeFilePreview.content} readOnly={activeFilePreview.truncated} onKeyDown={saveRemoteFileFromKeyboard} onChange={(event) => { setFilePreviews((currentPreviews) => currentPreviews.map((preview) => preview.path === activeFilePreview.path ? { ...preview, content: event.target.value, saveSucceeded: false } : preview)); }} spellCheck={false} /></>}</>
             ) : <Empty image={<File size={46} />} description="从左侧当前目录选择文件" />}
           </div>
         )}

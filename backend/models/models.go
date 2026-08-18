@@ -546,6 +546,8 @@ type ManagedFile struct {
 	Size int64 `json:"size"`
 	// StorageName 表示存储名称。
 	StorageName string `json:"storageName"`
+	// ContentSHA256 保存服务端内容去重哈希，不向客户端暴露。
+	ContentSHA256 string `json:"-"`
 	// OwnerID 表示所有者标识。
 	OwnerID int `json:"ownerId"`
 	// OwnerName 表示所有者名称。

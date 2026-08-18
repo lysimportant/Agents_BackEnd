@@ -141,8 +141,8 @@ docker compose up --build
 - `POST /api/data-points`: 新增采集数据
 - `GET /api/server/metrics`: 获取后端运行环境的 CPU/核心/负载、物理内存与交换区、文件系统与磁盘 I/O、总流量与网卡/连接、硬件温度、后端进程和即时健康告警；工作台默认每 5 秒采样并计算最近 5 分钟的网络及磁盘吞吐趋势。Docker 部署显示容器视角，平台或容器权限不支持的扩展项会通过 `collectionWarnings` 说明
 - `GET /api/server/connections`: 点击预览台“活动连接”后按需获取连接详情；返回 TCP/UDP、IPv4/IPv6、本地与远端端点、连接状态、PID 和权限允许时的进程名，最多枚举 5000 个套接字并返回前 500 条诊断明细
-- `GET /api/server/terminal`: 所有登录用户均可使用的 SSH WebSocket；全局 Header 可打开同一弹窗中的多终端标签，连接后支持 SFTP 目录逐层进入、返回上级、当前目录搜索、不超过 1 MiB 的 UTF-8 文本编辑保存，以及不超过 10 MiB 的常见图片和 PDF 只读预览。Bash/Zsh 终端执行 `cd`、`cd -`、`pushd` 等目录切换后会通过标准 OSC 7 报告实际工作目录，并自动同步左侧目录。连接密码、私钥和编辑内容仅在当前页面内存中使用，最小化弹窗或切换管理页面时保持，退出登录或关闭浏览器页面后全部清除；首次连接必须确认服务器 SHA256 主机指纹
-- `GET /api/server/host-terminal`: 仅超级管理员可使用的部署机直连 WebSocket；通过宿主机代理提供与 SSH 工作区一致的多终端、目录步进、文件编辑及媒体预览，不依赖 SSH 服务或 22 端口
+- `GET /api/server/terminal`: 所有登录用户均可使用的 SSH WebSocket；全局 Header 可打开同一弹窗中的多终端标签，每个终端连接可同时保留多个文件编辑标签，连接后支持 SFTP 目录逐层进入、返回上级、当前目录搜索、不超过 1 MiB 的 UTF-8 文本编辑保存，以及不超过 10 MiB 的常见图片和 PDF 只读预览。Bash/Zsh 终端执行 `cd`、`cd -`、`pushd` 等目录切换后会通过标准 OSC 7 报告实际工作目录，并自动同步左侧目录。连接密码、私钥和编辑内容仅在当前页面内存中使用，最小化弹窗或切换管理页面时保持，退出登录或关闭浏览器页面后全部清除；首次连接必须确认服务器 SHA256 主机指纹
+- `GET /api/server/host-terminal`: 仅超级管理员可使用的部署机直连 WebSocket；通过宿主机代理提供与 SSH 工作区一致的多终端、多文件编辑标签、目录步进、文件编辑及媒体预览，不依赖 SSH 服务或 22 端口；文件保存权限等于代理实际系统账号，并支持编辑 Nginx `sites-enabled` 这类符号链接指向的普通文件
 - `GET /api/server/host-agent`: Linux 宿主机代理使用 Bearer 共享令牌主动注册的 WebSocket；一个后端实例同时接受一个代理并复用最多 32 个临时终端会话
 
 ### 部署机直连（无需 22 端口）
@@ -172,7 +172,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now collector-host-agent
 ```
 
-`HOST_AGENT_SERVER_URL` 应指向后端可访问的 `ws://` 或 `wss://.../api/server/host-agent`。反向代理必须为 `/api/server/host-agent` 和 `/api/server/host-terminal` 保留 WebSocket `Upgrade`，并关闭过短的读取超时。代理默认从 `/` 启动 shell，但实际命令和文件权限仅等于 `collector-terminal` 系统账号；需要管理权限时应在宿主机用最小范围 sudoers 规则授权，再在终端内显式执行 `sudo`，不要直接以 root 运行代理。
+`HOST_AGENT_SERVER_URL` 应指向后端可访问的 `ws://` 或 `wss://.../api/server/host-agent`。反向代理必须为 `/api/server/host-agent` 和 `/api/server/host-terminal` 保留 WebSocket `Upgrade`，并关闭过短的读取超时。代理默认从 `/` 启动 shell，命令和文件权限等于代理实际运行的系统账号；如果你明确把 systemd 服务切换为 root，界面也会按 root 权限执行文件读写，但这会扩大部署机风险，生产环境仍建议使用低权限账号配合最小范围 sudoers 规则。
 
 代理令牌只用于代理到后端的注册认证；浏览器不会接触该令牌。部署机直连还会再次校验后台 HttpOnly 会话与不可变 `roleCode=super-admin`，系统管理员和普通用户即使直接请求接口也会收到 403。代理离线时前端会显示明确错误，现有 SSH 模式不受影响。
 
@@ -265,7 +265,7 @@ sudo systemctl enable --now collector-host-agent
 
 - `GET /api/files`: 获取文件元数据列表；超级管理员还会看到内部聊天和客服聊天附件，统一归类为“聊天数据”且只读
 - `GET /api/files/:id`: 获取文件元数据详情
-- `POST /api/files`: 上传文件，`multipart/form-data` 字段为 `file`、`displayName`、`category`、`description`
+- `POST /api/files`: 上传文件，`multipart/form-data` 字段为 `file`、`displayName`、`category`、`description`；同一所有者已有相同内容时返回 `409/DUPLICATE_FILE`
 - `PUT /api/files/:id`: 更新文件元数据，JSON 字段为 `displayName`、`category`、`description`
 - `GET /api/files/:id/download`: 下载文件内容
 - `GET /api/files/chat-data/:source/:id/preview`: 超级管理员预览聊天附件，`source` 为 `internal-chat` 或 `customer-chat`
@@ -277,7 +277,8 @@ sudo systemctl enable --now collector-host-agent
 
 文件安全约束：
 
-- 单文件上传限制为 32MB。
+- 文件管理不设置应用层单文件大小和前端上传超时限制；文章图片、内部聊天和客服附件仍遵循各自限制。
+- 同一所有者的有效文件按 SHA-256 内容哈希去重；文件名相同但内容不同可继续上传，回收站记录不阻止重新上传。
 - 上传后使用随机服务端存储名，API 不返回绝对路径或存储路径。
 - 原始文件名通过 `filepath.Base` 清理，下载和删除只按文件 ID 查询元数据。
 - 删除默认采用可恢复软删除：文件移入回收站但物理上传内容保留，直到用户明确授权永久清理。

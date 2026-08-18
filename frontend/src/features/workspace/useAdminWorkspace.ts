@@ -24,7 +24,7 @@ import type {
   VisitorAnalyticsRange,
   VisitorAnalyticsResponse,
 } from '@/src/types/admin';
-import { API_BASE_URL, MAX_UPLOAD_SIZE, emptyArticleForm, emptyFileForm, emptyMenuForm, emptyUserForm, pageKeys } from '@/src/config/constants';
+import { API_BASE_URL, emptyArticleForm, emptyFileForm, emptyMenuForm, emptyUserForm, pageKeys } from '@/src/config/constants';
 import { requestWithSession } from '@/src/services/api';
 import { buildMenuTree } from '@/src/utils/menu';
 import { runViewTransition } from '@/src/utils/viewTransition';
@@ -1110,15 +1110,24 @@ export function useAdminWorkspace() {
     void globalMessage.success('文章删除完成');
   };
 
-  /** handleSelectUploadFiles 校验并保存文件选择器返回的整批文件。 */
+  /** handleSelectUploadFiles 过滤同批次重复选择并保存文件选择器返回的整批文件。 */
   const handleSelectUploadFiles = (event: ChangeEvent<HTMLInputElement>) => {
     /** selectedFiles 保存本次选择器返回的文件列表。 */
     const selectedFiles = Array.from(event.target.files ?? []);
     event.target.value = '';
-    /** rejectedFiles 保存空文件或超过单文件大小限制的记录。 */
-    const rejectedFiles = selectedFiles.filter((file) => file.size === 0 || file.size > MAX_UPLOAD_SIZE);
-    /** acceptedFiles 保存允许进入当前上传批次的文件。 */
-    const acceptedFiles = selectedFiles.filter((file) => file.size > 0 && file.size <= MAX_UPLOAD_SIZE);
+    /** uniqueFilesBySignature 按浏览器可用的文件元数据过滤当前选择中的重复项。 */
+    const uniqueFilesBySignature = new Map<string, File>();
+    selectedFiles.forEach((selectedFile) => {
+      /** fileSignature 组合文件选择器提供的稳定元数据，不读取文件内容以免阻塞界面。 */
+      const fileSignature = JSON.stringify([selectedFile.name, selectedFile.size, selectedFile.lastModified]);
+      if (!uniqueFilesBySignature.has(fileSignature)) {
+        uniqueFilesBySignature.set(fileSignature, selectedFile);
+      }
+    });
+    /** acceptedFiles 保存当前批次去除重复选择后的全部文件，包括空文件和大文件。 */
+    const acceptedFiles = Array.from(uniqueFilesBySignature.values());
+    /** filteredDuplicateCount 保存当前选择中被快速过滤的重复数量。 */
+    const filteredDuplicateCount = selectedFiles.length - acceptedFiles.length;
     setSelectedUploadFiles(acceptedFiles);
     setFileUploadProgress('');
     if (acceptedFiles.length === 1) {
@@ -1126,9 +1135,8 @@ export function useAdminWorkspace() {
     } else if (acceptedFiles.length > 1) {
       setFileForm((current) => ({ ...current, displayName: '' }));
     }
-    if (rejectedFiles.length > 0) {
-      setError(`${rejectedFiles.map((file) => file.name).join('、')} 为空或超过单文件 ${Math.round(MAX_UPLOAD_SIZE / 1024 / 1024)} MiB 限制`);
-      return;
+    if (filteredDuplicateCount > 0) {
+      void globalMessage.info(`已过滤 ${filteredDuplicateCount} 个重复选择`);
     }
     setError('');
   };
@@ -1177,6 +1185,8 @@ export function useAdminWorkspace() {
       const failureMessages: string[] = [];
       /** uploadedCount 统计本次已经成功写入文件库的数量。 */
       let uploadedCount = 0;
+      /** duplicateCount 统计后端按文件内容识别并跳过的重复数量。 */
+      let duplicateCount = 0;
       for (let fileIndex = 0; fileIndex < filesToUpload.length; fileIndex += 1) {
         /** uploadFile 保存当前顺序上传的文件。 */
         const uploadFile = filesToUpload[fileIndex];
@@ -1191,7 +1201,15 @@ export function useAdminWorkspace() {
         formData.append('is18r', fileForm.is18r ? 'true' : 'false');
         try {
           /** response 保存当前文件上传接口响应。 */
-          const response = await requestWithSession(`${API_BASE_URL}/api/files`, { method: 'POST', body: formData });
+          const response = await requestWithSession(`${API_BASE_URL}/api/files`, { method: 'POST', body: formData, timeoutMs: null });
+          if (response.status === 409) {
+            /** duplicatePayload 保存后端重复文件响应的稳定错误编码。 */
+            const duplicatePayload = await response.clone().json().catch(() => null) as { code?: string } | null;
+            if (duplicatePayload?.code === 'DUPLICATE_FILE') {
+              duplicateCount += 1;
+              continue;
+            }
+          }
           if (!response.ok) {
             throw new Error(await parseError(response, '上传失败'));
           }
@@ -1209,14 +1227,20 @@ export function useAdminWorkspace() {
       if (failedFiles.length > 0) {
         setSelectedUploadFiles(failedFiles);
         /** resultMessage 汇总部分成功或全部失败的上传结果。 */
-        const resultMessage = `已上传 ${uploadedCount} 个，失败 ${failedFiles.length} 个。${failureMessages.join('；')}`;
+        const resultMessage = `上传成功 ${uploadedCount} 个，重复跳过 ${duplicateCount} 个，失败 ${failedFiles.length} 个。${failureMessages.join('；')}`;
         setError(resultMessage);
         void globalMessage.warning(resultMessage);
         return false;
       }
 
       resetFileForm();
-      void globalMessage.success(`已上传 ${uploadedCount} 个文件`);
+      if (duplicateCount > 0 && uploadedCount === 0) {
+        void globalMessage.info(`重复跳过 ${duplicateCount} 个文件`);
+      } else if (duplicateCount > 0) {
+        void globalMessage.success(`上传成功 ${uploadedCount} 个，重复跳过 ${duplicateCount} 个`);
+      } else {
+        void globalMessage.success(`已上传 ${uploadedCount} 个文件`);
+      }
       return true;
     /** saveError 保存保存状态错误状态。 */
     } catch (saveError) {

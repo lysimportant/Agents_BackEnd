@@ -1,9 +1,11 @@
 package repository
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -283,6 +285,7 @@ func (s *SQLiteStore) migrate() error {
 			content_type TEXT NOT NULL DEFAULT '',
 			size INTEGER NOT NULL DEFAULT 0,
 			storage_name TEXT NOT NULL,
+			content_sha256 TEXT NOT NULL DEFAULT '',
 			owner_id INTEGER NOT NULL DEFAULT 0,
 			is_private INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL,
@@ -394,6 +397,8 @@ func (s *SQLiteStore) migrate() error {
 		{"articles", "is_private", "ALTER TABLE articles ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0"},
 		{"files", "owner_id", "ALTER TABLE files ADD COLUMN owner_id INTEGER NOT NULL DEFAULT 0"},
 		{"files", "is_private", "ALTER TABLE files ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0"},
+		// content_sha256 仅用于同一所有者的有效文件按内容去重，不向客户端返回。
+		{"files", "content_sha256", "ALTER TABLE files ADD COLUMN content_sha256 TEXT NOT NULL DEFAULT ''"},
 		{"socket_conversations", "title", "ALTER TABLE socket_conversations ADD COLUMN title TEXT NOT NULL DEFAULT ''"},
 		// articles.portal_published_at 保存文章首次发布时间，由系统在发布时自动写入。
 		{"articles", "portal_published_at", "ALTER TABLE articles ADD COLUMN portal_published_at TEXT"},
@@ -454,6 +459,8 @@ func (s *SQLiteStore) migrate() error {
 		// C 端门户列表按私密与发布状态读取。
 		`CREATE INDEX IF NOT EXISTS idx_articles_public ON articles(is_private,status,id)`,
 		`CREATE INDEX IF NOT EXISTS idx_files_public ON files(is_private,deleted_at,id)`,
+		// 同一所有者的有效文件内容唯一；空哈希兼容尚未回填的历史重复记录。
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_files_owner_content_sha256 ON files(owner_id,content_sha256) WHERE deleted_at IS NULL AND content_sha256 <> ''`,
 	}
 	// statement 表示当前循环中的索引、键或业务元素。
 	for _, statement := range indexes {
@@ -577,35 +584,79 @@ func (s *SQLiteStore) ReconcileUploadFiles(uploadDir string) error {
 		}
 		// name 保存名称。
 		name := entry.Name()
-		// count 保存数量。
-		var count int
-		// err 保存当前操作结果以及可能返回的错误状态。
-		if err := s.db.QueryRow(`SELECT COUNT(1) FROM files WHERE storage_name = ?`, name).Scan(&count); err != nil {
-			return err
-		}
-		if count > 0 {
-			continue
-		}
 		// info、err 保存当前操作结果以及可能返回的错误状态。
 		info, err := entry.Info()
 		if err != nil {
 			continue
 		}
+		// contentSHA256 保存物理文件内容哈希，用于补齐历史文件去重元数据。
+		contentSHA256, hashErr := fileSHA256(filepath.Join(uploadDir, name))
+		if hashErr != nil {
+			continue
+		}
+		// fileID、ownerID、storedSHA256 保存已有文件记录的标识、所有者和哈希。
+		var fileID, ownerID int
+		var storedSHA256 string
+		// lookupErr 保存按物理存储名查询已有记录的结果。
+		lookupErr := s.db.QueryRow(`SELECT id,owner_id,content_sha256 FROM files WHERE storage_name=? ORDER BY id LIMIT 1`, name).Scan(&fileID, &ownerID, &storedSHA256)
+		if lookupErr == nil {
+			if strings.TrimSpace(storedSHA256) != "" {
+				continue
+			}
+			// 历史有效重复只给最早回填成功的记录保存哈希，其余记录保持空哈希且不删除。
+			if _, err := s.db.Exec(`
+				UPDATE files SET content_sha256=?
+				WHERE id=? AND content_sha256=''
+				  AND NOT EXISTS (
+					SELECT 1 FROM files
+					WHERE owner_id=? AND content_sha256=? AND deleted_at IS NULL AND id<>?
+				  )
+			`, contentSHA256, fileID, ownerID, contentSHA256, fileID); err != nil {
+				return err
+			}
+			continue
+		}
+		if !errors.Is(lookupErr, sql.ErrNoRows) {
+			return lookupErr
+		}
 		// now 保存当前时间。
 		now := time.Now().UTC()
-		// ownerID 保存所有者标识。
-		ownerID := 1
+		ownerID = 1
 		// admin、ok 保存业务值及其是否存在或处理成功的标记。
 		if admin, ok := s.findAdminUser(); ok {
 			ownerID = admin.ID
 		}
+		// activeDuplicateCount 保存同一所有者是否已经存在相同内容的有效记录。
+		var activeDuplicateCount int
+		if err := s.db.QueryRow(`SELECT COUNT(1) FROM files WHERE owner_id=? AND content_sha256=? AND deleted_at IS NULL`, ownerID, contentSHA256).Scan(&activeDuplicateCount); err != nil {
+			return err
+		}
+		if activeDuplicateCount > 0 {
+			contentSHA256 = ""
+		}
 		_, _ = s.db.Exec(
-			`INSERT INTO files (display_name,original_name,category,description,content_type,size,storage_name,owner_id,is_private,image_width,image_height,created_at,updated_at,deleted_at)
-			 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
-			name, name, "未分类", "系统自动补录", "application/octet-stream", info.Size(), name, ownerID, 0, 0, 0, timeText(now), timeText(now),
+			`INSERT INTO files (display_name,original_name,category,description,content_type,size,storage_name,content_sha256,owner_id,is_private,image_width,image_height,created_at,updated_at,deleted_at)
+			 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
+			name, name, "未分类", "系统自动补录", "application/octet-stream", info.Size(), name, contentSHA256, ownerID, 0, 0, 0, timeText(now), timeText(now),
 		)
 	}
 	return nil
+}
+
+// fileSHA256 流式计算物理文件的 SHA-256，避免读取整文件到内存。
+func fileSHA256(path string) (string, error) {
+	// source 保存待计算哈希的物理文件句柄。
+	source, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer source.Close()
+	// hasher 保存 SHA-256 累计状态。
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, source); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
 }
 
 // findAdminUser 获取对应业务记录。
@@ -1360,7 +1411,7 @@ func (s *SQLiteStore) DeleteArticle(id int) bool {
 func (s *SQLiteStore) ListFiles(includeDeleted bool) []models.ManagedFile {
 	// query 保存查询条件。
 	query := `
-		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.content_type,f.size,f.storage_name,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
+		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.content_type,f.size,f.storage_name,f.content_sha256,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
 		FROM files f
 		LEFT JOIN users u ON u.id = f.owner_id
 	`
@@ -1496,7 +1547,7 @@ func buildChatDataFile(file models.ManagedFile, source, description, storagePath
 // FindFileByID 获取对应业务记录。
 func (s *SQLiteStore) FindFileByID(id int) (models.ManagedFile, bool) {
 	return scanFile(s.db.QueryRow(`
-		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.content_type,f.size,f.storage_name,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
+		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.content_type,f.size,f.storage_name,f.content_sha256,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
 		FROM files f
 		LEFT JOIN users u ON u.id = f.owner_id
 		WHERE f.id=? AND f.deleted_at IS NULL
@@ -1506,11 +1557,25 @@ func (s *SQLiteStore) FindFileByID(id int) (models.ManagedFile, bool) {
 // FindDeletedFileByID 获取对应业务记录。
 func (s *SQLiteStore) FindDeletedFileByID(id int) (models.ManagedFile, bool) {
 	return scanFile(s.db.QueryRow(`
-		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.content_type,f.size,f.storage_name,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
+		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.content_type,f.size,f.storage_name,f.content_sha256,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
 		FROM files f
 		LEFT JOIN users u ON u.id = f.owner_id
 		WHERE f.id=? AND f.deleted_at IS NOT NULL
 	`, id))
+}
+
+// FindActiveFileByOwnerAndHash 查询同一所有者中内容相同且未删除的文件。
+func (s *SQLiteStore) FindActiveFileByOwnerAndHash(ownerID int, contentSHA256 string) (models.ManagedFile, bool) {
+	if ownerID <= 0 || strings.TrimSpace(contentSHA256) == "" {
+		return models.ManagedFile{}, false
+	}
+	return scanFile(s.db.QueryRow(`
+		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.content_type,f.size,f.storage_name,f.content_sha256,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
+		FROM files f
+		LEFT JOIN users u ON u.id = f.owner_id
+		WHERE f.owner_id=? AND f.content_sha256=? AND f.deleted_at IS NULL
+		ORDER BY f.id LIMIT 1
+	`, ownerID, contentSHA256))
 }
 
 // CreateFile 创建或追加对应业务记录。
@@ -1519,9 +1584,9 @@ func (s *SQLiteStore) CreateFile(file models.ManagedFile) models.ManagedFile {
 	now := time.Now().UTC()
 	// result、err 保存当前操作结果以及可能返回的错误状态。
 	result, err := s.db.Exec(
-		`INSERT INTO files (display_name,original_name,category,description,content_type,size,storage_name,owner_id,is_private,is_18r,image_width,image_height,created_at,updated_at,deleted_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
-		file.DisplayName, file.OriginalName, file.Category, file.Description, file.ContentType, file.Size, file.StorageName, file.OwnerID, boolToInt(file.IsPrivate), boolToInt(file.Is18R), file.ImageWidth, file.ImageHeight, timeText(now), timeText(now),
+		`INSERT INTO files (display_name,original_name,category,description,content_type,size,storage_name,content_sha256,owner_id,is_private,is_18r,image_width,image_height,created_at,updated_at,deleted_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
+		file.DisplayName, file.OriginalName, file.Category, file.Description, file.ContentType, file.Size, file.StorageName, file.ContentSHA256, file.OwnerID, boolToInt(file.IsPrivate), boolToInt(file.Is18R), file.ImageWidth, file.ImageHeight, timeText(now), timeText(now),
 	)
 	if err != nil {
 		return models.ManagedFile{}
@@ -1554,7 +1619,7 @@ func (s *SQLiteStore) UpdateFileMetadata(id int, request models.FileMetadataRequ
 }
 
 // UpdateFileContentMeta 更新并保存对应业务状态。
-func (s *SQLiteStore) UpdateFileContentMeta(id int, size int64, contentType string) (models.ManagedFile, bool) {
+func (s *SQLiteStore) UpdateFileContentMeta(id int, size int64, contentType, contentSHA256 string) (models.ManagedFile, bool) {
 	// ok 保存业务值及其是否存在或处理成功的标记。
 	if _, ok := s.FindFileByID(id); !ok {
 		return models.ManagedFile{}, false
@@ -1563,8 +1628,8 @@ func (s *SQLiteStore) UpdateFileContentMeta(id int, size int64, contentType stri
 	now := time.Now().UTC()
 	// err 保存当前操作结果以及可能返回的错误状态。
 	if _, err := s.db.Exec(
-		`UPDATE files SET size=?, content_type=?, updated_at=? WHERE id=? AND deleted_at IS NULL`,
-		size, contentType, timeText(now), id,
+		`UPDATE files SET size=?, content_type=?, content_sha256=?, updated_at=? WHERE id=? AND deleted_at IS NULL`,
+		size, contentType, contentSHA256, timeText(now), id,
 	); err != nil {
 		return models.ManagedFile{}, false
 	}
@@ -1587,16 +1652,39 @@ func (s *SQLiteStore) SoftDeleteFile(id int) bool {
 
 // RestoreFile 实现对应业务逻辑。
 func (s *SQLiteStore) RestoreFile(id int) (models.ManagedFile, bool) {
+	// tx、err 保存恢复时清理冲突哈希和移出回收站的原子事务。
+	tx, err := s.db.Begin()
+	if err != nil {
+		return models.ManagedFile{}, false
+	}
+	defer tx.Rollback()
+	// 内容已经重新上传时清空回收站记录的哈希，允许两条记录同时恢复且不删除文件。
+	if _, err := tx.Exec(`
+		UPDATE files AS restored
+		SET content_sha256=''
+		WHERE restored.id=? AND restored.deleted_at IS NOT NULL AND restored.content_sha256<>''
+		  AND EXISTS (
+			SELECT 1 FROM files AS active
+			WHERE active.owner_id=restored.owner_id
+			  AND active.content_sha256=restored.content_sha256
+			  AND active.deleted_at IS NULL
+		  )
+	`, id); err != nil {
+		return models.ManagedFile{}, false
+	}
 	// now 保存当前时间。
 	now := time.Now().UTC()
 	// result、err 保存当前操作结果以及可能返回的错误状态。
-	result, err := s.db.Exec(`UPDATE files SET deleted_at=NULL, updated_at=? WHERE id=? AND deleted_at IS NOT NULL`, timeText(now), id)
+	result, err := tx.Exec(`UPDATE files SET deleted_at=NULL, updated_at=? WHERE id=? AND deleted_at IS NOT NULL`, timeText(now), id)
 	if err != nil {
 		return models.ManagedFile{}, false
 	}
 	// affected 保存受影响记录数。
 	affected, _ := result.RowsAffected()
 	if affected == 0 {
+		return models.ManagedFile{}, false
+	}
+	if err := tx.Commit(); err != nil {
 		return models.ManagedFile{}, false
 	}
 	return s.FindFileByID(id)
@@ -1763,7 +1851,7 @@ func scanFile(row scanner) (models.ManagedFile, bool) {
 	// deleted 保存文件删除时间的可空字符串。
 	var deleted sql.NullString
 	// err 保存扫描过程中的错误状态。
-	err := row.Scan(&f.ID, &f.DisplayName, &f.OriginalName, &f.Category, &f.Description, &f.ContentType, &f.Size, &f.StorageName, &f.OwnerID, &f.OwnerName, &isPrivate, &is18R, &f.ImageWidth, &f.ImageHeight, &c, &up, &deleted)
+	err := row.Scan(&f.ID, &f.DisplayName, &f.OriginalName, &f.Category, &f.Description, &f.ContentType, &f.Size, &f.StorageName, &f.ContentSHA256, &f.OwnerID, &f.OwnerName, &isPrivate, &is18R, &f.ImageWidth, &f.ImageHeight, &c, &up, &deleted)
 	if err != nil {
 		return models.ManagedFile{}, false
 	}

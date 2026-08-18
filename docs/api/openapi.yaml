@@ -243,7 +243,7 @@ paths:
     get:
       tags: [服务器]
       summary: 建立登录用户 SSH 终端 WebSocket
-      description: 任意有效登录会话均可升级，匿名请求仍会被拒绝；每个 WebSocket 对应一个独立 SSH 终端，前端可同时打开多个连接。连接凭据不持久化，首次握手必须确认 SHA256 主机指纹。连接后可通过同一通道的 list_dir、read_file、search 和 write_file 消息浏览 SFTP 目录、读取文件，以及编辑保存不超过 1 MiB 的现有 UTF-8 普通文本文件；read_file 还可返回不超过 10 MiB 的 PNG、JPEG、GIF、WebP、BMP、SVG 图片或 PDF Base64 预览。前端采用当前目录步进浏览和本层过滤搜索；Bash/Zsh 提示符通过标准 OSC 7 报告实际工作目录，使终端路径变更自动刷新左侧目录，协议仍保留从根目录递归搜索能力。目录单次最多返回 2000 项；递归搜索最多扫描 10000 个节点并返回 200 项；写入受远端 SSH 账号文件权限约束。
+      description: 任意有效登录会话均可升级，匿名请求仍会被拒绝；每个 WebSocket 对应一个独立 SSH 终端，前端可同时打开多个连接并在同一连接中保留多个文件编辑标签。连接凭据不持久化，首次握手必须确认 SHA256 主机指纹。连接后可通过同一通道的 list_dir、read_file、search 和 write_file 消息浏览 SFTP 目录、读取文件，以及编辑保存不超过 1 MiB 的现有 UTF-8 普通文本文件；read_file 还可返回不超过 10 MiB 的 PNG、JPEG、GIF、WebP、BMP、SVG 图片或 PDF Base64 预览。前端采用当前目录步进浏览和本层过滤搜索；Bash/Zsh 提示符通过标准 OSC 7 报告实际工作目录，使终端路径变更自动刷新左侧目录，协议仍保留从根目录递归搜索能力。目录单次最多返回 2000 项；递归搜索最多扫描 10000 个节点并返回 200 项；写入受远端 SSH 账号文件权限约束。
       security: [{ cookieSession: [] }]
       responses:
         '101': { description: WebSocket 升级成功。 }
@@ -252,7 +252,7 @@ paths:
     get:
       tags: [服务器]
       summary: 建立超级管理员部署机直连 WebSocket
-      description: 仅 roleCode=super-admin 的有效登录会话可升级；后端为每个浏览器标签分配临时会话，并通过已认证宿主机代理转发 PTY、目录、搜索、文件读取和文本保存消息。该模式不使用 SSH 或 22 端口，命令与文件权限等于运行代理的 Linux 系统账号，代理离线时返回明确错误。
+      description: 仅 roleCode=super-admin 的有效登录会话可升级；后端为每个浏览器标签分配临时会话，并通过已认证宿主机代理转发 PTY、目录、搜索、文件读取和文本保存消息。该模式不使用 SSH 或 22 端口，命令与文件权限等于运行代理的 Linux 系统账号，保存文件时允许跟随符号链接到普通目标文件，代理离线时返回明确错误。
       security: [{ cookieSession: [] }]
       responses:
         '101': { description: WebSocket 升级成功。 }
@@ -313,10 +313,28 @@ paths:
           multipart/form-data:
             schema:
               type: object
+              required: [file]
               properties:
                 file: { type: string, format: binary }
       responses:
-        '201': { description: 文件已保存且元数据已持久化。 }
+        '201': { description: 文件已保存且元数据已持久化；文件管理接口不设置应用层单文件大小上限。 }
+        '409':
+          description: 同一所有者已存在内容相同且未删除的文件。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [code, error, existingFile]
+                properties:
+                  code: { type: string, enum: [DUPLICATE_FILE] }
+                  error: { type: string }
+                  existingFile:
+                    type: object
+                    required: [id, displayName, originalName]
+                    properties:
+                      id: { type: integer }
+                      displayName: { type: string }
+                      originalName: { type: string }
   /api/files/{id}/download:
     get:
       tags: [文件]

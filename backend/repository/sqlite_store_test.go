@@ -1,6 +1,9 @@
 package repository
 
 import (
+	"crypto/sha256"
+	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -13,6 +16,100 @@ import (
 	"collector-backend/models"
 	"collector-backend/permissions"
 )
+
+func TestManagedFileContentHashDeduplicationAndReconcile(t *testing.T) {
+	store, dir := openTempStore(t)
+	defer store.db.Close()
+
+	// ownerID 保存默认超级管理员的用户标识。
+	ownerID := 1
+	if admin, ok := store.findAdminUser(); ok {
+		ownerID = admin.ID
+	}
+	// secondOwner 保存跨用户相同内容不应互相过滤的测试账号。
+	canLogin := true
+	secondOwner, message := store.CreateUser(models.UserRequest{
+		Username: "hash-owner-2",
+		Name:     "哈希测试用户",
+		Role:     "内容编辑",
+		Status:   "在岗",
+		CanLogin: &canLogin,
+	}, auth.MustHashPassword("pass1234"))
+	if message != "" {
+		t.Fatalf("create second owner: %s", message)
+	}
+
+	// contentHash 保存一组固定内容的 SHA-256。
+	hashBytes := sha256.Sum256([]byte("same-content"))
+	contentHash := fmt.Sprintf("%x", hashBytes[:])
+	// firstFile 保存首条有效文件记录。
+	firstFile := store.CreateFile(models.ManagedFile{
+		DisplayName: "first.txt", OriginalName: "first.txt", ContentType: "text/plain", StorageName: "first.txt", ContentSHA256: contentHash, OwnerID: ownerID,
+	})
+	if firstFile.ID == 0 {
+		t.Fatal("create first hashed file failed")
+	}
+	// sameOwnerDuplicate 保存同一用户相同内容的重复写入结果。
+	sameOwnerDuplicate := store.CreateFile(models.ManagedFile{
+		DisplayName: "renamed.txt", OriginalName: "renamed.txt", ContentType: "text/plain", StorageName: "renamed.txt", ContentSHA256: contentHash, OwnerID: ownerID,
+	})
+	if sameOwnerDuplicate.ID != 0 {
+		t.Fatalf("same owner duplicate should be rejected: %+v", sameOwnerDuplicate)
+	}
+	// crossOwnerFile 保存另一个用户上传相同内容的结果。
+	crossOwnerFile := store.CreateFile(models.ManagedFile{
+		DisplayName: "other.txt", OriginalName: "other.txt", ContentType: "text/plain", StorageName: "other.txt", ContentSHA256: contentHash, OwnerID: secondOwner.ID,
+	})
+	if crossOwnerFile.ID == 0 {
+		t.Fatal("different owner should allow same content hash")
+	}
+	if !store.SoftDeleteFile(firstFile.ID) {
+		t.Fatal("soft delete first file failed")
+	}
+	// replacementFile 保存原记录进入回收站后重新上传的相同内容。
+	replacementFile := store.CreateFile(models.ManagedFile{
+		DisplayName: "replacement.txt", OriginalName: "replacement.txt", ContentType: "text/plain", StorageName: "replacement.txt", ContentSHA256: contentHash, OwnerID: ownerID,
+	})
+	if replacementFile.ID == 0 {
+		t.Fatal("soft-deleted file should not block same content upload")
+	}
+	// restoredFile 恢复旧记录时应保留数据并清空冲突哈希。
+	restoredFile, restored := store.RestoreFile(firstFile.ID)
+	if !restored || restoredFile.ID == 0 || restoredFile.ContentSHA256 != "" {
+		t.Fatalf("restore conflicting historical file failed: %+v", restoredFile)
+	}
+
+	// uploadDir 保存历史物理文件回填测试的独立上传目录。
+	uploadDir := filepath.Join(dir, "reconcile-uploads")
+	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
+		t.Fatalf("create reconcile dir: %v", err)
+	}
+	for _, storageName := range []string{"legacy-a.txt", "legacy-b.txt"} {
+		if err := os.WriteFile(filepath.Join(uploadDir, storageName), []byte("legacy-content"), 0o644); err != nil {
+			t.Fatalf("write legacy file: %v", err)
+		}
+		created := store.CreateFile(models.ManagedFile{
+			DisplayName: storageName, OriginalName: storageName, ContentType: "text/plain", StorageName: storageName, OwnerID: ownerID,
+		})
+		if created.ID == 0 {
+			t.Fatalf("create legacy metadata for %s", storageName)
+		}
+	}
+	if err := store.ReconcileUploadFiles(uploadDir); err != nil {
+		t.Fatalf("reconcile historical hashes: %v", err)
+	}
+	// legacyHash 保存历史物理文件共同内容的 SHA-256。
+	legacyHashBytes := sha256.Sum256([]byte("legacy-content"))
+	legacyHash := fmt.Sprintf("%x", legacyHashBytes[:])
+	// hashedLegacyCount 保存历史重复记录中成功写入哈希的数量。
+	var hashedLegacyCount int
+	if err := store.db.QueryRow(`SELECT COUNT(1) FROM files WHERE owner_id=? AND content_sha256=?`, ownerID, legacyHash).Scan(&hashedLegacyCount); err != nil {
+		t.Fatalf("count reconciled hashes: %v", err)
+	}
+	if hashedLegacyCount != 1 {
+		t.Fatalf("expected one reconciled historical hash, got %d", hashedLegacyCount)
+	}
+}
 
 func openTempStore(t *testing.T) (*SQLiteStore, string) {
 	t.Helper()

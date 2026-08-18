@@ -33,7 +33,7 @@ import {
   ZoomOutOutlined,
   CompressOutlined,
 } from '@ant-design/icons';
-import { API_BASE_URL, MAX_UPLOAD_SIZE } from '@/src/config/constants';
+import { API_BASE_URL } from '@/src/config/constants';
 import { permanentlyDeleteFile, readFilePreviewBlob, readTextFileContent, updateFileMetadata, updateTextFileContent } from '@/src/services/fileApi';
 import type { ResourceActionAccess } from '@/src/utils/actionPermissions';
 import { clearStoredLoginBackground, setStoredLoginBackground } from '@/src/utils/loginBackground';
@@ -367,7 +367,7 @@ export function FilesPage(props: FilesPageProps) {
           <input multiple type="file" disabled={isSavingFile} onChange={onSelectUploadFiles} />
           <InboxOutlined />
           <strong>{selectedUploadFiles.length === 0 ? '点击选择一个或多个文件' : selectedUploadFiles.length === 1 ? selectedUploadFiles[0].name : `已选择 ${selectedUploadFiles.length} 个文件`}</strong>
-          <small>{selectedUploadFiles.length === 0 ? `图片、PDF、Office、程序等，单文件最大 ${formatFileSize(MAX_UPLOAD_SIZE)}` : selectedUploadFiles.length === 1 ? `${formatFileSize(selectedUploadFiles[0].size)} · ${getFileKindFromName(selectedUploadFiles[0].name, selectedUploadFiles[0].type).label}` : `合计 ${formatFileSize(selectedUploadTotalSize)}，将按顺序逐个上传`}</small>
+          <small>{selectedUploadFiles.length === 0 ? '图片、PDF、Office、程序等文件' : selectedUploadFiles.length === 1 ? `${formatFileSize(selectedUploadFiles[0].size)} · ${getFileKindFromName(selectedUploadFiles[0].name, selectedUploadFiles[0].type).label}` : `合计 ${formatFileSize(selectedUploadTotalSize)}，将按顺序逐个上传`}</small>
         </label>
         {selectedUploadFiles.length > 0 && <div className="file-upload-selection-list" role="list" aria-label="待上传文件">
           {selectedUploadFiles.map((uploadFile, fileIndex) => <div className="file-upload-selection-item" role="listitem" key={`${uploadFile.name}-${uploadFile.size}-${uploadFile.lastModified}-${fileIndex}`}>

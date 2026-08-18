@@ -365,17 +365,17 @@ func searchLocalFiles(_ string, requestQuery string, _ string) (terminalprotocol
 	return terminalprotocol.ServerMessage{Type: "search_results", Query: query, Entries: results, Truncated: truncated}, nil
 }
 
-// writeLocalFile 使用代理系统账号权限覆盖一个已存在的普通 UTF-8 文本文件。
+// writeLocalFile 使用代理系统账号权限覆盖一个已存在的普通 UTF-8 文本文件；符号链接按系统调用语义跟随到目标文件。
 func writeLocalFile(requestPath, _ string, content string) (terminalprotocol.ServerMessage, error) {
 	if validationErr := validateLocalTextContent(content); validationErr != nil {
 		return terminalprotocol.ServerMessage{}, validationErr
 	}
 	// normalizedPath 表示清理后的宿主机绝对文件路径。
 	normalizedPath := normalizeLocalPath(requestPath)
-	// fileInfo、statErr 表示目标节点元数据及读取错误；符号链接不能通过编辑器覆盖。
-	fileInfo, statErr := os.Lstat(normalizedPath)
-	if statErr != nil || !fileInfo.Mode().IsRegular() || fileInfo.Mode()&os.ModeSymlink != 0 {
-		return terminalprotocol.ServerMessage{}, errors.New("只能保存已存在且不是符号链接的普通文本文件")
+	// fileInfo、statErr 表示跟随符号链接后的目标元数据及错误状态。
+	fileInfo, statErr := os.Stat(normalizedPath)
+	if statErr != nil || !fileInfo.Mode().IsRegular() {
+		return terminalprotocol.ServerMessage{}, errors.New("只能保存已存在的普通文本文件")
 	}
 	// localFile、openErr 表示使用代理账号权限打开的覆盖写入句柄。
 	localFile, openErr := os.OpenFile(normalizedPath, os.O_WRONLY|os.O_TRUNC, 0)
