@@ -130,6 +130,31 @@
   animation: fade-in-up 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
+@keyframes viewport-reveal-enter {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+[data-viewport-reveal-state='pending'] {
+  opacity: 0;
+  translate: 0 12px;
+  will-change: opacity, translate;
+}
+
+[data-viewport-reveal-state='visible'] {
+  animation: viewport-reveal-enter 360ms cubic-bezier(0.22, 1, 0.36, 1) var(--viewport-reveal-delay, 0ms) both;
+}
+
+.tilt-image-card {
+  transition: transform 200ms ease-out;
+}
+
 /* ===== 骨架屏闪烁 ===== */
 .skeleton {
   border-radius: 8px;
@@ -143,26 +168,49 @@
   animation: shimmer 1.4s ease-in-out infinite;
 }
 
-/* ===== 图片瀑布流（CSS columns） ===== */
+/* ===== 图片瀑布流（稳定独立列，追加内容不重排旧卡片） ===== */
 .masonry {
-  column-count: 1;
-  column-gap: 1rem;
+  display: grid;
+  gap: 1rem;
+  align-items: start;
+}
+.masonry-columns-1,
+.masonry-skeleton {
+  grid-template-columns: minmax(0, 1fr);
+}
+.masonry-columns-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.masonry-columns-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.masonry-columns-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.masonry-columns-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.masonry-column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1rem;
+  align-self: start;
 }
 @media (min-width: 480px) {
-  .masonry { column-count: 2; }
+  .masonry-skeleton { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (min-width: 768px) {
-  .masonry { column-count: 3; }
+  .masonry-skeleton { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (min-width: 1280px) {
-  .masonry { column-count: 4; }
+  .masonry-skeleton { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (min-width: 1536px) {
-  .masonry { column-count: 5; }
+  .masonry-skeleton { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
 .masonry-item {
-  break-inside: avoid;
-  margin-bottom: 1rem;
+  margin: 0;
 }
 
 /* ===== 瀑布流自动加载状态 ===== */
@@ -284,5 +332,11 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  [data-viewport-reveal-state] {
+    opacity: 1 !important;
+    translate: none !important;
+    animation: none !important;
   }
 }

@@ -1,6 +1,6 @@
 # 新建页面与后端创建接口开发说明
 
-这份说明用于新增一个“可在工作台打开、可通过 API 创建数据”的业务模块。示例名称使用 `products`（商品），实际开发时请替换成真实业务名称。
+这份说明用于新增 B 端工作台业务模块、后端 API，或扩展 C 端公开页面。B 端示例名称使用 `products`（商品），实际开发时请替换成真实业务名称。
 
 核心原则：先确定数据和权限，再实现后端接口，最后接入前端页面。前后端 JSON 字段统一使用 `camelCase`，所有写请求都必须在后端再次鉴权。
 
@@ -19,6 +19,8 @@
 ```
 
 管理后台目前只有根页面 `/`。新增管理功能通常不是创建 `/products`，而是让 `app/page.tsx` 根据 `activePage === 'products'` 渲染 `ProductsPage`。
+
+C 端 `portal/` 使用真实 App Router URL，不使用 `activePage`。公开页面位于 `portal/app/[locale]/`，内容请求集中在 `portal/src/services/publicApi.ts`，只能读取 `/api/public/*`；登录、会话恢复和退出是唯一允许调用的认证接口。
 
 ## 二、后端开发顺序
 
@@ -231,7 +233,29 @@ export async function createProduct(form: ProductForm) {
 - 确认 `resolvePageKey` 同时匹配菜单 `code` 和去除斜杠后的 `path`。
 - 检查父菜单展开、面包屑、刷新后 `sessionStorage` 恢复和移动端侧栏动画。
 
-## 四、一次完整的开发顺序
+## 四、C 端公开功能开发
+
+C 端页面使用 `/{locale}/...` 真实路由。新增或修改公开功能时按以下位置联动：
+
+- 路由和 metadata：`portal/app/[locale]/`，同时检查 canonical、语言替换、sitemap、robots 和 RSS。
+- 展示组件：`portal/src/components/`；跨页面交互状态放 `portal/src/features/`。
+- API 与类型：`portal/src/services/publicApi.ts`、`portal/src/types/publicContent.ts`。
+- 三语言文案：`portal/src/i18n/messages/zh-CN.json`、`en-US.json`、`ja-JP.json`。
+- 公开契约：`backend/routes/public.go`、公开 handler/repository、`docs/api/openapi.yaml`。
+
+图片页虽然不显示分页按钮，仍使用后端 `page/pageSize` 作为内部批次协议。接近底部时通过 `IntersectionObserver` 加载下一批；追加数据不得重新分配已加载卡片的瀑布流列。
+
+C 端验证命令：
+
+```powershell
+cd portal
+npm run typecheck
+npm run lint
+npm run docs
+npm run build
+```
+
+## 五、一次完整的开发顺序
 
 1. 先写字段、权限和 API 草图。
 2. 后端增加模型、迁移、repository、handler、route、权限和测试。
@@ -241,7 +265,7 @@ export async function createProduct(form: ProductForm) {
 6. 启动隔离后端，登录后验证创建、列表、更新、删除和越权。
 7. 再执行前端类型检查、生产构建和浏览器验收。
 
-## 五、联调验收清单
+## 六、联调验收清单
 
 后端：
 
@@ -271,13 +295,23 @@ go vet ./...
 cd ..\frontend
 npx.cmd tsc --noEmit --incremental false
 npm.cmd run build
+
+cd ..\portal
+npm.cmd run typecheck
+npm.cmd run lint
+npm.cmd run docs
+npm.cmd run build
 ```
 
-## 六、常见遗漏
+只有涉及 C 端或公开 API 时才需要执行 portal 命令；只有涉及 B 端时才需要执行 frontend 命令。
+
+## 七、常见遗漏
 
 - 只写了页面，没有在 `routes.Setup` 注册接口。
 - 只加了后端路由，没有把菜单种子和权限动作补齐。
 - 把页面当成 `/products`，但本项目管理页实际由 `/` 的 `activePage` 切换。
+- 把 C 端也做成 `activePage`，或从 C 端调用后台写接口。
+- 图片自动加载时抛弃后端分页协议，导致无法限制单次响应和恢复加载状态。
 - 写请求没有 `credentials: 'include'`，导致登录 Cookie 没有发送。
 - 修改 JSON 字段却没有同步模型、前端类型、OpenAPI 和 README。
 - 用角色显示名称做安全判断，或只隐藏按钮而没有后端鉴权。

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-版本：3.0
+版本：3.1
 编码：UTF-8
 适用范围：本文件适用于 `D:\agent` 工作区全部代码、文档和运行配置；子目录 `AGENTS.md` 在其作用域内补充本文件。
 
@@ -30,17 +30,17 @@
 
 ## 二、当前项目状态
 
-这是一个采集数据管理平台。仓库目前有两个可运行应用和一个已定义但尚未脚手架化的 C 端门户目录：
+这是一个采集数据管理平台。仓库目前有三个可独立运行的应用：
 
 | 目录 | 当前状态 | 技术栈与职责 | 默认地址 |
 | --- | --- | --- | --- |
 | `backend/` | 可运行 | Go 1.26、Gin、SQLite、Redis；认证、权限、内容、文件、聊天、监控、SSH 与宿主机代理 | `http://localhost:8080` |
 | `frontend/` | 可运行 | Next.js 16 App Router、React、strict TypeScript、Ant Design、Tailwind CSS 4 | `http://localhost:3000` |
-| `portal/` | 仅有 `AGENTS.md`，尚无 `package.json` 和源码 | 规划中的公开内容门户；需求基线为 `docs/portal-requirements.md` | 规划为 `http://localhost:3001` |
+| `portal/` | 可运行 | Next.js 16 App Router、React、strict TypeScript、Tailwind CSS 4、next-intl；公开内容门户 | `http://localhost:3001` |
 
 - 根目录没有统一构建脚本，也不是 monorepo 工具链工程；Go 和 npm 命令必须在对应应用目录执行。
 - 根 `package-lock.json` 是被 `.gitignore` 忽略的遗留文件，不表示应在根目录安装依赖。
-- `docker-compose.yml` 当前只编排 Redis、后端和管理前端，不包含 `portal/`。
+- `docker-compose.yml` 编排 Redis、后端、管理前端和 C 端门户；三个应用仍分别维护依赖和构建命令。
 
 ## 三、目录与运行链路
 
@@ -58,8 +58,9 @@
 
 ### C 端门户
 
-- 后端 `/api/public/*` 已存在，但 `portal/` 前端尚未创建。不得把需求文档或 `portal/AGENTS.md` 当成已经可运行的实现。
-- 创建门户时直接在 `portal/` 生成独立项目，不得增加第二层项目目录；只能调用公开只读 API，不得复用后台 Cookie 或直连 SQLite。
+- `portal/` 使用真实的 `/{locale}/...` App Router 路由，支持 `zh-CN`、`en-US`、`ja-JP`、四种主题、SEO、公开内容检索、图片预览和登录后 18R 开关。
+- C 端业务数据只能来自 `/api/public/*`；不得直连 SQLite、扫描上传目录或调用后台写接口。登录只复用后端 HttpOnly Cookie 会话，用于身份恢复和 18R 可见性判断，不在浏览器持久化会话 ID。
+- C 端图片页不显示分页按钮，但后端分页契约仍作为内部批次协议；接近底部时自动预加载下一批，稳定瀑布流列不得因追加数据重排已加载卡片。
 
 ## 四、代码、注释与命名
 
@@ -85,7 +86,7 @@
 
 - 文章和文件均有所有者与私密状态；公开资源按菜单和动作权限读取，私密资源仅所有者或管理员读取，写入仍需所有权或管理员身份。
 - 文件默认软删除到回收站。永久删除同时移除 SQLite 记录和物理文件，只有用户明确操作或授权后才能执行。
-- 门户发布还要求 `portalVisible` 等公开条件，`isPrivate=false` 本身不等于允许匿名访问。
+- C 端公开文章必须满足 `is_private=0 AND status='已发布'`；公开文件必须满足 `is_private=0 AND deleted_at IS NULL`。匿名访问额外排除 `is_18r=1`，只有有效登录会话且 `portal-r18=1` 时才包含 18R 内容。
 
 ### 两套聊天
 
@@ -105,7 +106,7 @@
 - “业务资源”是工作台下独立的 `business-resources` 页面，展示用户、菜单和文章的总量、有效量、构成及可用率，不得重新塞回预览台底部长页面。
 - `/api/server/terminal` 是任意有效登录用户可用的 SSH WebSocket，不得重新加入管理员限定。
 - `/api/server/host-agent` 使用 `HOST_AGENT_TOKEN` 接受单个 Linux 宿主机代理主动注册；`/api/server/host-terminal` 只允许 `roleCode=super-admin`，不得向系统管理员或普通用户开放。
-- 部署机直连命令和文件权限必须等于代理进程系统账号；禁止通过特权容器、Docker Socket 或挂载宿主机根目录替代独立低权限代理，也不得把容器 shell 标记为宿主机终端。
+- 部署机直连命令和文件权限必须等于代理进程系统账号；当前受支持的生产方案是宿主机上以 `root` 运行独立 systemd 代理，因此仅向可信超级管理员开放。禁止通过特权容器、Docker Socket 或挂载宿主机根目录替代代理，也不得把容器 shell 标记为宿主机终端。
 - SSH 凭据、私钥、文件内容和连接状态只保存在当前浏览器页面内存；弹窗最小化和页面切换保持连接，退出登录或关闭浏览器页面时销毁。
 - 多终端、主机指纹确认、SFTP 步进目录、当前目录搜索、终端路径同步、文本编辑保存、图片/PDF 预览属于同一协议能力，修改一端时必须同步检查后端协议、前端会话状态和 OpenAPI。
 
@@ -120,7 +121,7 @@
 | 用户、角色、部门 | repository 事务与迁移、关联名称同步、保护性测试、管理前端选择器 |
 | SQLite 迁移 | `backend/repository/sqlite_store.go`、相关 repository、扫描顺序、迁移幂等测试、`docs/database/schema.md` |
 | 文件与聊天附件 | routes、handlers、repository、`frontend/src/services/fileApi.ts`、文件页、聊天调用方、回收站语义 |
-| 公开门户能力 | `/api/public/*`、B 端发布控制、OpenAPI、`docs/portal-requirements.md`、未来 `portal/` 调用方 |
+| 公开门户能力 | `/api/public/*`、文章/文件公开与 18R 字段、OpenAPI、`docs/portal-requirements.md`、`portal/` 调用方 |
 | 服务器与终端 | `backend/handlers/server.go`、`backend/handlers/host_agent.go`、`backend/cmd/host-agent/`、`backend/routes/server.go`、`frontend/src/services/serverApi.ts`、终端组件、OpenAPI |
 | 主题、布局或交互 | `frontend/src/theme/`、`frontend/app/globals.css`、相关 CSS/组件、桌面和移动浏览器验收 |
 
@@ -164,14 +165,27 @@ npm run dev
 - `frontend` 当前没有自动化测试脚本；`npm run lint` 仍调用 Next.js 16 已移除的 `next lint`，在脚本修复前不作为有效验收命令。
 - 开发服务和生产构建共享 `.next`，不要并发执行；不要手工编辑或提交 `.next/`、`node_modules/`、`tsconfig.tsbuildinfo`、`next-env.d.ts` 等生成物。
 
+### C 端门户
+
+```powershell
+cd portal
+npm run typecheck
+npm run lint
+npm run docs
+npm run build
+npm run dev
+```
+
+- TypeDoc 输出到 `portal/docs/`，属于生成文档；业务规则和接口说明仍维护在根 `docs/`。
+- 开发服务和生产构建共享 `.next`，不要并发执行；涉及布局、动画或交互时按本文件浏览器验收规则检查三语言和桌面/移动视口。
+
 ### Docker
 
 ```powershell
 docker compose up --build
 ```
 
-- Compose 默认启动 Redis、后端和管理前端；持久化目录与端口通过根 `.env` 或 `.env.example` 中的变量覆盖。
-- `portal/` 尚不可执行 npm 验证；只有生成 `package.json` 和源码后，才按 `portal/AGENTS.md` 执行其验证流程。
+- Compose 默认启动 Redis、后端、管理前端和 C 端门户；持久化目录、端口和公开地址通过根 `.env` 或 `.env.example` 中的变量覆盖。
 
 ## 十一、Git 提交与推送
 

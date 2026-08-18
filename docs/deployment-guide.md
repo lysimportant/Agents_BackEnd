@@ -174,13 +174,16 @@ docker compose logs --tail=100 portal
 
 ## 6. 配置 Nginx 与 HTTPS
 
-下面使用三个域名分别代理后端、管理前端和 C 端门户。先在 Nginx `http` 作用域内定义 WebSocket 连接映射，例如创建 `/etc/nginx/conf.d/00-websocket-map.conf`：
+下面使用三个域名分别代理后端、管理前端和 C 端门户。先在 Nginx `http` 作用域内定义 WebSocket 连接映射和全局请求体策略，例如创建 `/etc/nginx/conf.d/00-platform-global.conf`：
 
 ```nginx
 map $http_upgrade $connection_upgrade {
     default upgrade;
     '' close;
 }
+
+# 0 表示不由 Nginx 限制请求体大小，文件管理可上传任意大小的文件。
+client_max_body_size 0;
 ```
 
 创建 `/etc/nginx/conf.d/agents-backend.conf`：
@@ -190,10 +193,9 @@ server {
     listen 80;
     server_name api.example.com;
 
-    client_max_body_size 32m;
-
     location / {
         proxy_pass http://127.0.0.1:30003;
+        proxy_request_buffering off;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -260,6 +262,8 @@ curl -fsS https://api.example.com/health
 curl -fsSI https://admin.example.com/
 curl -fsSI https://portal.example.com/
 ```
+
+`client_max_body_size 0` 关闭 Nginx 请求体大小限制，`proxy_request_buffering off` 让大文件上传直接流向后端，避免 Nginx 先完整写入临时文件。文件管理本身不设置应用层单文件大小上限，但实际可上传大小仍受磁盘空间、反向代理上游、网络超时和操作系统资源约束。
 
 后端代理必须保留 WebSocket `Upgrade`，否则 SSH 终端、内部聊天、Socket 客服和部署机直连会连接失败。生产环境不要把 `CORS_ALLOWED_ORIGINS` 设置为通配符。
 

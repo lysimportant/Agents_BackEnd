@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { AntdRegistry } from '@ant-design/nextjs-registry';
 import { TiltCardEffects } from '@/src/components/shared/TiltCardEffects';
+import { ViewportRevealEffects } from '@/src/components/shared/ViewportRevealEffects';
 import { GlobalFeedbackProvider } from '@/src/components/shared/GlobalFeedbackProvider';
 import { ADMIN_THEME_BOOTSTRAP_SCRIPT } from '@/src/theme/themes';
 import { LOGIN_BACKGROUND_BOOTSTRAP_SCRIPT } from '@/src/utils/loginBackground';
@@ -62,6 +63,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <AntdRegistry>
           <GlobalFeedbackProvider>
             <TiltCardEffects />
+            <ViewportRevealEffects />
             <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: structuredData }} />
             {children}
           </GlobalFeedbackProvider>

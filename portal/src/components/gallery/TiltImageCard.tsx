@@ -59,11 +59,9 @@ export function TiltImageCard({
       onPointerMove={handlePointerMove}
       onPointerLeave={() => setTransform('')}
       aria-label={t('openImage') + ': ' + image.alt}
-      className="masonry-item animate-fade-in-up group relative block w-full overflow-hidden rounded-lg text-left"
+      className="masonry-item tilt-image-card group relative block w-full overflow-hidden rounded-lg text-left"
       style={{
         transform,
-        transition: 'transform 0.2s ease-out',
-        animationDelay: Math.min(index, 8) * 50 + 'ms',
       }}
     >
       <ProgressiveImage

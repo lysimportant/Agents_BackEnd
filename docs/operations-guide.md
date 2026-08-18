@@ -1,25 +1,18 @@
 # 平台操作说明
 
-这份说明面向第一次运行平台的开发人员和管理员。按照“先后端、再前端、最后浏览器操作”的顺序执行即可。
-
-如果要开发新的管理页面和对应 API，请阅读[前后端页面/API 开发说明](./frontend-backend-page-api-guide.md)。
+这份说明面向第一次运行平台的开发人员和管理员。系统由后端、B 端管理前端和 C 端内容门户三个独立应用组成。
 
 ## 一、准备环境
 
-请先安装：
+请安装 Go 1.26、Node.js、npm 和 PowerShell。默认地址：
 
-- Go 1.26 或兼容版本
-- Node.js 和 npm
-- PowerShell
-
-项目分为两个独立服务：
-
-- 后端 API：`http://localhost:8080`
-- 前端管理界面：`http://localhost:3000`
+| 服务 | 地址 | 作用 |
+| --- | --- | --- |
+| 后端 | `http://localhost:8080` | API、SQLite、Redis 会话、文件、聊天和终端 |
+| B 端 | `http://localhost:3000` | 管理后台、内部聊天、客服管理和 SSH 工作区 |
+| C 端 | `http://localhost:3001` | 公开文章、图片、资源、分类和搜索 |
 
 ## 二、启动后端
-
-打开第一个 PowerShell 窗口：
 
 ```powershell
 cd D:\agent\backend
@@ -27,39 +20,29 @@ go mod download
 go run .
 ```
 
-看到服务监听 `:8080` 后，打开另一个 PowerShell 检查后端：
+健康检查：
 
 ```powershell
 Invoke-RestMethod http://localhost:8080/health
 ```
 
-能返回健康状态，就说明后端已经启动。
+默认业务数据位置：
 
-### 后端数据位置
-
-默认情况下，业务数据和上传文件保存在：
-
-- SQLite 数据库：`backend/data/app.db`
-- 普通文件：`backend/uploads/`
-- 客服聊天附件：`backend/uploads/socket/`
+- SQLite：`backend/data/app.db`
+- 文件管理上传：`backend/uploads/`
+- 客服附件：`backend/uploads/socket/`
 - 内部聊天附件：`backend/uploads/internal-chat/`
 
-首次启动会自动创建表、索引、菜单、角色和默认管理员，不会覆盖已有业务数据。
-
-### 使用隔离数据测试
-
-测试上传、聊天附件或数据库迁移时，请使用独立目录，不要碰正式数据：
+首次启动会增量创建表、索引、菜单、角色和默认管理员，不会覆盖已有业务数据。测试迁移、上传或聊天时必须使用隔离目录：
 
 ```powershell
 cd D:\agent\backend
-$env:SQLITE_PATH="D:\agent\.workspace-temp\p30-operations\app.db"
-$env:UPLOAD_DIR="D:\agent\.workspace-temp\p30-operations\uploads"
+$env:SQLITE_PATH="D:\agent\.workspace-temp\<task>\app.db"
+$env:UPLOAD_DIR="D:\agent\.workspace-temp\<task>\uploads"
 go run .
 ```
 
-## 三、启动前端
-
-打开第二个 PowerShell 窗口：
+## 三、启动 B 端
 
 ```powershell
 cd D:\agent\frontend
@@ -68,104 +51,126 @@ $env:NEXT_PUBLIC_API_BASE_URL="http://localhost:8080"
 npm run dev
 ```
 
-浏览器打开 <http://localhost:3000>。
+浏览器打开 `http://localhost:3000`。管理页主要在根路由 `/` 内通过 `activePage` 切换；内部聊天使用真实路由 `/chat`，Socket 客服访客页使用 `/socket/chat/...`。
 
-开发时保持后端窗口和前端窗口都运行。修改代码后，前端页面通常会自动刷新，后端 Go 代码需要重新启动服务。
+## 四、启动 C 端
 
-## 四、第一次登录
+```powershell
+cd D:\agent\portal
+npm install
+$env:NEXT_PUBLIC_API_BASE_URL="http://localhost:8080"
+$env:NEXT_PUBLIC_SITE_URL="http://localhost:3001"
+npm run dev
+```
 
-默认管理员账号为：
+浏览器打开 `http://localhost:3001`，根地址会按语言偏好跳转，`/{locale}` 当前继续跳转到 `/{locale}/images`。支持 `zh-CN`、`en-US`、`ja-JP`。
+
+C 端图片页没有分页按钮。页面内部仍按后端分页批次读取数据，接近底部时自动预加载下一批，并显示加载或重试状态。缩略图用于低流量占位，中图用于瀑布流，打开预览后才读取原图。
+
+## 五、第一次登录
+
+初始化超级管理员：
 
 - 用户名：`MH`
 - 初始密码：`123`
 
-登录后建议立即打开个人资料修改密码和联系方式。密码不会显示在页面或 API 返回中。
+首次登录后应立即修改密码和联系方式。`MH` 只在用户表首次为空时创建，后续不具有特殊业务权限。
 
-## 五、常用后台操作
+C 端也可以复用后端登录会话。匿名访问不会看到 18R 内容；登录后开启“显示 18R 内容”才会写入 `portal-r18=1` Cookie，并让公开接口包含 18R 内容。会话 ID 始终保存在 HttpOnly Cookie 中。
 
-### 1. 用户、部门、角色和菜单
+## 六、常用后台操作
 
-在工作台左侧进入对应菜单：
+### 用户、部门、角色和菜单
 
-1. 先创建部门。
-2. 再创建角色并分配菜单、动作权限。
-3. 最后创建用户，选择部门和角色。
-4. 用户登录后只能看到自己有效菜单，按钮权限由后端再次校验。
+1. 创建部门。
+2. 创建角色并分配菜单。
+3. 创建用户并选择部门和角色。
+4. 在用户页按需补充个人菜单和动作权限。
 
-超级管理员和系统管理员拥有全部当前权限。只有超级管理员可以创建或调整超级管理员及系统管理员。
+超级管理员和系统管理员拥有全部菜单与动作。只有超级管理员可以管理其他超级管理员。
 
-### 2. 文件管理
+### 文件管理
 
-进入“文件管理”后可以：
+文件管理支持：
 
-- 点击刷新按钮重新获取文件列表。
-- 预览或下载普通文件和图片。
-- 将图片设置为登录背景。
-- 删除文件时先进入回收站，需要时可以恢复。
-- 超级管理员可以看到聊天附件分类“聊天数据”，并查看内部聊天和客服聊天的附件。
+- 一次选择并上传多个文件。
+- 前端过滤同一批选择中的重复文件。
+- 后端按“同一所有者 + SHA-256 内容哈希”过滤有效重复文件，后端结果是权威判断。
+- 文件管理上传不设置应用层单文件大小上限，前端上传请求也不主动设置超时。
+- 预览、下载、刷新、编辑元数据和将图片设为登录背景。
+- 默认软删除到回收站，确认后才可永久删除物理文件。
+- 超级管理员查看内部聊天和客服聊天附件分类。
 
-聊天附件仍然受权限保护，不能通过猜测静态地址访问。
+聊天和文章附件仍保留各自的数量、大小或类型限制，不能把文件管理的无限制规则套用到其他接口。
 
-### 3. 访问分析
+### 文章和 C 端公开规则
 
-进入“访问分析”可以查看访问者的 IP、User-Agent、来源页、国家/地区等元数据，并使用：
+C 端文章公开条件是非私密且状态为“已发布”。C 端文件公开条件是非私密且未进入回收站。当前没有额外的门户发布开关；调整私密状态、文章状态或文件回收站状态会直接影响 C 端可见性。
 
-- 时间筛选和关键词搜索
-- 每页 10、20、30、50 或 100 条
-- 刷新按钮
-- 表格、统计卡片和图表
+### 访问分析
 
-访问日志默认保留 90 天，仅超级管理员和系统管理员可查看。国家/地区需要可信反向代理写入 `CF-IPCountry` 等请求头。
+访问分析支持时间和关键词筛选、刷新、统计卡片、图表和每页 `10/20/30/50/100` 条。日志默认保留 90 天；国家/地区需要可信反向代理提供 `CF-IPCountry` 等 Header。
 
-## 六、内部聊天 `/chat`
+## 七、聊天和终端
 
-登录后可从页面右上角聊天入口，或直接打开 <http://localhost:3000/chat>。
+内部聊天 `/chat` 与 Socket 客服是两套独立系统，状态、WebSocket 和附件权限不得混用。历史消息浏览时，只有用户接近底部或主动查看最新消息才自动跟随新消息。
 
-1. 左侧选择群聊或在线用户发起私聊。
-2. 在输入框输入文字，按 Enter 发送；需要换行时使用 Shift+Enter。
-3. 点击表情按钮，在分类面板中选择表情，表情会插入当前文字位置。
-4. 点击附件按钮选择图片或普通文件，等待上传完成后再发送消息。
-5. 图片附件会显示缩略图，普通文件显示名称、大小和下载入口。
-6. 消息正文中的 HTTP/HTTPS 图片链接会显示预览，其他网址会保留为安全外链。
-7. 左侧用户行和聊天入口会显示未读数量；收到新消息时会有视觉提示和可用的声音提示。
+Header 中的 SSH 工作区对所有有效登录用户开放。只有 `roleCode=super-admin` 可以选择“部署机直连”；该入口连接 Linux 宿主机上的独立 root systemd 代理，因此具备 root 文件和命令权限。
 
-内部聊天和客服聊天是两套独立业务，内部聊天的接口统一位于 `/api/internal-chat/*`。
+## 八、验证和生产构建
 
-## 七、客服聊天
+后端：
 
-客服功能位于工作台的“Socket 客服”页面，面向网站访客；它不是内部聊天 `/chat`。
+```powershell
+cd D:\agent\backend
+go test ./...
+go vet ./...
+```
 
-管理员可以在客服页面查看访客会话、发送文字/表情/图片/文件、结束会话，并在文件管理的“聊天数据”分类中查看聊天附件。网站访客使用客服悬浮组件发起咨询，不需要后台账号。
-
-## 八、生产构建和停止服务
-
-前端发布前执行：
+B 端：
 
 ```powershell
 cd D:\agent\frontend
-npx.cmd tsc --noEmit --incremental false
+.\node_modules\.bin\tsc.cmd --noEmit --incremental false
 npm run build
-npm run start
 ```
 
-停止开发服务时，在对应 PowerShell 窗口按 `Ctrl+C`。不要手工删除 `backend/data/`、`backend/uploads/` 或其 SQLite WAL/SHM 文件。
+C 端：
+
+```powershell
+cd D:\agent\portal
+npm run typecheck
+npm run lint
+npm run docs
+npm run build
+```
+
+前端开发服务和生产构建共享 `.next`，不要并发运行。停止服务时在对应终端按 `Ctrl+C`，不要删除业务 SQLite、WAL/SHM 或上传目录。
 
 ## 九、常见问题
 
 ### 页面打不开
 
-确认后端的 `http://localhost:8080/health` 正常，再确认前端运行在 `3000` 端口。端口被占用时，先关闭旧进程或改用其他端口。
+先检查 `http://localhost:8080/health`，再确认 B 端 `3000` 和 C 端 `3001` 端口。端口被占用时关闭旧进程或修改启动端口和对应公开地址。
 
-### 登录后 API 返回 401/403
+### 登录后返回 401/403
 
-确认前后端地址、Cookie 和 CORS 配置一致。跨站 HTTPS 部署通常需要：
+检查 Cookie、CORS、账号状态、菜单和动作权限。跨站 HTTPS 通常需要：
 
 ```powershell
 $env:COOKIE_SAMESITE="None"
 $env:COOKIE_SECURE="true"
-$env:CORS_ALLOWED_ORIGINS="https://你的前端域名"
+$env:CORS_ALLOWED_ORIGINS="https://管理域名,https://门户域名"
 ```
 
-### 附件上传失败
+### 文件上传失败
 
-确认 `UPLOAD_DIR` 可写、文件没有超过接口限制，并检查后端窗口的错误日志。验收附件功能时请使用隔离的 `SQLITE_PATH` 和 `UPLOAD_DIR`。
+文件管理没有应用层大小上限。检查 `UPLOAD_DIR` 是否可写、磁盘空间、Nginx 是否设置 `client_max_body_size 0`、上游代理限制和网络连接。聊天或文章附件失败时，还要检查对应接口自身限制。
+
+### C 端没有显示 18R 内容
+
+需要先在 C 端登录有效账号，再开启 18R 开关。只有 `portal-r18=1` 而没有有效会话时，后端仍会排除 18R 内容。
+
+### 图片滚到底部没有继续加载
+
+检查浏览器控制台和 `/api/public/images?page=...&pageSize=...` 请求。接口仍有每页最大 50 条的批次限制，但页面不会显示分页按钮。

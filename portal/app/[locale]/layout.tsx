@@ -10,6 +10,7 @@ import { SITE_BRAND_NAME, SITE_TAGLINE, SITE_URL } from '@/config/constants';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { LocaleCookieSync } from '@/components/layout/LocaleCookieSync';
 import { SkipToContent } from '@/components/layout/SkipToContent';
+import { ViewportRevealEffects } from '@/components/common/ViewportRevealEffects';
 import { localizedPath } from '@/utils/seo';
 
 /** 预生成三种语言的静态布局，供静态渲染与 ISR 使用。 */
@@ -66,6 +67,7 @@ export default async function LocaleLayout({
         <ThemeProvider>
           <NextIntlClientProvider>
             <AuthProvider>
+              <ViewportRevealEffects />
               <LocaleCookieSync />
               <SkipToContent />
               <SiteHeader />

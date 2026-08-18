@@ -31,7 +31,7 @@
 - `config/`：环境变量和默认配置。
 - `database/`：SQLite 连接初始化及连接级设置。
 - `handlers/`：HTTP 与 WebSocket handler，覆盖认证、数据点、用户、部门、角色、菜单、文章、文件、公开门户、两套聊天、访问分析、服务器指标、SSH/SFTP 和宿主机代理转发。
-- `cmd/host-agent/`：部署在 Linux 宿主机的低权限终端代理；主动连接后端并按临时会话提供 PTY、本地目录、搜索、读取和文本保存。
+- `cmd/host-agent/`：部署在 Linux 宿主机的独立终端代理；主动连接后端并按临时会话提供 PTY、本地目录、搜索、读取和文本保存，当前生产手册以 root systemd 服务运行。
 - `terminalprotocol/`：浏览器终端、后端转发层与宿主机代理共享的 JSON 协议类型。
 - `repository/`：当前生产路径使用的 SQLite 持久化实现，包含增量迁移、幂等种子、权限合并、内容、文件、聊天和访问日志查询。
 - `store/`：保留的内存存储实现；`main.go` 当前不使用它，不要把新功能只实现于此。
@@ -75,7 +75,7 @@
 - `/api/server/terminal` 只要求有效登录会话，所有登录用户权限相同。SSH WebSocket 同时承载终端数据、主机指纹确认、SFTP 目录/搜索/读写以及 OSC 7 工作目录同步协议。
 - `/api/server/host-agent` 只接受与后端 `HOST_AGENT_TOKEN` 常量时间匹配的 Bearer 令牌，并限制一个后端实例同时连接一个代理；令牌为空时接口必须禁用。
 - `/api/server/host-terminal` 必须同时要求有效后台会话和稳定 `roleCode=super-admin`；系统管理员及普通用户均为 403。代理断开、浏览器关闭或页面退出时必须释放对应 PTY，会话标识不得持久化。
-- 宿主机代理必须以独立低权限系统账号运行，不得要求后端容器使用 privileged、Docker Socket 或宿主机根目录挂载。代理日志不得包含共享令牌、终端输入、文件内容或后台 Cookie。
+- 宿主机代理必须作为宿主机独立 systemd 进程运行，当前受支持的部署账号为 `root`，其命令和文件权限因此等同 root；该能力只允许 `super-admin` 使用。不得要求后端容器使用 privileged、Docker Socket 或宿主机根目录挂载，代理日志不得包含共享令牌、终端输入、文件内容或后台 Cookie。
 - SSH 文本编辑仅允许不超过 1 MiB 的现有 UTF-8 普通文件；图片和 PDF 预览不超过 10 MiB；目录和递归搜索必须保留数量上限、路径清理及远端权限错误反馈。
 
 ## 鉴权层次

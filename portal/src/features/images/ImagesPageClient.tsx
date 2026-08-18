@@ -152,7 +152,11 @@ export function ImagesPageClient() {
 
   if (isInitialLoading && imageFiles.length === 0) {
     return (
-      <div className="masonry" aria-busy="true" aria-label={commonT('loading')}>
+      <div
+        className="masonry masonry-skeleton"
+        aria-busy="true"
+        aria-label={commonT('loading')}
+      >
         {Array.from({ length: 8 }, (_, index) => (
           <div key={index} className="masonry-item skeleton h-48" aria-hidden="true" />
         ))}

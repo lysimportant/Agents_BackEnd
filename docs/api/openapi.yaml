@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: 采集数据管理平台 API
   version: 1.0.0
-  description: 使用 Cookie 会话鉴权的管理、文件、分析和聊天接口。
+  description: 管理端使用 Cookie 会话鉴权；公开门户接口默认匿名只读，只有有效会话同时携带 portal-r18=1 时才包含 18R 内容。
 servers:
   - url: http://localhost:8080
     description: 本地后端服务
@@ -25,6 +25,7 @@ paths:
       parameters:
         - { name: keyword, in: query, schema: { type: string }, description: 按标题与摘要模糊搜索 }
         - { name: category, in: query, schema: { type: string }, description: 按分类名称筛选 }
+        - { name: sort, in: query, schema: { type: string }, description: 当前会解析但暂不影响排序，结果固定按 ID 倒序 }
         - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 24 } }
       responses:
@@ -45,6 +46,7 @@ paths:
       parameters:
         - { name: keyword, in: query, schema: { type: string } }
         - { name: category, in: query, schema: { type: string } }
+        - { name: sort, in: query, schema: { type: string }, description: 当前会解析但暂不影响排序，结果固定按 ID 倒序 }
         - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 24 } }
       responses:
@@ -56,6 +58,7 @@ paths:
       parameters:
         - { name: keyword, in: query, schema: { type: string } }
         - { name: category, in: query, schema: { type: string } }
+        - { name: sort, in: query, schema: { type: string }, description: 当前会解析但暂不影响排序，结果固定按 ID 倒序 }
         - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 24 } }
       responses:

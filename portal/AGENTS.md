@@ -14,26 +14,26 @@
 
 ## 当前实现状态
 
-- 当前 `portal/` 只有本规则文件，尚无 `package.json`、锁文件、Next.js 配置、`app/` 或 `src/`，因此目前不是可安装、可启动或可构建的应用。
-- 后端 `/api/public/*` 和 B 端门户发布字段已经存在，但不能把后端能力、需求文档或 HTML 预览稿视为 C 端页面已经实现。
-- 普通文档任务不得执行不存在的 portal npm 命令。只有用户要求创建门户并完成脚手架后，才启用本文件后续的依赖、构建、浏览器和三语言验收规则。
-- 仓库根 `docker-compose.yml` 当前不包含门户服务；门户真正实现后若需容器化，必须显式更新 Compose、根 `.env.example`、README 和部署说明。
+- `portal/` 已是可安装、启动、构建和容器部署的 Next.js 16 应用，拥有独立 `package.json`、锁文件、App Router 源码、Dockerfile、三语言资源和 TypeDoc 配置。
+- 当前实现包含文章、图片、资源、分类、搜索、关于、文章详情、RSS、sitemap 和 robots；`/{locale}` 当前跳转到 `/{locale}/images`，图片瀑布流是第一屏主入口。
+- C 端支持后端会话登录恢复和 18R 开关。匿名请求排除 18R 内容；只有有效 HttpOnly 会话且 `portal-r18=1` 时公开接口才返回 18R 内容。
+- 仓库根 `docker-compose.yml` 已编排门户服务，默认端口为 `3001`；部署配置变化时同步检查 Compose、根 `.env.example`、README 和部署说明。
 
 ## 项目定位与业务边界
 
-- `portal/` 的目标是成为面向匿名访问者的 C 端内容门户，展示经 B 端明确发布的文章、图片和文件资源。
-- 门户实现后，`backend/` 是唯一业务数据来源；C 端不得直连 SQLite、扫描上传目录、复制后台数据或实现第二套内容存储。
-- C 端业务请求只能使用 `/api/public/*`。不得调用需要后台 Cookie、菜单权限或动作权限的管理接口，也不得读取或持久化后台会话 ID。
-- `isPrivate=false` 不等于允许匿名访问。只有同时满足后端门户发布条件的资源才能展示，前端不得自行放宽 `portalVisible`、状态、删除状态或文件类型限制。
+- `portal/` 是面向普通访问者的 C 端内容门户，展示后端判定可公开的文章、图片和文件资源。
+- `backend/` 是唯一业务数据来源；C 端不得直连 SQLite、扫描上传目录、复制后台数据或实现第二套内容存储。
+- 内容请求只能使用 `/api/public/*`。登录、会话恢复和退出可使用 `/api/auth/login`、`/api/auth/session`、`/api/auth/logout`，但不得调用后台写接口、读取或持久化会话 ID。
+- 公开文章条件为 `is_private=0 AND status='已发布'`；公开文件条件为 `is_private=0 AND deleted_at IS NULL`。前端不得自行放宽这些条件或 18R 过滤。
 - 客服入口只能复用现有客服聊天边界，不得调用或混用 `/api/internal-chat/*`、内部聊天状态和后台鉴权。
 - C 端不提供内容编辑、用户注册、评论、付费或投稿能力，除非后续需求明确扩展。
 
-## 目标技术栈与运行约定
+## 技术栈与运行约定
 
-- 创建应用时，`portal/` 本身就是 C 端项目根目录，`package.json` 名称使用 `portal`；所有源码和配置直接写入当前目录，禁止创建 `collector-portal/`、`portal/` 等第二层项目目录。
-- 目标技术栈为 Next.js 16 App Router、React、strict TypeScript、Tailwind CSS 4、Lucide React 和 `next-intl`。
-- 应用创建后独立维护 `package.json` 与 `package-lock.json`，依赖只在 `portal/` 安装；禁止在仓库根目录混装依赖。
-- 规划的默认开发地址为 `http://localhost:3001`，后端默认地址为 `http://localhost:8080`。
+- `portal/` 本身是 C 端项目根目录，`package.json` 名称为 `portal`；禁止创建第二层项目目录。
+- 当前技术栈为 Next.js 16 App Router、React、strict TypeScript、Tailwind CSS 4、Lucide React 和 `next-intl`。
+- 独立维护 `package.json` 与 `package-lock.json`，依赖只在 `portal/` 安装；禁止在仓库根目录混装依赖。
+- 默认开发地址为 `http://localhost:3001`，后端默认地址为 `http://localhost:8080`。
 - 浏览器可见后端地址读取 `NEXT_PUBLIC_API_BASE_URL`，站点绝对地址读取 `NEXT_PUBLIC_SITE_URL`；`NEXT_PUBLIC_*` 中禁止放密钥、数据库地址、后台 Cookie 或其他秘密。
 - 新增依赖前先确认现有平台能力能否完成需求。开源代码必须核对许可证，并在 `THIRD_PARTY_NOTICES.md` 记录来源、许可证、使用范围和修改说明。
 
@@ -83,14 +83,14 @@
 - 外部媒体首期只接受受控 `https://` 地址；禁止新增可请求任意 URL 的服务端代理，避免 SSRF。
 - SVG、HTML、脚本、可执行文件和无法确认真实类型的文件不得匿名内联展示。下载和预览必须使用后端返回的受控 URL。
 - 外链使用安全 `rel`，用户内容不得生成任意 `script`、事件属性、表单、iframe 或危险协议。
-- 修改公开 API 路径、字段、缓存、鉴权或错误契约时，同步检查 `backend/`、B 端发布控制、`../docs/api/openapi.yaml`、根 `README.md` 和 C 端所有调用方。
+- 修改公开 API 路径、字段、缓存、鉴权或错误契约时，同步检查 `backend/`、B 端文章/文件字段、`../docs/api/openapi.yaml`、根 `README.md` 和 C 端所有调用方。
 
 ## SEO 约定
 
-- 首页、文章、图片、资源、分类和详情页必须输出服务端可见正文，不得依赖客户端请求后才出现主要内容。
+- 图片入口、文章、资源、分类和详情页必须输出服务端可见正文，不得依赖客户端请求后才出现主要内容。
 - 每个可索引页面提供唯一 title、description、canonical 和必要的 Open Graph 信息；结构化数据必须与页面可见内容一致。
 - 规范路由使用 `/{locale}/...`。`/` 只根据已校验偏好跳转，不支持的语言返回 `404`。
-- sitemap、robots、RSS 和 JSON-LD 只能包含当前满足门户发布条件的资源；取消发布后必须按缓存约定失效。
+- sitemap、robots、RSS 和 JSON-LD 只能包含当前满足公开条件的资源；内容变为私密、未发布或软删除后必须按缓存约定失效。
 - 搜索结果、预览状态、错误页和不稳定筛选组合使用 `noindex`；第一页不得同时以无参数和 `?page=1` 两个 canonical 被索引。
 - 文章正文实际语言使用 `contentLocale` 标记。没有真实翻译关系时不得伪造文章详情 `hreflang`。
 - 生产构建必须使用最终 HTTPS `NEXT_PUBLIC_SITE_URL`，不能静默生成 localhost canonical。
@@ -116,13 +116,14 @@
 - 所有页面切换、侧栏、抽屉、浮层和卡片动画必须支持 `prefers-reduced-motion: reduce`，减少动态效果时关闭或显著弱化。
 - 使用 Lucide 图标实现常见工具操作，图标按钮提供 tooltip 和 `aria-label`；不重复手绘已有图标。
 - 卡片圆角默认不超过 `8px`。页面区块不包装成漂浮卡片，不在卡片内继续嵌套卡片。
-- 不使用装饰性渐变球、光斑或纯氛围插画代替真实内容。首页主视觉优先展示 B 端真实发布资源，并在首屏露出下一段内容。
+- 不使用装饰性渐变球、光斑或纯氛围插画代替真实内容。当前图片入口优先展示真实公开资源，并在首屏露出后续内容。
 - 字号不随视口宽度连续缩放，字距不使用负值；三语言长文本必须换行并保持容器稳定。
 
 ## 响应式与可访问性
 
 - 同时验证桌面、平板和移动布局；禁止横向溢出、文本遮挡、控件裁切、不可点击区域和双重滚动条。
 - 图片瀑布流必须预留宽高比，移动端 `1-2` 列、平板 `2-3` 列、桌面 `3-5` 列，并保证 DOM 阅读顺序可理解。
+- 图片页使用后端分页作为内部批次协议，不显示分页按钮；通过 `IntersectionObserver` 在接近底部时预加载下一批，追加数据时保持已加载卡片的列归属稳定。
 - 触控目标至少约 `44px × 44px`；hover 只作为鼠标设备增强，核心操作在触摸设备上必须始终可发现。
 - 页面保持正确标题层级，每页一个清晰 `h1`，并使用 `nav`、`main`、`article`、`time` 等语义结构。
 - 提供跳到主要内容入口、可见焦点和键盘操作；浮层管理焦点循环，关闭后焦点返回触发元素。
@@ -140,9 +141,8 @@
 
 ## 测试、数据隔离与验收
 
-- 在门户骨架尚不存在时，只执行规则、需求、后端公开 API 与路径一致性检查，不运行 npm 命令。
-- 门户应用创建后，C 端最小验证包括 `npm run typecheck`、`npm run lint`、`npm run build` 和 `npm run docs`；创建脚本时必须保证这些命令真实存在并可执行，新增测试脚本后同步执行相关单元与集成测试。
-- 涉及后端公开 API 时执行 `go test ./...`、`go vet ./...`；涉及 B 端发布控件时执行 B 端严格类型检查和生产构建。
+- C 端最小验证包括 `npm run typecheck`、`npm run lint`、`npm run docs` 和 `npm run build`；新增测试脚本后同步执行相关单元与集成测试。
+- 涉及后端公开 API 时执行 `go test ./...`、`go vet ./...`；涉及 B 端文章或文件能力时执行 B 端严格类型检查和生产构建。
 - 所有联调、脚本和浏览器验收使用当前任务对应的 `.workspace-temp/p<n>-portal/` 目录，其中 `n` 为当前 `Pn` 的数字部分；目录内使用独立 SQLite、上传目录、日志和中间产物。
 - 严禁删除、覆盖、重置、清空或使用真实业务 API 批量清理 `backend/data/`、SQLite WAL/SHM 和 `backend/uploads/`。
 - 视觉或交互变更必须使用当前 Codex 环境的官方 Browser 插件检查桌面与移动端，不以第三方浏览器工具替代。
