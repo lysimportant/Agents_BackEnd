@@ -69,7 +69,7 @@ export default async function LocaleLayout({
               <LocaleCookieSync />
               <SkipToContent />
               <SiteHeader />
-              <main id="main-content" className="min-h-[70vh] pt-16">
+              <main id="main-content" className="mx-auto min-h-[70vh] w-4/5 pt-16">
                 {children}
               </main>
             </AuthProvider>

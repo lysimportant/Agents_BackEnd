@@ -136,8 +136,8 @@ export function useAdminWorkspace() {
   const [articleForm, setArticleForm] = useState<ArticleForm>(emptyArticleForm);
   /** fileForm、setFileForm 保存文件表单、文件表单。 */
   const [fileForm, setFileForm] = useState<FileForm>(emptyFileForm);
-  /** selectedUploadFile、setSelectedUploadFile 保存已选择上传文件、已选择上传文件。 */
-  const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
+  /** selectedUploadFiles、setSelectedUploadFiles 保存当前批次准备上传的文件列表。 */
+  const [selectedUploadFiles, setSelectedUploadFiles] = useState<File[]>([]);
   /** editingUserId、setEditingUserId 保存用户标识、用户标识。 */
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   /** editingMenuId、setEditingMenuId 保存菜单标识、菜单标识。 */
@@ -174,6 +174,8 @@ export function useAdminWorkspace() {
   const [isSavingArticle, setIsSavingArticle] = useState(false);
   /** isSavingFile、setIsSavingFile 分别保存文件状态及其更新函数。 */
   const [isSavingFile, setIsSavingFile] = useState(false);
+  /** fileUploadProgress、setFileUploadProgress 保存批量上传时的当前文件进度文案。 */
+  const [fileUploadProgress, setFileUploadProgress] = useState('');
   /** isSavingPermission、setIsSavingPermission 分别保存权限状态及其更新函数。 */
   const [isSavingPermission, setIsSavingPermission] = useState(false);
   /** isSavingActionPermission、setIsSavingActionPermission 分别保存权限状态及其更新函数。 */
@@ -574,7 +576,8 @@ export function useAdminWorkspace() {
   /** resetFileForm 负责计算或维护文件表单。 */
   const resetFileForm = () => {
     setFileForm(emptyFileForm);
-    setSelectedUploadFile(null);
+    setSelectedUploadFiles([]);
+    setFileUploadProgress('');
     setEditingFileId(null);
   };
 
@@ -1107,17 +1110,37 @@ export function useAdminWorkspace() {
     void globalMessage.success('文章删除完成');
   };
 
-  /** handleSelectUploadFile 负责处理对应的界面事件和状态变化。 */
-  const handleSelectUploadFile = (event: ChangeEvent<HTMLInputElement>) => {
-    /** file 保存文件。 */
-    const file = event.target.files?.[0] ?? null;
-    if (file && file.size > MAX_UPLOAD_SIZE) {
-      setError('上传文件不能超过 10MB');
-      event.target.value = '';
-      setSelectedUploadFile(null);
+  /** handleSelectUploadFiles 校验并保存文件选择器返回的整批文件。 */
+  const handleSelectUploadFiles = (event: ChangeEvent<HTMLInputElement>) => {
+    /** selectedFiles 保存本次选择器返回的文件列表。 */
+    const selectedFiles = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    /** rejectedFiles 保存空文件或超过单文件大小限制的记录。 */
+    const rejectedFiles = selectedFiles.filter((file) => file.size === 0 || file.size > MAX_UPLOAD_SIZE);
+    /** acceptedFiles 保存允许进入当前上传批次的文件。 */
+    const acceptedFiles = selectedFiles.filter((file) => file.size > 0 && file.size <= MAX_UPLOAD_SIZE);
+    setSelectedUploadFiles(acceptedFiles);
+    setFileUploadProgress('');
+    if (acceptedFiles.length === 1) {
+      setFileForm((current) => ({ ...current, displayName: current.displayName.trim() || acceptedFiles[0].name }));
+    } else if (acceptedFiles.length > 1) {
+      setFileForm((current) => ({ ...current, displayName: '' }));
+    }
+    if (rejectedFiles.length > 0) {
+      setError(`${rejectedFiles.map((file) => file.name).join('、')} 为空或超过单文件 ${Math.round(MAX_UPLOAD_SIZE / 1024 / 1024)} MiB 限制`);
       return;
     }
-    setSelectedUploadFile(file);
+    setError('');
+  };
+
+  /** handleRemoveUploadFile 从当前上传批次移除指定位置的文件。 */
+  const handleRemoveUploadFile = (fileIndex: number) => {
+    /** remainingFiles 保存移除目标文件后的上传列表。 */
+    const remainingFiles = selectedUploadFiles.filter((_, index) => index !== fileIndex);
+    setSelectedUploadFiles(remainingFiles);
+    if (remainingFiles.length === 1 && !fileForm.displayName.trim()) {
+      setFileForm((current) => ({ ...current, displayName: remainingFiles[0].name }));
+    }
   };
 
   /** handleSubmitFile 负责处理对应的界面事件和状态变化。 */
@@ -1126,39 +1149,81 @@ export function useAdminWorkspace() {
     setIsSavingFile(true);
     setError('');
     try {
-      let response: Response;
       if (editingFileId) {
-        response = await requestWithSession(`${API_BASE_URL}/api/files/${editingFileId}`, {
+        /** response 保存文件元数据编辑接口响应。 */
+        const response = await requestWithSession(`${API_BASE_URL}/api/files/${editingFileId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(fileForm),
         });
-      } else {
-        if (!selectedUploadFile) {
-          throw new Error('请选择要上传的文件');
+        if (!response.ok) {
+          throw new Error(await parseError(response, '保存文件元数据失败'));
         }
-        /** formData 保存表单业务数据。 */
+        resetFileForm();
+        await loadData();
+        void globalMessage.success('文件信息修改完成');
+        return true;
+      }
+
+      if (selectedUploadFiles.length === 0) {
+        throw new Error('请选择要上传的文件');
+      }
+
+      /** filesToUpload 固定本次提交的文件快照，避免上传过程中选择状态变化。 */
+      const filesToUpload = [...selectedUploadFiles];
+      /** failedFiles 保存上传失败且需要保留重试的文件。 */
+      const failedFiles: File[] = [];
+      /** failureMessages 保存每个失败文件对应的后端或网络错误。 */
+      const failureMessages: string[] = [];
+      /** uploadedCount 统计本次已经成功写入文件库的数量。 */
+      let uploadedCount = 0;
+      for (let fileIndex = 0; fileIndex < filesToUpload.length; fileIndex += 1) {
+        /** uploadFile 保存当前顺序上传的文件。 */
+        const uploadFile = filesToUpload[fileIndex];
+        setFileUploadProgress(`正在上传 ${fileIndex + 1}/${filesToUpload.length}：${uploadFile.name}`);
+        /** formData 保存当前文件及本批次共用的元数据。 */
         const formData = new FormData();
-        formData.append('file', selectedUploadFile);
-        formData.append('displayName', fileForm.displayName);
+        formData.append('file', uploadFile);
+        formData.append('displayName', filesToUpload.length === 1 ? fileForm.displayName.trim() || uploadFile.name : uploadFile.name);
         formData.append('category', fileForm.category);
         formData.append('description', fileForm.description);
         formData.append('isPrivate', fileForm.isPrivate ? 'true' : 'false');
         formData.append('is18r', fileForm.is18r ? 'true' : 'false');
-        response = await requestWithSession(`${API_BASE_URL}/api/files`, { method: 'POST', body: formData });
+        try {
+          /** response 保存当前文件上传接口响应。 */
+          const response = await requestWithSession(`${API_BASE_URL}/api/files`, { method: 'POST', body: formData });
+          if (!response.ok) {
+            throw new Error(await parseError(response, '上传失败'));
+          }
+          uploadedCount += 1;
+        /** uploadError 保存当前文件上传失败的具体原因。 */
+        } catch (uploadError) {
+          failedFiles.push(uploadFile);
+          failureMessages.push(`${uploadFile.name}：${uploadError instanceof Error ? uploadError.message : '上传失败'}`);
+        }
       }
-      if (!response.ok) {
-        throw new Error(await parseError(response, editingFileId ? '保存文件元数据失败' : '上传文件失败'));
+
+      if (uploadedCount > 0) {
+        await loadData();
       }
+      if (failedFiles.length > 0) {
+        setSelectedUploadFiles(failedFiles);
+        /** resultMessage 汇总部分成功或全部失败的上传结果。 */
+        const resultMessage = `已上传 ${uploadedCount} 个，失败 ${failedFiles.length} 个。${failureMessages.join('；')}`;
+        setError(resultMessage);
+        void globalMessage.warning(resultMessage);
+        return false;
+      }
+
       resetFileForm();
-      await loadData();
-      void globalMessage.success(editingFileId ? '文件信息修改完成' : '文件上传完成');
+      void globalMessage.success(`已上传 ${uploadedCount} 个文件`);
       return true;
     /** saveError 保存保存状态错误状态。 */
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : '保存文件失败');
       return false;
     } finally {
+      setFileUploadProgress('');
       setIsSavingFile(false);
     }
   };
@@ -1173,7 +1238,8 @@ export function useAdminWorkspace() {
       isPrivate: Boolean(file.isPrivate),
       is18r: Boolean(file.is18r),
     });
-    setSelectedUploadFile(null);
+    setSelectedUploadFiles([]);
+    setFileUploadProgress('');
   };
 
   /** handleDownloadFile 负责处理对应的界面事件和状态变化。 */
@@ -1250,7 +1316,7 @@ export function useAdminWorkspace() {
     menuForm,
     articleForm,
     fileForm,
-    selectedUploadFile,
+    selectedUploadFiles,
     editingUserId,
     editingMenuId,
     editingArticleId,
@@ -1270,6 +1336,7 @@ export function useAdminWorkspace() {
     isSavingMenu,
     isSavingArticle,
     isSavingFile,
+    fileUploadProgress,
     isSavingPermission,
     isSavingActionPermission,
     isSavingDepartment,
@@ -1336,7 +1403,8 @@ export function useAdminWorkspace() {
     handleEditArticle,
     handleToggleArticleStatus,
     handleDeleteArticle,
-    handleSelectUploadFile,
+    handleSelectUploadFiles,
+    handleRemoveUploadFile,
     handleSubmitFile,
     handleEditFile,
     handleDownloadFile,

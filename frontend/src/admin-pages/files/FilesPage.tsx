@@ -49,18 +49,22 @@ type FilesPageProps = {
   recycleFiles: ManagedFile[];
   /** fileForm 表示文件表单。 */
   fileForm: FileForm;
-  /** selectedUploadFile 表示已选择上传文件。 */
-  selectedUploadFile: File | null;
+  /** selectedUploadFiles 表示当前批次已选择的上传文件。 */
+  selectedUploadFiles: File[];
   /** editingFileId 表示文件标识。 */
   editingFileId: number | null;
   /** fileKeyword 表示文件搜索关键词。 */
   fileKeyword: string;
   /** isSavingFile 表示文件。 */
   isSavingFile: boolean;
+  /** fileUploadProgress 表示当前批量上传进度。 */
+  fileUploadProgress: string;
   /** onFileFormChange 表示文件表单。 */
   onFileFormChange: (form: FileForm) => void;
-  /** onSelectUploadFile 表示上传文件。 */
-  onSelectUploadFile: (event: ChangeEvent<HTMLInputElement>) => void;
+  /** onSelectUploadFiles 保存文件选择器返回的整批文件。 */
+  onSelectUploadFiles: (event: ChangeEvent<HTMLInputElement>) => void;
+  /** onRemoveUploadFile 从当前上传批次移除指定文件。 */
+  onRemoveUploadFile: (fileIndex: number) => void;
   /** onSubmitFile 表示文件。 */
   onSubmitFile: (event: FormEvent<HTMLFormElement>) => Promise<boolean>;
   /** onResetFileForm 表示文件表单。 */
@@ -107,8 +111,8 @@ export function FilesPage(props: FilesPageProps) {
   const { message } = App.useApp();
   const {
     actions,
-    filteredFiles, recycleFiles, fileForm, selectedUploadFile, editingFileId, fileKeyword, isSavingFile,
-    onFileFormChange, onSelectUploadFile, onSubmitFile, onResetFileForm, onFileKeywordChange,
+    filteredFiles, recycleFiles, fileForm, selectedUploadFiles, editingFileId, fileKeyword, isSavingFile, fileUploadProgress,
+    onFileFormChange, onSelectUploadFiles, onRemoveUploadFile, onSubmitFile, onResetFileForm, onFileKeywordChange,
     onEditFile, onDownloadFile, onDeleteFile, onRestoreFile, onLoadRecycleFiles, onRefreshFiles,
   } = props;
   /** activeKind、setActiveKind 保存当前激活、当前激活。 */
@@ -165,6 +169,13 @@ export function FilesPage(props: FilesPageProps) {
   const categoryOptions = useMemo(() => Array.from(new Set([...CATEGORY_PRESETS, ...files.map((f) => f.category), fileForm.category].filter(Boolean))), [files, fileForm.category]);
   /** visibleFiles 负责计算或维护可见状态。 */
   const visibleFiles = activeKind === 'all' ? files : files.filter((file) => getFileKind(file).key === activeKind);
+  /** selectedUploadTotalSize 汇总当前批次全部文件的字节数。 */
+  const selectedUploadTotalSize = useMemo(
+    () => selectedUploadFiles.reduce((totalSize, uploadFile) => totalSize + uploadFile.size, 0),
+    [selectedUploadFiles],
+  );
+  /** isBatchUpload 表示当前是否为需要使用各自文件名的批量上传。 */
+  const isBatchUpload = selectedUploadFiles.length > 1;
   /** clampScale 负责计算或维护缩放比例。 */
   const clampScale = (next: number) => Math.max(0.35, Number(next.toFixed(2)));
   /** resetImageTransform 负责计算或维护图片。 */
@@ -351,8 +362,25 @@ export function FilesPage(props: FilesPageProps) {
   const fileFormContent = (mode: 'upload' | 'edit', asForm = true) => {
     /** fields 保存表单字段。 */
     const fields = <>
-      {mode === 'upload' && <label className="file-dropzone antd-dropzone"><input required type="file" onChange={onSelectUploadFile} /><InboxOutlined /><strong>{selectedUploadFile?.name ?? '点击选择文件上传'}</strong><small>{selectedUploadFile ? `${formatFileSize(selectedUploadFile.size)} · ${getFileKindFromName(selectedUploadFile.name, selectedUploadFile.type).label}` : `图片、PDF、Office、程序等，单文件最大 ${formatFileSize(MAX_UPLOAD_SIZE)}`}</small></label>}
-      <label>显示名称<Input required value={fileForm.displayName} onChange={(event) => onFileFormChange({ ...fileForm, displayName: event.target.value })} placeholder="请输入文件显示名称" /></label>
+      {mode === 'upload' && <>
+        <label className="file-dropzone antd-dropzone">
+          <input multiple type="file" disabled={isSavingFile} onChange={onSelectUploadFiles} />
+          <InboxOutlined />
+          <strong>{selectedUploadFiles.length === 0 ? '点击选择一个或多个文件' : selectedUploadFiles.length === 1 ? selectedUploadFiles[0].name : `已选择 ${selectedUploadFiles.length} 个文件`}</strong>
+          <small>{selectedUploadFiles.length === 0 ? `图片、PDF、Office、程序等，单文件最大 ${formatFileSize(MAX_UPLOAD_SIZE)}` : selectedUploadFiles.length === 1 ? `${formatFileSize(selectedUploadFiles[0].size)} · ${getFileKindFromName(selectedUploadFiles[0].name, selectedUploadFiles[0].type).label}` : `合计 ${formatFileSize(selectedUploadTotalSize)}，将按顺序逐个上传`}</small>
+        </label>
+        {selectedUploadFiles.length > 0 && <div className="file-upload-selection-list" role="list" aria-label="待上传文件">
+          {selectedUploadFiles.map((uploadFile, fileIndex) => <div className="file-upload-selection-item" role="listitem" key={`${uploadFile.name}-${uploadFile.size}-${uploadFile.lastModified}-${fileIndex}`}>
+            <div className="file-upload-selection-main">
+              <strong title={uploadFile.name}>{uploadFile.name}</strong>
+              <small>{formatFileSize(uploadFile.size)} · {getFileKindFromName(uploadFile.name, uploadFile.type).label}</small>
+            </div>
+            <Button type="text" danger size="small" icon={<DeleteOutlined />} disabled={isSavingFile} aria-label={`移除 ${uploadFile.name}`} onClick={() => onRemoveUploadFile(fileIndex)}>移除</Button>
+          </div>)}
+        </div>}
+        {fileUploadProgress && <div className="file-upload-progress" role="status"><LoadingOutlined spin />{fileUploadProgress}</div>}
+      </>}
+      <label>显示名称<Input required={mode === 'edit'} disabled={mode === 'upload' && isBatchUpload} value={fileForm.displayName} onChange={(event) => onFileFormChange({ ...fileForm, displayName: event.target.value })} placeholder={mode === 'upload' ? isBatchUpload ? '批量上传时使用各自文件名' : '留空则使用原文件名' : '请输入文件显示名称'} />{mode === 'upload' && isBatchUpload && <small className="file-upload-field-hint">批量上传会分别使用每个文件的原始名称。</small>}</label>
       <label>业务分类<Select value={fileForm.category || undefined} allowClear placeholder="请选择或清空分类" options={categoryOptions.map((category) => ({ value: category, label: category }))} onChange={(category) => onFileFormChange({ ...fileForm, category: category ?? '' })} /></label>
       <label>说明<Input.TextArea value={fileForm.description} rows={3} onChange={(event) => onFileFormChange({ ...fileForm, description: event.target.value })} placeholder="请输入文件说明" /></label>
       <div className="privacy-switch-row">
@@ -382,7 +410,7 @@ export function FilesPage(props: FilesPageProps) {
         {visibleFiles.length === 0 ? <Empty description="暂无匹配文件" /> : <div className="file-card-grid">{visibleFiles.map((file) => <FileCard key={getFileIdentity(file)} file={file} actions={actions} onOpenImage={openImage} onEditFile={openEditDialog} onDownloadFile={onDownloadFile} onDeleteFile={onDeleteFile} onSetLoginBackground={setAsLoginBackground} settingLoginBackgroundKey={settingLoginBackgroundKey} />)}</div>}
       </Card>
 
-      <Modal open={isUploadOpen} title="上传文件" okText="上传" cancelText="取消" confirmLoading={isSavingFile} onOk={() => document.getElementById('file-upload-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))} onCancel={closeUploadDialog} destroyOnHidden>
+      <Modal open={isUploadOpen} title="上传文件" okText={selectedUploadFiles.length > 1 ? `上传 ${selectedUploadFiles.length} 个文件` : '上传'} cancelText="取消" confirmLoading={isSavingFile} cancelButtonProps={{ disabled: isSavingFile }} closable={!isSavingFile} keyboard={!isSavingFile} mask={{ closable: !isSavingFile }} onOk={() => document.getElementById('file-upload-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))} onCancel={closeUploadDialog} destroyOnHidden>
         {fileFormContent('upload')}
       </Modal>
 

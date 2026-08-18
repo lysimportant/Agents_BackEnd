@@ -73,10 +73,10 @@ export function SiteHeader() {
   }, [drawerOpen]);
 
   return (
-    <header className="pointer-events-none fixed inset-x-0 top-4 z-40 px-4">
+    <header className="pointer-events-none fixed inset-x-0 top-4 z-40">
       <nav
         className={cn(
-          'site-header pointer-events-auto mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-2 rounded-full border px-3 shadow-sm transition-all duration-300',
+          'site-header pointer-events-auto mx-auto flex h-14 w-4/5 items-center justify-between gap-2 rounded-full border px-3 shadow-sm transition-all duration-300',
           scrolled ? 'shadow-lg' : 'shadow-sm',
         )}
       >

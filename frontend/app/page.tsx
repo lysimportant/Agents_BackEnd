@@ -248,12 +248,14 @@ export default function Home() {
           filteredFiles={workspace.filteredFiles}
           recycleFiles={workspace.recycleFiles}
           fileForm={workspace.fileForm}
-          selectedUploadFile={workspace.selectedUploadFile}
+          selectedUploadFiles={workspace.selectedUploadFiles}
           editingFileId={workspace.editingFileId}
           fileKeyword={workspace.fileKeyword}
           isSavingFile={workspace.isSavingFile}
+          fileUploadProgress={workspace.fileUploadProgress}
           onFileFormChange={workspace.setFileForm}
-          onSelectUploadFile={workspace.handleSelectUploadFile}
+          onSelectUploadFiles={workspace.handleSelectUploadFiles}
+          onRemoveUploadFile={workspace.handleRemoveUploadFile}
           onSubmitFile={workspace.handleSubmitFile}
           onResetFileForm={workspace.resetFileForm}
           onFileKeywordChange={workspace.setFileKeyword}

@@ -121,6 +121,13 @@ html[data-theme='dark'] .antd-files-workspace .files-hero {
 .antd-dropzone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .antd-dropzone .anticon { font-size: 29px; }
 .antd-dropzone small { color: #64748b; font-weight: 400; }
+.file-upload-selection-list { display: grid; gap: 8px; max-height: 220px; overflow-y: auto; padding-right: 3px; }
+.file-upload-selection-item { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--border-subtle, #dbe4f0); border-radius: 8px; padding: 8px 10px; background: var(--surface-panel, #fff); }
+.file-upload-selection-main { display: grid; min-width: 0; gap: 2px; }
+.file-upload-selection-main strong { overflow: hidden; color: var(--text-primary, #1f2937); font-size: 13px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.file-upload-selection-main small,
+.file-upload-field-hint { color: var(--text-secondary, #64748b); font-size: 12px; font-weight: 400; }
+.file-upload-progress { display: flex; min-width: 0; align-items: center; gap: 8px; border-radius: 8px; padding: 9px 11px; background: var(--surface-selected, #eff6ff); color: var(--theme-primary, #1677ff); font-size: 13px; overflow-wrap: anywhere; }
 .antd-file-tools { display: flex; flex-wrap: wrap; gap: 8px; }
 .antd-file-tools .ant-input-affix-wrapper { width: min(340px, 44vw); }
 .file-kind-panel .ant-card-body { padding-top: 14px; }
