@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=collector-terminal
-Group=collector-terminal
+User=root
+Group=root
 EnvironmentFile=/etc/collector-host-agent.env
 ExecStart=/usr/local/bin/collector-host-agent
 Restart=always

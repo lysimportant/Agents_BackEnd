@@ -147,7 +147,7 @@ docker compose up --build
 
 ### 部署机直连（无需 22 端口）
 
-部署机直连由宿主机上的独立低权限进程执行命令。Docker 后端只负责认证和转发，因此不会把容器 shell 误当成宿主机，也不需要给后端容器挂载 Docker Socket、宿主机根目录或特权模式。
+部署机直连由宿主机上的 root systemd 进程执行命令和文件操作。Docker 后端只负责认证和转发，因此不会把容器 shell 误当成宿主机，也不需要给后端容器挂载 Docker Socket、宿主机根目录或特权模式。
 
 1. 生成共享令牌，并将同一值分别配置到仓库部署 `.env` 的 `HOST_AGENT_TOKEN` 和宿主机 `/etc/collector-host-agent.env`。令牌不得提交到 Git：
 
@@ -161,10 +161,9 @@ openssl rand -hex 32
 docker build --file backend/Dockerfile.host-agent --output type=local,dest=./dist backend
 ```
 
-3. 创建专用系统账号并安装二进制、环境文件和 systemd 服务：
+3. 以 root 安装二进制、环境文件和 systemd 服务：
 
 ```bash
-sudo useradd --system --create-home --shell /bin/bash collector-terminal
 sudo install -m 0755 dist/collector-host-agent /usr/local/bin/collector-host-agent
 sudo install -m 0600 deploy/host-agent/collector-host-agent.env.example /etc/collector-host-agent.env
 sudo install -m 0644 deploy/host-agent/collector-host-agent.service /etc/systemd/system/collector-host-agent.service
@@ -172,7 +171,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now collector-host-agent
 ```
 
-`HOST_AGENT_SERVER_URL` 应指向后端可访问的 `ws://` 或 `wss://.../api/server/host-agent`。反向代理必须为 `/api/server/host-agent` 和 `/api/server/host-terminal` 保留 WebSocket `Upgrade`，并关闭过短的读取超时。代理默认从 `/` 启动 shell，命令和文件权限等于代理实际运行的系统账号；如果你明确把 systemd 服务切换为 root，界面也会按 root 权限执行文件读写，但这会扩大部署机风险，生产环境仍建议使用低权限账号配合最小范围 sudoers 规则。
+`HOST_AGENT_SERVER_URL` 应指向后端可访问的 `ws://` 或 `wss://.../api/server/host-agent`。反向代理必须为 `/api/server/host-agent` 和 `/api/server/host-terminal` 保留 WebSocket `Upgrade`，并关闭过短的读取超时。代理默认从 `/` 启动 shell，命令和文件权限等于 root；重新连接后界面目标账号应显示为 `root@主机名`。root 运行会让部署机直连具备整台主机的读写权限，只应在可信的超级管理员环境启用。
 
 代理令牌只用于代理到后端的注册认证；浏览器不会接触该令牌。部署机直连还会再次校验后台 HttpOnly 会话与不可变 `roleCode=super-admin`，系统管理员和普通用户即使直接请求接口也会收到 403。代理离线时前端会显示明确错误，现有 SSH 模式不受影响。
 

@@ -265,7 +265,7 @@ curl -fsSI https://portal.example.com/
 
 ## 7. 安装宿主机代理（可选）
 
-`collector-host-agent` 是运行在 Linux 宿主机上的独立低权限进程，不是 Docker Compose 服务。它主动连接后端，为超级管理员提供部署机终端和受控文件操作能力；不使用该能力时可跳过本节并保持 `HOST_AGENT_TOKEN` 为空。
+`collector-host-agent` 是运行在 Linux 宿主机上的 root systemd 进程，不是 Docker Compose 服务。它主动连接后端，为超级管理员提供部署机终端和文件操作能力；不使用该能力时可跳过本节并保持 `HOST_AGENT_TOKEN` 为空。
 
 ### 7.1 生成并配置令牌
 
@@ -304,12 +304,9 @@ docker build \
 
 ### 7.3 安装 systemd 服务
 
-创建独立低权限账号并安装二进制：
+以 root 安装二进制：
 
 ```bash
-getent passwd collector-terminal >/dev/null || \
-  useradd --system --create-home --shell /bin/bash collector-terminal
-
 install -m 0755 \
   dist/collector-host-agent \
   /usr/local/bin/collector-host-agent
@@ -355,7 +352,13 @@ journalctl -u collector-host-agent -n 100 --no-pager
 
 服务显示 `active (running)` 且日志报告连接成功后，以超级管理员登录管理前端验证“部署机直连”。系统管理员和普通用户不能使用该入口。
 
-不要让代理以 `root` 运行，也不要给后端容器添加 `privileged`、Docker Socket 或宿主机根目录挂载。代理执行命令和访问文件的权限只应等于 `collector-terminal` 系统账号；确需管理某项服务时，通过最小范围 sudoers 单独授权。
+确认代理实际以 root 运行：
+
+```bash
+ps -o user,group,pid,args -C collector-host-agent
+```
+
+输出中的 `USER` 和 `GROUP` 应为 `root`。root 运行会让部署机直连具备整台主机的读写权限，只应在可信的超级管理员环境启用；仍然不要给后端容器添加 `privileged`、Docker Socket 或宿主机根目录挂载。
 
 ## 8. 日常更新
 
