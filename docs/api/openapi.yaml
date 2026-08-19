@@ -683,7 +683,7 @@ paths:
       summary: 获取已授权图片缩略图
       security: [{ cookieSession: [] }]
       parameters: [{ $ref: '#/components/parameters/NumericID' }]
-      responses: { '200': { description: 图片缩略图内容。 } }
+      responses: { '200': { description: 可解码位图返回最大宽高 480 像素、仅由当前浏览器缓存的 JPEG 缩略图；不支持解码的图片格式回退为原文件。 } }
   /api/files/chat-data/{source}/{id}/preview:
     get:
       tags: [文件]

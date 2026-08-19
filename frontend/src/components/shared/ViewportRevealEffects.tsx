@@ -8,6 +8,8 @@ export const DEFAULT_VIEWPORT_REVEAL_SELECTOR = [
   DEFAULT_TILT_CARD_SELECTOR,
   '.antd-content-view > :is(.page-stack, .dashboard-page) > *',
   '.auth-shell > *',
+  '.antd-content-view .file-card',
+  '.antd-content-view .recycle-file-card',
   '.antd-content-view tbody tr',
   '.antd-content-view .socket-conversation-item',
   '.antd-content-view .socket-message-row',

@@ -90,7 +90,7 @@
 - 相邻业务页主要使用 Ant Design 和原生 CSS，`components/ui/` 是 shadcn 基础组件；不要为了单个页面混入第三套新组件库。
 - Ant Design 响应式布局优先使用真实 `Row/Col`，避免用宽泛的子元素 `display` 规则覆盖其 flex/grid 行为。
 - 全站卡片效果由根布局中的 `TiltCardEffects` 通过事件委托和单个 `requestAnimationFrame` 自动增强；显式新卡可使用 `TiltCard/TiltCardLayer`。通过 `data-tilt-disabled="true"` 排除表单或交互密集容器。
-- 3D 卡片只更新 CSS 变量和 transform；保持触摸设备与 `prefers-reduced-motion` 禁用逻辑。文件管理外层 `.file-browser-panel` 必须保持普通静态 Card，内部 `.file-card` 才启用效果。
+- 3D 卡片只更新 CSS 变量和 transform；保持触摸设备与 `prefers-reduced-motion` 禁用逻辑。文件管理外层 `.file-browser-panel` 与内部 `.file-card` 都保持静态，文件卡只播放轻量视口进入动画，避免大量卡片挂载时叠加合成开销。
 - 弹窗和折叠权限区域要检查文字截断、Tooltip、左右留白以及 390px 移动端无横向溢出。
 - Header、Dialog、Segmented 等同组工具按钮统一使用稳定高度和中心线；图标与文字必须处于同一个横向 flex 布局，`.ant-space-item`、`.ant-badge`、`.ant-btn-icon`、`.ant-segmented-item-icon` 与 SVG 使用紧凑行高。混用 Ant Design 与 Lucide 时需量测按钮、图标和文字中心线，禁止仅对某个图标添加 `top`、margin 或 `translateY` 补偿。
 - 所有新增或修改的折叠面板、侧栏（sidebar）及展开/收起交互都必须为宽度、位移或内容显隐提供平滑过渡，禁止无动画瞬间跳变；动画不得造成遮挡或横向溢出，并必须在 `prefers-reduced-motion: reduce` 下关闭或显著弱化。

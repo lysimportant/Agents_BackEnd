@@ -1,8 +1,15 @@
 package handlers
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	_ "image/gif"
+	"image/jpeg"
+	_ "image/png"
 	"io"
 	"mime"
 	"net/http"
@@ -19,6 +26,15 @@ import (
 
 // MaxUploadSize 保存模块使用的固定配置或共享状态。
 const MaxUploadSize = 32 << 20
+
+// managedThumbnailMaxSize 限制文件管理卡片缩略图的最大宽高，避免列表下载原图。
+const managedThumbnailMaxSize = 480
+
+// managedThumbnailQuality 控制文件管理缩略图的 JPEG 质量。
+const managedThumbnailQuality = 80
+
+// managedThumbnailCacheDirectory 保存按文件内容生成的缩略图缓存目录名。
+const managedThumbnailCacheDirectory = ".thumbnail-cache"
 
 // FileStore 定义对应业务的数据结构与调用契约。
 type FileStore interface {
@@ -467,6 +483,8 @@ func (h *FileHandler) PermanentlyDelete(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "回收站中不存在该文件"})
 		return
 	}
+	// 文件记录与原图永久删除后，同步清理可重新生成的缩略图缓存。
+	_ = os.Remove(h.thumbnailCachePath(file))
 	c.Status(http.StatusNoContent)
 }
 
@@ -480,9 +498,122 @@ func (h *FileHandler) Preview(c *gin.Context) {
 	h.serveFile(c, false)
 }
 
-// Thumbnail 实现对应业务逻辑。
+// Thumbnail 处理 GET /api/files/:id/thumbnail，校验登录、菜单和文件可见性后返回缓存的 JPEG 缩略图。
 func (h *FileHandler) Thumbnail(c *gin.Context) {
-	h.serveFile(c, false)
+	// id、ok 保存路径中的文件标识及解析结果。
+	id, ok := utils.ParseID(c)
+	if !ok {
+		return
+	}
+	// user 保存当前已通过路由鉴权的登录用户。
+	user, _ := middleware.CurrentUser(c)
+	// file、found 保存有效文件或回收站文件及其查询结果。
+	file, found := h.store.FindFileByID(id)
+	if !found {
+		file, found = h.store.FindDeletedFileByID(id)
+	}
+	if !found || !canAccessFile(user, file) || !strings.HasPrefix(file.ContentType, "image/") {
+		c.JSON(http.StatusNotFound, gin.H{"error": "图片不存在"})
+		return
+	}
+
+	// sourcePath 保存受管图片的物理文件路径。
+	sourcePath := filepath.Join(h.uploadDir, file.StorageName)
+	if _, statErr := os.Stat(sourcePath); statErr != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "物理图片不存在"})
+		return
+	}
+	// cachePath 保存当前图片内容对应的 JPEG 缩略图缓存路径。
+	cachePath := h.thumbnailCachePath(file)
+	if _, cacheErr := os.Stat(cachePath); cacheErr == nil {
+		writeManagedThumbnailHeaders(c, "image/jpeg")
+		c.File(cachePath)
+		return
+	}
+
+	// source 保存用于解码原图的只读文件句柄。
+	source, openErr := os.Open(sourcePath)
+	if openErr != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "物理图片不存在"})
+		return
+	}
+	// decoded、decodeErr 保存原图解码结果；不支持解码的格式保留原文件回退能力。
+	decoded, _, decodeErr := image.Decode(source)
+	_ = source.Close()
+	if decodeErr != nil {
+		writeManagedThumbnailHeaders(c, file.ContentType)
+		c.File(sourcePath)
+		return
+	}
+
+	// scaledImage 保存等比缩放后不超过 480 像素边界的图片。
+	scaledImage := utils.ResizeToFit(decoded, managedThumbnailMaxSize, managedThumbnailMaxSize)
+	// bounds 保存缩略图输出区域。
+	bounds := scaledImage.Bounds()
+	// background 使用白色承接透明像素，避免 JPEG 输出出现黑底。
+	background := image.NewRGBA(bounds)
+	draw.Draw(background, bounds, image.NewUniform(color.White), image.Point{}, draw.Src)
+	draw.Draw(background, bounds, scaledImage, bounds.Min, draw.Over)
+	// thumbnailBuffer 保存本次生成的 JPEG 字节，既用于响应也用于落盘缓存。
+	var thumbnailBuffer bytes.Buffer
+	if encodeErr := jpeg.Encode(&thumbnailBuffer, background, &jpeg.Options{Quality: managedThumbnailQuality}); encodeErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成缩略图失败"})
+		return
+	}
+	// thumbnailBytes 固定本次输出内容，缓存失败不影响当前请求返回。
+	thumbnailBytes := thumbnailBuffer.Bytes()
+	h.cacheManagedThumbnail(cachePath, thumbnailBytes)
+	writeManagedThumbnailHeaders(c, "image/jpeg")
+	c.Data(http.StatusOK, "image/jpeg", thumbnailBytes)
+}
+
+// thumbnailCachePath 根据文件内容哈希生成稳定缓存路径，旧文件缺少哈希时使用存储信息隔离。
+func (h *FileHandler) thumbnailCachePath(file models.ManagedFile) string {
+	// cacheIdentity 保存能够区分文件内容版本的稳定标识。
+	cacheIdentity := strings.TrimSpace(file.ContentSHA256)
+	if cacheIdentity == "" {
+		cacheIdentity = fmt.Sprintf("%d:%s:%d", file.ID, file.StorageName, file.Size)
+	}
+	// cacheDigest 缩短缓存文件名，同时避免把物理存储名直接暴露到缓存目录。
+	cacheDigest := sha256.Sum256([]byte(cacheIdentity))
+	// cacheName 保存包含文件 ID 和内容摘要的缓存文件名。
+	cacheName := fmt.Sprintf("%d-%x.jpg", file.ID, cacheDigest[:8])
+	return filepath.Join(h.uploadDir, managedThumbnailCacheDirectory, cacheName)
+}
+
+// cacheManagedThumbnail 通过临时文件原子写入缩略图缓存，失败时保留当前 HTTP 响应能力。
+func (h *FileHandler) cacheManagedThumbnail(cachePath string, thumbnailBytes []byte) {
+	// cacheDirectory 保存缩略图缓存文件所在目录。
+	cacheDirectory := filepath.Dir(cachePath)
+	if createErr := os.MkdirAll(cacheDirectory, 0o755); createErr != nil {
+		return
+	}
+	// temporaryFile 保存尚未完成写入的缩略图缓存文件。
+	temporaryFile, createErr := os.CreateTemp(cacheDirectory, ".thumbnail-*.tmp")
+	if createErr != nil {
+		return
+	}
+	// temporaryPath 保存失败或竞争写入时需要清理的临时路径。
+	temporaryPath := temporaryFile.Name()
+	defer os.Remove(temporaryPath)
+	// writeErr、closeErr 保存缓存字节写入和文件关闭结果。
+	_, writeErr := temporaryFile.Write(thumbnailBytes)
+	closeErr := temporaryFile.Close()
+	if writeErr != nil || closeErr != nil {
+		return
+	}
+	// 目标已由并发请求生成时保留现有完整缓存即可。
+	if renameErr := os.Rename(temporaryPath, cachePath); renameErr != nil {
+		return
+	}
+}
+
+// writeManagedThumbnailHeaders 设置仅允许当前浏览器缓存的缩略图响应头。
+func writeManagedThumbnailHeaders(c *gin.Context, contentType string) {
+	c.Header("Content-Type", contentType)
+	c.Header("Content-Disposition", "inline")
+	c.Header("Cache-Control", "private, max-age=604800")
+	c.Header("X-Content-Type-Options", "nosniff")
 }
 
 // ChatDataDownload 实现对应业务逻辑。

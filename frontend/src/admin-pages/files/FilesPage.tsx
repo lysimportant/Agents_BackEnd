@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent, type WheelEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition, type ChangeEvent, type FormEvent, type MouseEvent, type WheelEvent } from 'react';
 import {
   Button,
   App,
@@ -105,6 +105,9 @@ const FILE_KIND_OPTIONS: FileKindMeta[] = [
 /** CATEGORY_PRESETS 保存模块使用的固定配置或共享状态。 */
 const CATEGORY_PRESETS = ['制度文档', '图片素材', '合同资料', '报表台账', '安装包', '培训资料', '其它'];
 
+/** FILE_RENDER_BATCH_SIZE 限制单次挂载的文件卡片数量，降低进入页面和滚动追加时的主线程压力。 */
+const FILE_RENDER_BATCH_SIZE = 30;
+
 /** FilesPage 实现对应业务逻辑。 */
 export function FilesPage(props: FilesPageProps) {
   /** message 保存消息。 */
@@ -117,6 +120,10 @@ export function FilesPage(props: FilesPageProps) {
   } = props;
   /** activeKind、setActiveKind 保存当前激活、当前激活。 */
   const [activeKind, setActiveKind] = useState<FileKind>('all');
+  /** visibleFileLimit、setVisibleFileLimit 保存当前已经允许挂载的文件卡片数量。 */
+  const [visibleFileLimit, setVisibleFileLimit] = useState(FILE_RENDER_BATCH_SIZE);
+  /** isExpandingFiles、startFileListTransition 将下一批卡片作为低优先级更新挂载。 */
+  const [isExpandingFiles, startFileListTransition] = useTransition();
   /** isUploadOpen、setIsUploadOpen 分别保存上传状态及其更新函数。 */
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   /** isEditOpen、setIsEditOpen 分别保存打开状态状态及其更新函数。 */
@@ -155,6 +162,8 @@ export function FilesPage(props: FilesPageProps) {
   const [isRefreshingFiles, setIsRefreshingFiles] = useState(false);
   /** dragStartRef 保存跨渲染周期使用的开始位置引用。 */
   const dragStartRef = useRef({ pointerX: 0, pointerY: 0, offsetX: 0, offsetY: 0 });
+  /** fileLoadSentinelRef 指向触发下一批文件卡片挂载的列表底部哨兵。 */
+  const fileLoadSentinelRef = useRef<HTMLDivElement | null>(null);
   /** files 保存文件。 */
   const files = Array.isArray(filteredFiles) ? filteredFiles : [];
   /** kindCounts 缓存计算得到的数量。 */
@@ -167,8 +176,15 @@ export function FilesPage(props: FilesPageProps) {
   }, [files]);
   /** categoryOptions 缓存计算得到的分类。 */
   const categoryOptions = useMemo(() => Array.from(new Set([...CATEGORY_PRESETS, ...files.map((f) => f.category), fileForm.category].filter(Boolean))), [files, fileForm.category]);
-  /** visibleFiles 负责计算或维护可见状态。 */
-  const visibleFiles = activeKind === 'all' ? files : files.filter((file) => getFileKind(file).key === activeKind);
+  /** kindFilteredFiles 缓存当前类型筛选后的完整文件集合。 */
+  const kindFilteredFiles = useMemo(
+    () => activeKind === 'all' ? files : files.filter((file) => getFileKind(file).key === activeKind),
+    [activeKind, files],
+  );
+  /** visibleFiles 只截取当前批次已经允许挂载的卡片。 */
+  const visibleFiles = kindFilteredFiles.slice(0, visibleFileLimit);
+  /** hasMoreFiles 表示底部是否仍有尚未挂载的文件卡片。 */
+  const hasMoreFiles = visibleFiles.length < kindFilteredFiles.length;
   /** selectedUploadTotalSize 汇总当前批次全部文件的字节数。 */
   const selectedUploadTotalSize = useMemo(
     () => selectedUploadFiles.reduce((totalSize, uploadFile) => totalSize + uploadFile.size, 0),
@@ -176,12 +192,44 @@ export function FilesPage(props: FilesPageProps) {
   );
   /** isBatchUpload 表示当前是否为需要使用各自文件名的批量上传。 */
   const isBatchUpload = selectedUploadFiles.length > 1;
+  /** changeActiveKind 切换文件类型时立即恢复首批卡片数量。 */
+  const changeActiveKind = (nextKind: FileKind) => {
+    setActiveKind(nextKind);
+    setVisibleFileLimit(FILE_RENDER_BATCH_SIZE);
+  };
   /** clampScale 负责计算或维护缩放比例。 */
   const clampScale = (next: number) => Math.max(0.35, Number(next.toFixed(2)));
   /** resetImageTransform 负责计算或维护图片。 */
   const resetImageTransform = () => { setImageScale(1); setImageOffset({ x: 0, y: 0 }); };
   /** openImage 负责计算或维护图片。 */
   const openImage = (file: ManagedFile) => { setOriginalLoading(true); resetImageTransform(); setPreviewFile(file); };
+
+  useEffect(() => {
+    setVisibleFileLimit(FILE_RENDER_BATCH_SIZE);
+  }, [files]);
+
+  useEffect(() => {
+    /** sentinel 保存当前筛选结果底部的自动加载哨兵。 */
+    const sentinel = fileLoadSentinelRef.current;
+    if (!sentinel || !hasMoreFiles) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisibleFileLimit(kindFilteredFiles.length);
+      return;
+    }
+    /** observer 在用户接近底部前预先挂载下一批文件卡片。 */
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+        startFileListTransition(() => {
+          setVisibleFileLimit((currentLimit) => Math.min(currentLimit + FILE_RENDER_BATCH_SIZE, kindFilteredFiles.length));
+        });
+      },
+      { rootMargin: '700px 0px 500px', threshold: 0.01 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMoreFiles, kindFilteredFiles.length, startFileListTransition, visibleFiles.length]);
   /** closeUploadDialog 负责删除或清理对应业务状态。 */
   const closeUploadDialog = () => { setIsUploadOpen(false); onResetFileForm(); };
   /** closeEditDialog 负责删除或清理对应业务状态。 */
@@ -405,9 +453,9 @@ export function FilesPage(props: FilesPageProps) {
   return (
     <section className="page-stack files-workspace antd-files-workspace" aria-labelledby="files-page-title">
       <Card data-tilt-disabled="true" className="file-browser-panel" title={<h1 id="files-page-title" className="file-page-heading">文件管理</h1>} extra={<div className="antd-file-tools"><Input value={fileKeyword} allowClear onChange={(event) => onFileKeywordChange(event.target.value)} placeholder="名称、分类或说明" prefix={<FileTextOutlined />} /><Button onClick={() => onFileKeywordChange('')}>重置</Button><Button icon={<ReloadOutlined />} loading={isRefreshingFiles} onClick={() => void refreshFiles()}>刷新</Button>{actions.create && <Button type="primary" icon={<InboxOutlined />} onClick={() => { onResetFileForm(); setIsUploadOpen(true); }}>上传文件</Button>}{(actions.restore || actions.permanentDelete) && <Button icon={<DeleteOutlined />} onClick={() => void openRecycleBin()}>回收站{recycleFiles.length ? ` (${recycleFiles.length})` : ''}</Button>}</div>}>
-        <div className="file-type-tabs" role="tablist" aria-label="按文件类型筛选">{FILE_KIND_OPTIONS.map((item) => <button className={activeKind === item.key ? 'active' : ''} type="button" role="tab" aria-selected={activeKind === item.key} key={item.key} onClick={() => setActiveKind(item.key)}><span aria-hidden="true">{item.icon}</span>{item.label}<strong>{kindCounts[item.key]}</strong></button>)}</div>
+        <div className="file-type-tabs" role="tablist" aria-label="按文件类型筛选">{FILE_KIND_OPTIONS.map((item) => <button className={activeKind === item.key ? 'active' : ''} type="button" role="tab" aria-selected={activeKind === item.key} key={item.key} onClick={() => changeActiveKind(item.key)}><span aria-hidden="true">{item.icon}</span>{item.label}<strong>{kindCounts[item.key]}</strong></button>)}</div>
         <div className="file-login-background-toolbar"><span>图片可保存为当前浏览器的登录背景，不依赖外部 URL。</span><Button icon={<PictureOutlined />} onClick={resetLoginBackground}>恢复默认背景</Button></div>
-        {visibleFiles.length === 0 ? <Empty description="暂无匹配文件" /> : <div className="file-card-grid">{visibleFiles.map((file) => <FileCard key={getFileIdentity(file)} file={file} actions={actions} onOpenImage={openImage} onEditFile={openEditDialog} onDownloadFile={onDownloadFile} onDeleteFile={onDeleteFile} onSetLoginBackground={setAsLoginBackground} settingLoginBackgroundKey={settingLoginBackgroundKey} />)}</div>}
+        {kindFilteredFiles.length === 0 ? <Empty description="暂无匹配文件" /> : <><div className="file-card-grid">{visibleFiles.map((file) => <FileCard key={getFileIdentity(file)} file={file} actions={actions} onOpenImage={openImage} onEditFile={openEditDialog} onDownloadFile={onDownloadFile} onDeleteFile={onDeleteFile} onSetLoginBackground={setAsLoginBackground} settingLoginBackgroundKey={settingLoginBackgroundKey} />)}</div>{hasMoreFiles && <div ref={fileLoadSentinelRef} className="file-load-status" role="status" aria-live="polite" aria-busy={isExpandingFiles}><LoadingOutlined spin /><span>{isExpandingFiles ? '正在加载更多文件…' : '继续下滑将自动加载更多文件'}</span><small>已显示 {visibleFiles.length} / {kindFilteredFiles.length}</small></div>}</>}
       </Card>
 
       <Modal open={isUploadOpen} title="上传文件" okText={selectedUploadFiles.length > 1 ? `上传 ${selectedUploadFiles.length} 个文件` : '上传'} cancelText="取消" confirmLoading={isSavingFile} cancelButtonProps={{ disabled: isSavingFile }} closable={!isSavingFile} keyboard={!isSavingFile} mask={{ closable: !isSavingFile }} onOk={() => document.getElementById('file-upload-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))} onCancel={closeUploadDialog} destroyOnHidden>
@@ -484,7 +532,7 @@ function FileCard({ file, actions, onOpenImage, onEditFile, onDownloadFile, onDe
   const titleId = `file-title-${file.source || 'managed'}-${file.id}`;
   /** imageText 保存图片。 */
   const imageText = getImageAccessibleText(file);
-  return <article className={`file-card tone-${meta.tone}`} aria-labelledby={titleId} itemScope={isIndexableImage} itemType={isIndexableImage ? 'https://schema.org/ImageObject' : undefined}>
+  return <article className={`file-card tone-${meta.tone}`} data-tilt-disabled="true" aria-labelledby={titleId} itemScope={isIndexableImage} itemType={isIndexableImage ? 'https://schema.org/ImageObject' : undefined}>
     {isIndexableImage && <meta itemProp="contentUrl" content={previewUrl} />}
     <figure className="file-preview-frame">
       {isImage ? <button className="thumbnail-button" type="button" onClick={() => onOpenImage(file)} aria-label={`预览原图：${imageText}`}><img src={thumbnailUrl} alt={imageText} title={file.description || file.displayName} itemProp={isIndexableImage ? 'thumbnailUrl' : undefined} loading="lazy" decoding="async" /><span><EyeOutlined /> 查看原图</span></button> : isPDF ? <a className="file-preview-icon pdf-preview" href={previewUrl} target="_blank" rel="noopener"><FilePdfOutlined /><strong>PDF</strong><small>点击浏览</small></a> : <div className="file-preview-icon">{isImage ? <PictureOutlined /> : <FileImageOutlined />}<span aria-hidden="true">{meta.icon}</span><strong>{meta.label}</strong><small>{getFileExtension(file.originalName).toUpperCase() || meta.description}</small></div>}

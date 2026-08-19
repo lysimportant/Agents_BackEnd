@@ -14,8 +14,6 @@ export const DEFAULT_TILT_CARD_SELECTOR = [
   '.antd-content-view .dashboard-panel',
   '.antd-content-view .menu-summary-card',
   '.antd-content-view .file-kind-card',
-  '.antd-content-view .file-card',
-  '.antd-content-view .recycle-file-card',
   '.antd-content-view .article-library-card',
   '.antd-content-view .ant-card:not(.file-browser-panel):not([data-tilt-disabled="true"])',
   '.antd-content-view [data-slot="card"]',

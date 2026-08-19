@@ -1631,6 +1631,19 @@ html[data-theme="dark"] .theme-toggle {
   gap: 16px;
 }
 
+.file-load-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 64px;
+  color: #64748b;
+}
+
+.file-load-status small {
+  color: #94a3b8;
+}
+
 .file-card {
   display: flex;
   flex-direction: column;
