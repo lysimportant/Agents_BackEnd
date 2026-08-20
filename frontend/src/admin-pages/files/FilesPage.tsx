@@ -105,8 +105,8 @@ const FILE_KIND_OPTIONS: FileKindMeta[] = [
 /** CATEGORY_PRESETS 保存模块使用的固定配置或共享状态。 */
 const CATEGORY_PRESETS = ['制度文档', '图片素材', '合同资料', '报表台账', '安装包', '培训资料', '其它'];
 
-/** FILE_RENDER_BATCH_SIZE 限制单次挂载的文件卡片数量，降低进入页面和滚动追加时的主线程压力。 */
-const FILE_RENDER_BATCH_SIZE = 30;
+/** FILE_RENDER_BATCH_SIZE 限制单次挂载的文件卡片数量，控制预加载图片的数量。 */
+const FILE_RENDER_BATCH_SIZE = 5;
 
 /** FilesPage 实现对应业务逻辑。 */
 export function FilesPage(props: FilesPageProps) {
@@ -225,7 +225,7 @@ export function FilesPage(props: FilesPageProps) {
           setVisibleFileLimit((currentLimit) => Math.min(currentLimit + FILE_RENDER_BATCH_SIZE, kindFilteredFiles.length));
         });
       },
-      { rootMargin: '700px 0px 500px', threshold: 0.01 },
+      { rootMargin: '300px 0px 200px', threshold: 0.01 },
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
@@ -518,8 +518,8 @@ function FileCard({ file, actions, onOpenImage, onEditFile, onDownloadFile, onDe
   const meta = getFileKind(file);
   /** previewUrl 保存预览地址。 */
   const previewUrl = resolveFilePreviewUrl(file);
-  /** thumbnailUrl 保存地址。 */
-  const thumbnailUrl = file.previewUrl ? previewUrl : `${API_BASE_URL}/api/files/${file.id}/thumbnail`;
+  /** thumbnailUrl 让普通文件直接复用后端生成的缩略图，聊天附件保留其专用鉴权预览地址。 */
+  const thumbnailUrl = file.source ? previewUrl : `${API_BASE_URL}/api/files/${file.id}/thumbnail`;
   /** isImage 保存图片。 */
   const isImage = meta.key === 'image';
   /** isPDF 保存变量 isPDF。 */
