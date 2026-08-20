@@ -162,8 +162,8 @@ export function FilesPage(props: FilesPageProps) {
   const [isRefreshingFiles, setIsRefreshingFiles] = useState(false);
   /** dragStartRef 保存跨渲染周期使用的开始位置引用。 */
   const dragStartRef = useRef({ pointerX: 0, pointerY: 0, offsetX: 0, offsetY: 0 });
-  /** fileLoadSentinelRef 指向触发下一批文件卡片挂载的列表底部哨兵。 */
-  const fileLoadSentinelRef = useRef<HTMLDivElement | null>(null);
+  /** isAppendingFilesRef 防止同一次滚动到底部重复追加文件批次。 */
+  const isAppendingFilesRef = useRef(false);
   /** files 保存文件。 */
   const files = Array.isArray(filteredFiles) ? filteredFiles : [];
   /** kindCounts 缓存计算得到的数量。 */
@@ -209,27 +209,29 @@ export function FilesPage(props: FilesPageProps) {
   }, [files]);
 
   useEffect(() => {
-    /** sentinel 保存当前筛选结果底部的自动加载哨兵。 */
-    const sentinel = fileLoadSentinelRef.current;
-    if (!sentinel || !hasMoreFiles) return;
-    if (typeof IntersectionObserver === 'undefined') {
-      setVisibleFileLimit(kindFilteredFiles.length);
-      return;
-    }
-    /** observer 在用户接近底部前预先挂载下一批文件卡片。 */
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) return;
-        observer.disconnect();
-        startFileListTransition(() => {
-          setVisibleFileLimit((currentLimit) => Math.min(currentLimit + FILE_RENDER_BATCH_SIZE, kindFilteredFiles.length));
-        });
-      },
-      { rootMargin: '300px 0px 200px', threshold: 0.01 },
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [hasMoreFiles, kindFilteredFiles.length, startFileListTransition, visibleFiles.length]);
+    /** appendNextFileBatch 只有在用户真正滚动到页面底部时才追加下一批卡片。 */
+    const scrollContainer = document.querySelector<HTMLElement>('.antd-admin-content');
+    if (!scrollContainer) return;
+
+    const appendNextFileBatch = () => {
+      if (!hasMoreFiles || isAppendingFilesRef.current) return;
+      const reachedPageBottom = scrollContainer.scrollTop + scrollContainer.clientHeight >= scrollContainer.scrollHeight - 1;
+      if (!reachedPageBottom) return;
+
+      isAppendingFilesRef.current = true;
+      startFileListTransition(() => {
+        setVisibleFileLimit((currentLimit) => Math.min(currentLimit + FILE_RENDER_BATCH_SIZE, kindFilteredFiles.length));
+      });
+    };
+
+    scrollContainer.addEventListener('scroll', appendNextFileBatch, { passive: true });
+    return () => scrollContainer.removeEventListener('scroll', appendNextFileBatch);
+  }, [hasMoreFiles, kindFilteredFiles.length, startFileListTransition]);
+
+  useEffect(() => {
+    /** 新批次完成渲染后允许下一次真正到底部的滚动继续追加。 */
+    isAppendingFilesRef.current = false;
+  }, [visibleFiles.length]);
   /** closeUploadDialog 负责删除或清理对应业务状态。 */
   const closeUploadDialog = () => { setIsUploadOpen(false); onResetFileForm(); };
   /** closeEditDialog 负责删除或清理对应业务状态。 */
@@ -455,7 +457,7 @@ export function FilesPage(props: FilesPageProps) {
       <Card data-tilt-disabled="true" className="file-browser-panel" title={<h1 id="files-page-title" className="file-page-heading">文件管理</h1>} extra={<div className="antd-file-tools"><Input value={fileKeyword} allowClear onChange={(event) => onFileKeywordChange(event.target.value)} placeholder="名称、分类或说明" prefix={<FileTextOutlined />} /><Button onClick={() => onFileKeywordChange('')}>重置</Button><Button icon={<ReloadOutlined />} loading={isRefreshingFiles} onClick={() => void refreshFiles()}>刷新</Button>{actions.create && <Button type="primary" icon={<InboxOutlined />} onClick={() => { onResetFileForm(); setIsUploadOpen(true); }}>上传文件</Button>}{(actions.restore || actions.permanentDelete) && <Button icon={<DeleteOutlined />} onClick={() => void openRecycleBin()}>回收站{recycleFiles.length ? ` (${recycleFiles.length})` : ''}</Button>}</div>}>
         <div className="file-type-tabs" role="tablist" aria-label="按文件类型筛选">{FILE_KIND_OPTIONS.map((item) => <button className={activeKind === item.key ? 'active' : ''} type="button" role="tab" aria-selected={activeKind === item.key} key={item.key} onClick={() => changeActiveKind(item.key)}><span aria-hidden="true">{item.icon}</span>{item.label}<strong>{kindCounts[item.key]}</strong></button>)}</div>
         <div className="file-login-background-toolbar"><span>图片可保存为当前浏览器的登录背景，不依赖外部 URL。</span><Button icon={<PictureOutlined />} onClick={resetLoginBackground}>恢复默认背景</Button></div>
-        {kindFilteredFiles.length === 0 ? <Empty description="暂无匹配文件" /> : <><div className="file-card-grid">{visibleFiles.map((file) => <FileCard key={getFileIdentity(file)} file={file} actions={actions} onOpenImage={openImage} onEditFile={openEditDialog} onDownloadFile={onDownloadFile} onDeleteFile={onDeleteFile} onSetLoginBackground={setAsLoginBackground} settingLoginBackgroundKey={settingLoginBackgroundKey} />)}</div>{hasMoreFiles && <div ref={fileLoadSentinelRef} className="file-load-status" role="status" aria-live="polite" aria-busy={isExpandingFiles}><LoadingOutlined spin /><span>{isExpandingFiles ? '正在加载更多文件…' : '继续下滑将自动加载更多文件'}</span><small>已显示 {visibleFiles.length} / {kindFilteredFiles.length}</small></div>}</>}
+        {kindFilteredFiles.length === 0 ? <Empty description="暂无匹配文件" /> : <><div className="file-card-grid">{visibleFiles.map((file) => <FileCard key={getFileIdentity(file)} file={file} actions={actions} onOpenImage={openImage} onEditFile={openEditDialog} onDownloadFile={onDownloadFile} onDeleteFile={onDeleteFile} onSetLoginBackground={setAsLoginBackground} settingLoginBackgroundKey={settingLoginBackgroundKey} />)}</div>{hasMoreFiles && <div className="file-load-status" role="status" aria-live="polite" aria-busy={isExpandingFiles}><LoadingOutlined spin /><span>{isExpandingFiles ? '正在加载更多文件…' : '滑动到底部将自动加载下一批文件'}</span><small>已显示 {visibleFiles.length} / {kindFilteredFiles.length}</small></div>}</>}
       </Card>
 
       <Modal open={isUploadOpen} title="上传文件" okText={selectedUploadFiles.length > 1 ? `上传 ${selectedUploadFiles.length} 个文件` : '上传'} cancelText="取消" confirmLoading={isSavingFile} cancelButtonProps={{ disabled: isSavingFile }} closable={!isSavingFile} keyboard={!isSavingFile} mask={{ closable: !isSavingFile }} onOk={() => document.getElementById('file-upload-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))} onCancel={closeUploadDialog} destroyOnHidden>
