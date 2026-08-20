@@ -209,7 +209,7 @@ export function FilesPage(props: FilesPageProps) {
   }, [files]);
 
   useEffect(() => {
-    /** appendNextFileBatch 只有在用户真正滚动到页面底部时才追加下一批卡片。 */
+    /** appendNextFileBatch 在用户到底部或首批尚未撑满内容区时追加下一批卡片。 */
     const scrollContainer = document.querySelector<HTMLElement>('.antd-admin-content');
     if (!scrollContainer) return;
 
@@ -225,8 +225,13 @@ export function FilesPage(props: FilesPageProps) {
     };
 
     scrollContainer.addEventListener('scroll', appendNextFileBatch, { passive: true });
-    return () => scrollContainer.removeEventListener('scroll', appendNextFileBatch);
-  }, [hasMoreFiles, kindFilteredFiles.length, startFileListTransition]);
+    /** 首批内容未形成滚动条时不会触发 scroll，渲染后主动补一次检查。 */
+    const initialCheckFrame = window.requestAnimationFrame(appendNextFileBatch);
+    return () => {
+      window.cancelAnimationFrame(initialCheckFrame);
+      scrollContainer.removeEventListener('scroll', appendNextFileBatch);
+    };
+  }, [hasMoreFiles, kindFilteredFiles.length, startFileListTransition, visibleFiles.length]);
 
   useEffect(() => {
     /** 新批次完成渲染后允许下一次真正到底部的滚动继续追加。 */
