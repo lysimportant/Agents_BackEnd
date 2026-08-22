@@ -6,6 +6,8 @@ import type {
   PublicCategory,
   PublicDetailResponse,
   PublicFileListItem,
+  PublicFileComment,
+  PublicFileInteraction,
   PublicListResponse,
   PublicSearchResult,
   PublicSiteSummary,
@@ -222,6 +224,71 @@ export function listImages(
     '/api/public/images' + buildQueryString(params),
     options,
   );
+}
+
+/** 发送不自动重试的公开写请求，避免点赞或评论因网络重试重复执行。 */
+async function requestPublicMutationJson<T>(path: string, init: RequestInit): Promise<T> {
+  // controller 保存本次写请求的超时取消控制器。
+  const controller = new AbortController();
+  // timeoutId 保存写请求的十秒超时计时器。
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    // response 保存公开互动接口响应。
+    const response = await fetch(API_BASE_URL + path, {
+      ...init,
+      signal: controller.signal,
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...init.headers,
+      },
+    });
+    if (!response.ok) {
+      // code 保存后端稳定错误码，供预览层区分登录状态和普通失败。
+      const code = await readErrorCode(response);
+      throw new PublicApiError(response.status, code);
+    }
+    return (await response.json()) as T;
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new PublicApiError(0, 'timeout');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/** 获取公开图片的点赞状态和最近评论。 */
+export function getImageInteraction(
+  fileID: number,
+  options?: PublicFetchOptions,
+): Promise<PublicFileInteraction> {
+  return requestPublicJson<PublicFileInteraction>(
+    '/api/public/files/' + String(fileID) + '/interactions',
+    { ...options, credentials: 'include' },
+  );
+}
+
+/** 切换当前登录用户对公开图片的点赞状态。 */
+export function toggleImageLike(fileID: number): Promise<PublicFileInteraction> {
+  return requestPublicMutationJson<PublicFileInteraction>(
+    '/api/public/files/' + String(fileID) + '/like',
+    { method: 'POST', body: '{}' },
+  );
+}
+
+/** 发送当前登录用户的公开图片评论。 */
+export async function createImageComment(
+  fileID: number,
+  content: string,
+): Promise<PublicFileComment> {
+  // response 保存后端用 item 包装的新评论响应。
+  const response = await requestPublicMutationJson<{ item: PublicFileComment }>(
+    '/api/public/files/' + String(fileID) + '/comments',
+    { method: 'POST', body: JSON.stringify({ content }) },
+  );
+  return response.item;
 }
 
 /** 获取公开资源列表。 */

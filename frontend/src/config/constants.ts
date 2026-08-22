@@ -106,6 +106,7 @@ export const emptyFileForm = {
   displayName: '',
   category: '',
   description: '',
+  tags: [],
   isPrivate: false,
   is18r: false,
 };

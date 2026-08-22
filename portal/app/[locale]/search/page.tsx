@@ -122,12 +122,15 @@ export default async function SearchPage({
                       (file): GalleryImage => ({
                         id: file.id,
                         src: resolveMediaUrl(file.previewUrl),
-    thumbnailSrc: file.thumbnailUrl ? resolveMediaUrl(file.thumbnailUrl) : undefined,
+                        downloadSrc: resolveMediaUrl(file.downloadUrl),
+                        thumbnailSrc: file.thumbnailUrl ? resolveMediaUrl(file.thumbnailUrl) : undefined,
                         alt: file.altText || file.displayName || '',
                         width: file.imageWidth ?? 0,
                         height: file.imageHeight ?? 0,
                         displayName: file.displayName,
                         category: file.category,
+                        tags: file.tags ?? [],
+                        likeCount: file.likeCount ?? 0,
                       }),
                     )}
                     emptyTitle={t('noResultsTitle')}

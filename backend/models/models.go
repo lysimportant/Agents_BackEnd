@@ -540,6 +540,8 @@ type ManagedFile struct {
 	Category string `json:"category"`
 	// Description 表示说明。
 	Description string `json:"description"`
+	// Tags 表示用于公开检索和内容识别的文件标签。
+	Tags []string `json:"tags"`
 	// ContentType 表示内容。
 	ContentType string `json:"contentType"`
 	// Size 表示大小。
@@ -584,6 +586,8 @@ type FileMetadataRequest struct {
 	Category string `json:"category"`
 	// Description 表示说明。
 	Description string `json:"description"`
+	// Tags 表示文件标签，写入前由服务端统一清理和去重。
+	Tags []string `json:"tags"`
 	// IsPrivate 表示变量 IsPrivate。
 	IsPrivate bool `json:"isPrivate"`
 	// Is18R 是否开启 18R 限制。

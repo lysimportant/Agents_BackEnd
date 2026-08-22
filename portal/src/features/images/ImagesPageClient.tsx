@@ -171,6 +171,7 @@ export function ImagesPageClient() {
   const images: GalleryImage[] = imageFiles.map((file) => ({
     id: file.id,
     src: resolveMediaUrl(file.previewUrl),
+    downloadSrc: resolveMediaUrl(file.downloadUrl),
     displaySrc: file.mediumUrl ? resolveMediaUrl(file.mediumUrl) : undefined,
     thumbnailSrc: file.thumbnailUrl ? resolveMediaUrl(file.thumbnailUrl) : undefined,
     alt: file.altText || file.displayName || '',
@@ -178,6 +179,8 @@ export function ImagesPageClient() {
     height: file.imageHeight ?? 0,
     displayName: file.displayName,
     category: file.category,
+    tags: file.tags ?? [],
+    likeCount: file.likeCount ?? 0,
   }));
 
   return (

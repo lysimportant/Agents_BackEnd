@@ -169,6 +169,8 @@ func (h *FileHandler) Upload(c *gin.Context) {
 	category := strings.TrimSpace(c.PostForm("category"))
 	// description 保存说明。
 	description := strings.TrimSpace(c.PostForm("description"))
+	// tags 保存管理端按逗号或分号输入并由服务端规范化的文件标签。
+	tags := utils.ParseFileTags(c.PostForm("tags"))
 	// isPrivate 保存私密状态。
 	isPrivate := utils.ParseBool(c.PostForm("isPrivate"))
 	// is18R 保存 18R 分级限制状态。
@@ -246,6 +248,7 @@ func (h *FileHandler) Upload(c *gin.Context) {
 		OriginalName:  fileHeader.Filename,
 		Category:      category,
 		Description:   description,
+		Tags:          tags,
 		ContentType:   contentType,
 		Size:          size,
 		StorageName:   storageName,
@@ -292,6 +295,7 @@ func (h *FileHandler) UpdateMetadata(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	request.Tags = utils.NormalizeFileTags(request.Tags)
 	// user 保存用户。
 	user, _ := middleware.CurrentUser(c)
 	// file、found 保存业务值及其是否存在或处理成功的标记。

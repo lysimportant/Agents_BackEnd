@@ -1,6 +1,6 @@
 # 门户（C 端）
 
-面向匿名访问者的公开内容门户，通过后端 <code>/api/public/*</code> 只读接口展示经 B 端明确发布的文章、图片与文件资源。
+面向普通访问者的公开内容门户，通过后端 <code>/api/public/*</code> 展示经 B 端明确发布的文章、图片与文件资源，并支持登录后图片点赞和评论。
 
 - 技术栈：Next.js 16 App Router + React + strict TypeScript + Tailwind CSS 4 + next-intl + Lucide React。
 - 默认地址：<code>http://localhost:3001</code>，后端默认 <code>http://localhost:8080</code>。
@@ -71,7 +71,12 @@
 | GET | <code>/api/public/images</code> | 公开图片列表 |
 | GET | <code>/api/public/resources</code> | 公开资源列表 |
 | GET | <code>/api/public/files/:id/preview</code> | 文件内联预览 |
+| GET | <code>/api/public/files/:id/thumbnail</code> | 图片缩略图 |
+| GET | <code>/api/public/files/:id/medium</code> | 图片屏幕适配中图 |
 | GET | <code>/api/public/files/:id/download</code> | 文件下载 |
+| GET | <code>/api/public/files/:id/interactions</code> | 图片点赞数量和评论 |
+| POST | <code>/api/public/files/:id/like</code> | 登录用户点赞或取消点赞 |
+| POST | <code>/api/public/files/:id/comments</code> | 登录用户发送纯文本评论 |
 | GET | <code>/api/public/categories</code> | 公开分类聚合 |
 | GET | <code>/api/public/site-summary</code> | 站点聚合概览 |
 | GET | <code>/api/public/search?keyword=</code> | 聚合搜索 |

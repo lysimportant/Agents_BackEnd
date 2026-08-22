@@ -74,12 +74,15 @@ export default async function CategoryDetailPage({
   const galleryImages: GalleryImage[] = images.items.map((file) => ({
     id: file.id,
     src: resolveMediaUrl(file.previewUrl),
+    downloadSrc: resolveMediaUrl(file.downloadUrl),
     thumbnailSrc: file.thumbnailUrl ? resolveMediaUrl(file.thumbnailUrl) : undefined,
     alt: file.altText || file.displayName || '',
     width: file.imageWidth ?? 0,
     height: file.imageHeight ?? 0,
     displayName: file.displayName,
     category: file.category,
+    tags: file.tags ?? [],
+    likeCount: file.likeCount ?? 0,
   }));
 
   const hasAnyContent = articles.items.length > 0 || galleryImages.length > 0;

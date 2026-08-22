@@ -7,7 +7,7 @@
 - `backend`: Go + Gin + SQLite API 服务
 - `frontend`: Next.js + TypeScript 企业后台管理界面
 - `Socket 客服`: WebSocket 实时会话、聊天监控、图片/文件/表情发送，以及可嵌入第三方网站的悬浮客服组件
-- `portal`: Next.js + TypeScript + Tailwind 的 C 端公开内容门户，仅通过后端 `/api/public/*` 只读接口展示已发布内容
+- `portal`: Next.js + TypeScript + Tailwind 的 C 端公开内容门户，通过后端 `/api/public/*` 展示已发布内容并提供登录后图片点赞与评论
 
 ## 启动后端
 
@@ -67,7 +67,7 @@ npm run dev
 
 门户默认运行在 `http://localhost:3001`，默认调用后端 `http://localhost:8080`。
 面向普通访问者，展示经 B 端明确发布到门户的文章、图片与资源，支持简体中文 / English / 日本語、三套主题与移动端适配。
-门户页面只通过后端 `/api/public/*` 只读接口取数，不携带后台登录 Cookie，也不提供任何写能力。
+门户内容与图片互动只通过后端 `/api/public/*`；匿名可浏览、下载、查看标签和评论，登录后复用 HttpOnly Cookie 点赞或发送评论，不在浏览器保存会话 ID。
 
 如需覆盖后端地址或站点地址，可设置 `NEXT_PUBLIC_API_BASE_URL` 与 `NEXT_PUBLIC_SITE_URL`；详见 `portal/README.md`。
 
@@ -81,7 +81,7 @@ npm run build
 npm run docs
 ```
 
-门户只消费后端公开只读接口，具体路由与契约见 `docs/api/openapi.yaml` 与 `docs/portal-requirements.md`。
+门户只消费后端公开接口，具体路由与契约见 `docs/api/openapi.yaml` 与 `docs/portal-requirements.md`。
 
 ## Docker Compose 启动
 
@@ -96,7 +96,7 @@ docker compose up --build
 
 ### 公开接口（C 端门户）
 
-以下接口无需登录，仅返回满足门户发布条件的内容，不返回存储路径、所有者或删除信息：
+以下读取接口无需登录，仅返回满足门户公开条件的内容，不返回存储路径、所有者 ID 或删除信息；点赞和评论写入接口要求有效登录会话：
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -108,6 +108,9 @@ docker compose up --build
 | GET | `/api/public/files/:id/thumbnail` | 最大 `480×480`、质量 80 的 JPEG 缩略图 |
 | GET | `/api/public/files/:id/medium` | 最大宽度 `1280px`、质量 85 的 JPEG 屏幕适配图片 |
 | GET | `/api/public/files/:id/download` | 公开文件下载 |
+| GET | `/api/public/files/:id/interactions` | 图片点赞数量、当前用户状态和最近评论 |
+| POST | `/api/public/files/:id/like` | 登录用户点赞或取消点赞 |
+| POST | `/api/public/files/:id/comments` | 登录用户发送最多 500 字符的纯文本评论 |
 | GET | `/api/public/categories` | 公开分类聚合 |
 | GET | `/api/public/site-summary` | 站点聚合概览 |
 | GET | `/api/public/search?keyword=` | 聚合搜索（文章/图片/资源） |
@@ -264,7 +267,7 @@ sudo systemctl enable --now collector-host-agent
 
 - `GET /api/files`: 获取文件元数据列表；超级管理员还会看到内部聊天和客服聊天附件，统一归类为“聊天数据”且只读
 - `GET /api/files/:id`: 获取文件元数据详情
-- `POST /api/files`: 上传文件，`multipart/form-data` 字段为 `file`、`displayName`、`category`、`description`；同一所有者已有相同内容时返回 `409/DUPLICATE_FILE`
+- `POST /api/files`: 上传文件，`multipart/form-data` 字段为 `file`、`displayName`、`category`、`description`、`tags`；标签最多 12 个、每个最多 24 个 Unicode 字符，同一所有者已有相同内容时返回 `409/DUPLICATE_FILE`
 - `PUT /api/files/:id`: 更新文件元数据，JSON 字段为 `displayName`、`category`、`description`
 - `GET /api/files/:id/download`: 下载文件内容
 - `GET /api/files/chat-data/:source/:id/preview`: 超级管理员预览聊天附件，`source` 为 `internal-chat` 或 `customer-chat`

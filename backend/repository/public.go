@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	"strconv"
 	"strings"
+	"time"
 
 	"collector-backend/models"
+	"collector-backend/utils"
 )
 
 // isPublishedArticleSQL 保存公开文章的过滤条件，要求非私密且已发布。
@@ -261,8 +263,10 @@ func scanPublicFile(row scanner) (models.PublicFileListItem, bool) {
 	var c, up string
 	// deleted 保存软删除时间，非空表示已删除。
 	var deleted sql.NullString
+	// encodedTags 保存 SQLite 中的 JSON 标签文本。
+	var encodedTags string
 	// err 保存扫描过程的错误。
-	err := row.Scan(&item.ID, &item.DisplayName, &item.Category, &item.Description, &item.ContentType, &item.Size, &isPrivate, &item.ImageWidth, &item.ImageHeight, &c, &up, &deleted)
+	err := row.Scan(&item.ID, &item.DisplayName, &item.Category, &item.Description, &encodedTags, &item.ContentType, &item.Size, &isPrivate, &item.ImageWidth, &item.ImageHeight, &c, &up, &deleted, &item.LikeCount)
 	if err != nil {
 		return models.PublicFileListItem{}, false
 	}
@@ -273,6 +277,7 @@ func scanPublicFile(row scanner) (models.PublicFileListItem, bool) {
 	// 文件不再维护首次发布时间，统一使用更新时间。
 	item.PublishedAt = parseTime(up)
 	item.UpdatedAt = parseTime(up)
+	item.Tags = utils.DecodeFileTags(encodedTags)
 
 	// 使用相对公开地址，由 C 端结合基础地址拼接，不暴露存储结构。
 	item.PreviewURL = "/api/public/files/" + strconv.Itoa(item.ID) + "/preview"
@@ -287,7 +292,7 @@ func scanPublicFile(row scanner) (models.PublicFileListItem, bool) {
 }
 
 // publicFileSelect 保存公开文件列表查询需要扫描的列。
-const publicFileSelect = "f.id,f.display_name,f.category,f.description,f.content_type,f.size,f.is_private,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at"
+const publicFileSelect = "f.id,f.display_name,f.category,f.description,f.tags,f.content_type,f.size,f.is_private,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at,(SELECT COUNT(1) FROM public_file_likes pfl WHERE pfl.file_id=f.id)"
 
 // ListPublicFiles 返回公开文件列表及分页信息，isImageOnly 为 true 时仅返回图片。
 func (s *SQLiteStore) ListPublicFiles(isImageOnly bool, keyword, category string, page, pageSize int, includeR18 bool) ([]models.PublicFileListItem, int, int) {
@@ -301,8 +306,8 @@ func (s *SQLiteStore) ListPublicFiles(isImageOnly bool, keyword, category string
 		where = append(where, "f.content_type NOT LIKE 'image/%'")
 	}
 	if keyword != "" {
-		where = append(where, "(f.display_name LIKE ? OR f.description LIKE ? OR f.original_name LIKE ?)")
-		args = append(args, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
+		where = append(where, "(f.display_name LIKE ? OR f.description LIKE ? OR f.original_name LIKE ? OR f.tags LIKE ?)")
+		args = append(args, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
 	}
 	if category != "" {
 		where = append(where, "f.category=?")
@@ -432,4 +437,124 @@ func (s *SQLiteStore) FindPublicFileStorageName(id int, includeR18 bool) (string
 		return "", false
 	}
 	return storageName, true
+}
+
+// GetPublicFileInteraction 返回公开图片的点赞状态与最近一百条评论。
+func (s *SQLiteStore) GetPublicFileInteraction(fileID, userID int, includeR18 bool) (models.PublicFileInteraction, bool) {
+	// exists 保存目标文件是否仍满足当前访客的公开图片条件。
+	var exists int
+	if scanErr := s.db.QueryRow("SELECT COUNT(1) FROM files f WHERE f.id=? AND "+publicFileCondition(includeR18)+" AND f.content_type LIKE 'image/%'", fileID).Scan(&exists); scanErr != nil || exists == 0 {
+		return models.PublicFileInteraction{}, false
+	}
+
+	// interaction 保存图片互动汇总结果。
+	interaction := models.PublicFileInteraction{Comments: []models.PublicFileComment{}}
+	if countErr := s.db.QueryRow(`SELECT COUNT(1) FROM public_file_likes WHERE file_id=?`, fileID).Scan(&interaction.LikeCount); countErr != nil {
+		return models.PublicFileInteraction{}, false
+	}
+	if userID > 0 {
+		// likedCount 保存当前用户与图片之间是否存在点赞关系。
+		var likedCount int
+		if likedErr := s.db.QueryRow(`SELECT COUNT(1) FROM public_file_likes WHERE file_id=? AND user_id=?`, fileID, userID).Scan(&likedCount); likedErr == nil {
+			interaction.LikedByCurrentUser = likedCount > 0
+		}
+	}
+
+	// rows、queryErr 保存最近一百条评论查询结果与错误。
+	rows, queryErr := s.db.Query(`
+		SELECT recent.id,COALESCE(NULLIF(u.name,''),u.username),recent.content,recent.created_at
+		FROM (
+			SELECT id,user_id,content,created_at
+			FROM public_file_comments
+			WHERE file_id=?
+			ORDER BY id DESC
+			LIMIT 100
+		) recent
+		JOIN users u ON u.id=recent.user_id
+		ORDER BY recent.id ASC
+	`, fileID)
+	if queryErr != nil {
+		return models.PublicFileInteraction{}, false
+	}
+	defer rows.Close()
+	for rows.Next() {
+		// comment 保存当前扫描得到的公开评论。
+		var comment models.PublicFileComment
+		// createdAt 保存 SQLite 中的评论时间文本。
+		var createdAt string
+		if scanErr := rows.Scan(&comment.ID, &comment.UserName, &comment.Content, &createdAt); scanErr != nil {
+			continue
+		}
+		comment.CreatedAt = parseTime(createdAt)
+		interaction.Comments = append(interaction.Comments, comment)
+	}
+	return interaction, true
+}
+
+// TogglePublicFileLike 切换登录用户对公开图片的唯一点赞关系。
+func (s *SQLiteStore) TogglePublicFileLike(fileID, userID int, includeR18 bool) (models.PublicFileInteraction, bool) {
+	// publicFile、found 保存目标图片的公开可见性。
+	publicFile, found := s.FindPublicFile(fileID, includeR18)
+	if !found || !strings.HasPrefix(publicFile.ContentType, "image/") || userID <= 0 {
+		return models.PublicFileInteraction{}, false
+	}
+	// transaction、beginErr 保存点赞切换事务与开启错误。
+	transaction, beginErr := s.db.Begin()
+	if beginErr != nil {
+		return models.PublicFileInteraction{}, false
+	}
+	defer transaction.Rollback()
+	// existingCount 保存当前用户是否已经点赞。
+	var existingCount int
+	if queryErr := transaction.QueryRow(`SELECT COUNT(1) FROM public_file_likes WHERE file_id=? AND user_id=?`, fileID, userID).Scan(&existingCount); queryErr != nil {
+		return models.PublicFileInteraction{}, false
+	}
+	if existingCount > 0 {
+		if _, deleteErr := transaction.Exec(`DELETE FROM public_file_likes WHERE file_id=? AND user_id=?`, fileID, userID); deleteErr != nil {
+			return models.PublicFileInteraction{}, false
+		}
+	} else {
+		if _, insertErr := transaction.Exec(`INSERT INTO public_file_likes(file_id,user_id,created_at) VALUES(?,?,?)`, fileID, userID, timeText(time.Now().UTC())); insertErr != nil {
+			return models.PublicFileInteraction{}, false
+		}
+	}
+	if commitErr := transaction.Commit(); commitErr != nil {
+		return models.PublicFileInteraction{}, false
+	}
+	return s.GetPublicFileInteraction(fileID, userID, includeR18)
+}
+
+// CreatePublicFileComment 保存登录用户对公开图片发送的纯文本评论。
+func (s *SQLiteStore) CreatePublicFileComment(fileID, userID int, content string, includeR18 bool) (models.PublicFileComment, bool) {
+	// publicFile、found 保存目标图片的公开可见性。
+	publicFile, found := s.FindPublicFile(fileID, includeR18)
+	if !found || !strings.HasPrefix(publicFile.ContentType, "image/") || userID <= 0 {
+		return models.PublicFileComment{}, false
+	}
+	// createdAt 保存评论统一使用的 UTC 时间。
+	createdAt := time.Now().UTC()
+	// result、insertErr 保存评论写入结果与错误。
+	result, insertErr := s.db.Exec(`INSERT INTO public_file_comments(file_id,user_id,content,created_at) VALUES(?,?,?,?)`, fileID, userID, content, timeText(createdAt))
+	if insertErr != nil {
+		return models.PublicFileComment{}, false
+	}
+	// commentID 保存新评论的自增编号。
+	commentID, idErr := result.LastInsertId()
+	if idErr != nil {
+		return models.PublicFileComment{}, false
+	}
+	// comment 保存包含作者展示名称的新评论。
+	var comment models.PublicFileComment
+	// storedCreatedAt 保存数据库返回的评论时间文本。
+	var storedCreatedAt string
+	if queryErr := s.db.QueryRow(`
+		SELECT c.id,COALESCE(NULLIF(u.name,''),u.username),c.content,c.created_at
+		FROM public_file_comments c
+		JOIN users u ON u.id=c.user_id
+		WHERE c.id=?
+	`, commentID).Scan(&comment.ID, &comment.UserName, &comment.Content, &storedCreatedAt); queryErr != nil {
+		return models.PublicFileComment{}, false
+	}
+	comment.CreatedAt = parseTime(storedCreatedAt)
+	return comment, true
 }

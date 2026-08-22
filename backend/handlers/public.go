@@ -33,6 +33,9 @@ const publicThumbnailMaxSize = 480
 // publicMediumMaxWidth 表示瀑布流与未来长图阅读使用的最大图片宽度。
 const publicMediumMaxWidth = 1280
 
+// publicCommentMaxLength 限制单条公开图片评论的 Unicode 字符数量。
+const publicCommentMaxLength = 500
+
 // PublicStore 定义 C 端公开接口所需的数据访问能力。
 type PublicStore interface {
 	// ListPublicArticles 返回公开文章列表及分页信息。
@@ -55,6 +58,12 @@ type PublicStore interface {
 	SearchPublic(keyword string, limit int, includeR18 bool) models.PublicSearchResult
 	// FindPublicFileStorageName 表示获取公开文件存储名。
 	FindPublicFileStorageName(id int, includeR18 bool) (string, bool)
+	// GetPublicFileInteraction 返回公开图片的点赞和评论状态。
+	GetPublicFileInteraction(fileID, userID int, includeR18 bool) (models.PublicFileInteraction, bool)
+	// TogglePublicFileLike 切换登录用户对公开图片的点赞状态。
+	TogglePublicFileLike(fileID, userID int, includeR18 bool) (models.PublicFileInteraction, bool)
+	// CreatePublicFileComment 保存登录用户发送的图片评论。
+	CreatePublicFileComment(fileID, userID int, content string, includeR18 bool) (models.PublicFileComment, bool)
 }
 
 // PublicHandler 处理 C 端公开只读接口。
@@ -82,6 +91,32 @@ func (h *PublicHandler) includeR18(c *gin.Context) bool {
 	}
 	cookie, err := c.Cookie("portal-r18")
 	return err == nil && cookie == "1"
+}
+
+// currentUserID 返回当前有效登录用户 ID；匿名请求返回 0。
+func (h *PublicHandler) currentUserID(c *gin.Context) int {
+	if h.sessionService == nil {
+		return 0
+	}
+	// userID、ok 保存会话解析出的用户编号及有效性。
+	userID, ok := h.sessionService.UserIDFromRequest(c)
+	if !ok {
+		return 0
+	}
+	return userID
+}
+
+// parsePublicFileID 校验公开文件路由参数并输出统一错误响应。
+func parsePublicFileID(c *gin.Context) (int, bool) {
+	// rawID 保存路由参数中的原始文件编号。
+	rawID := strings.TrimSpace(c.Param("id"))
+	// fileID、parseErr 保存解析后的文件编号与错误。
+	fileID, parseErr := strconv.Atoi(rawID)
+	if parseErr != nil || fileID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_id", "error": "无效的文件 ID"})
+		return 0, false
+	}
+	return fileID, true
 }
 
 // parsePageParams 从查询参数解析关键字、分类、排序与分页参数，并做安全校验。
@@ -214,6 +249,82 @@ func (h *PublicHandler) Search(c *gin.Context) {
 		keyword = string([]rune(keyword)[:40])
 	}
 	c.JSON(http.StatusOK, h.store.SearchPublic(keyword, 12, h.includeR18(c)))
+}
+
+// GetFileInteraction 处理 GET /api/public/files/:id/interactions，公开返回点赞数量和评论。
+func (h *PublicHandler) GetFileInteraction(c *gin.Context) {
+	// fileID、ok 保存经过校验的公开文件编号。
+	fileID, ok := parsePublicFileID(c)
+	if !ok {
+		return
+	}
+	// interaction、found 保存互动数据及目标图片是否公开可见。
+	interaction, found := h.store.GetPublicFileInteraction(fileID, h.currentUserID(c), h.includeR18(c))
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"code": "file_not_found", "error": "图片不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, interaction)
+}
+
+// ToggleFileLike 处理 POST /api/public/files/:id/like，要求有效登录会话并切换唯一点赞。
+func (h *PublicHandler) ToggleFileLike(c *gin.Context) {
+	// userID 保存当前登录用户编号。
+	userID := h.currentUserID(c)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "login_required", "error": "登录后才能点赞"})
+		return
+	}
+	// fileID、ok 保存经过校验的公开文件编号。
+	fileID, ok := parsePublicFileID(c)
+	if !ok {
+		return
+	}
+	// interaction、updated 保存点赞切换后的互动状态与写入结果。
+	interaction, updated := h.store.TogglePublicFileLike(fileID, userID, h.includeR18(c))
+	if !updated {
+		c.JSON(http.StatusNotFound, gin.H{"code": "file_not_found", "error": "图片不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, interaction)
+}
+
+// CreateFileComment 处理 POST /api/public/files/:id/comments，要求登录并保存纯文本评论。
+func (h *PublicHandler) CreateFileComment(c *gin.Context) {
+	// userID 保存当前登录用户编号。
+	userID := h.currentUserID(c)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "login_required", "error": "登录后才能评论"})
+		return
+	}
+	// fileID、ok 保存经过校验的公开文件编号。
+	fileID, ok := parsePublicFileID(c)
+	if !ok {
+		return
+	}
+	// request 保存评论请求正文。
+	var request models.PublicFileCommentRequest
+	if bindErr := c.ShouldBindJSON(&request); bindErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_comment", "error": "请输入评论内容"})
+		return
+	}
+	// contentRunes 保存去除首尾空白后的评论 Unicode 字符。
+	contentRunes := []rune(strings.TrimSpace(request.Content))
+	if len(contentRunes) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_comment", "error": "请输入评论内容"})
+		return
+	}
+	if len(contentRunes) > publicCommentMaxLength {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "comment_too_long", "error": "评论不能超过 500 个字符"})
+		return
+	}
+	// comment、created 保存新评论与写入结果。
+	comment, created := h.store.CreatePublicFileComment(fileID, userID, string(contentRunes), h.includeR18(c))
+	if !created {
+		c.JSON(http.StatusNotFound, gin.H{"code": "file_not_found", "error": "图片不存在"})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"item": comment})
 }
 
 // PreviewFile 处理 GET /api/public/files/:id/preview 返回内联文件预览。

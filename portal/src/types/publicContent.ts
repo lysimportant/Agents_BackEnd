@@ -79,6 +79,8 @@ export interface PublicFileListItem {
   category: string;
   /** 文件描述。 */
   description: string;
+  /** 文件标签，用于公开展示和搜索。 */
+  tags: string[];
   /** 文件 MIME 类型。 */
   contentType: string;
   /** 文件大小（字节）。 */
@@ -101,6 +103,30 @@ export interface PublicFileListItem {
   publishedAt: string;
   /** 最后更新时间（RFC 3339）。 */
   updatedAt: string;
+  /** 图片当前点赞数量。 */
+  likeCount: number;
+}
+
+/** 公开图片下的一条登录用户评论。 */
+export interface PublicFileComment {
+  /** 评论唯一标识。 */
+  id: number;
+  /** 评论作者展示名称。 */
+  userName: string;
+  /** 评论纯文本内容。 */
+  content: string;
+  /** 评论发送时间。 */
+  createdAt: string;
+}
+
+/** 当前图片的点赞状态和最近评论。 */
+export interface PublicFileInteraction {
+  /** 图片点赞总数。 */
+  likeCount: number;
+  /** 当前登录用户是否已经点赞。 */
+  likedByCurrentUser: boolean;
+  /** 最近评论，按发送时间正序排列。 */
+  comments: PublicFileComment[];
 }
 
 /** 公开分类聚合信息，对应后端 PublicCategory。 */

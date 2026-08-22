@@ -238,7 +238,7 @@ export function useAdminWorkspace() {
     if (!keyword) {
       return files;
     }
-    return files.filter((file) => [file.displayName, file.originalName, file.category, file.description, file.ownerName ?? ''].some((value) => value.toLowerCase().includes(keyword)));
+    return files.filter((file) => [file.displayName, file.originalName, file.category, file.description, file.ownerName ?? '', ...(file.tags ?? [])].some((value) => value.toLowerCase().includes(keyword)));
   }, [fileKeyword, files]);
 
   /** loadUserMenus 负责读取并返回对应业务数据。 */
@@ -1197,6 +1197,7 @@ export function useAdminWorkspace() {
         formData.append('displayName', filesToUpload.length === 1 ? fileForm.displayName.trim() || uploadFile.name : uploadFile.name);
         formData.append('category', fileForm.category);
         formData.append('description', fileForm.description);
+        formData.append('tags', fileForm.tags.join(','));
         formData.append('isPrivate', fileForm.isPrivate ? 'true' : 'false');
         formData.append('is18r', fileForm.is18r ? 'true' : 'false');
         try {
@@ -1259,6 +1260,7 @@ export function useAdminWorkspace() {
       displayName: file.displayName,
       category: file.category,
       description: file.description,
+      tags: file.tags ?? [],
       isPrivate: Boolean(file.isPrivate),
       is18r: Boolean(file.is18r),
     });

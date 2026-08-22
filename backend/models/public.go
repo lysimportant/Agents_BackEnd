@@ -79,6 +79,8 @@ type PublicFileListItem struct {
 	Category string `json:"category"`
 	// Description 文件描述。
 	Description string `json:"description"`
+	// Tags 文件标签，用于公开展示和关键词搜索。
+	Tags []string `json:"tags"`
 	// ContentType 文件 MIME 类型。
 	ContentType string `json:"contentType"`
 	// Size 文件大小（字节）。
@@ -101,6 +103,36 @@ type PublicFileListItem struct {
 	PublishedAt time.Time `json:"publishedAt"`
 	// UpdatedAt 最后更新时间。
 	UpdatedAt time.Time `json:"updatedAt"`
+	// LikeCount 图片当前点赞数量。
+	LikeCount int `json:"likeCount"`
+}
+
+// PublicFileComment 表示公开图片下的一条登录用户评论。
+type PublicFileComment struct {
+	// ID 评论唯一标识。
+	ID int `json:"id"`
+	// UserName 评论作者展示名称。
+	UserName string `json:"userName"`
+	// Content 评论纯文本内容。
+	Content string `json:"content"`
+	// CreatedAt 评论发送时间。
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// PublicFileInteraction 表示当前图片的点赞状态和最近评论。
+type PublicFileInteraction struct {
+	// LikeCount 图片点赞总数。
+	LikeCount int `json:"likeCount"`
+	// LikedByCurrentUser 当前登录用户是否已经点赞。
+	LikedByCurrentUser bool `json:"likedByCurrentUser"`
+	// Comments 图片最近评论，按时间正序返回。
+	Comments []PublicFileComment `json:"comments"`
+}
+
+// PublicFileCommentRequest 表示登录用户发送图片评论的请求。
+type PublicFileCommentRequest struct {
+	// Content 评论纯文本内容，服务端限制长度并去除首尾空白。
+	Content string `json:"content" binding:"required"`
 }
 
 // PublicCategory 表示公开分类的聚合信息。

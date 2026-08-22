@@ -19,6 +19,8 @@
 | `sessions` | 不透明 HttpOnly 会话 ID 和过期时间。 | 前端不得持久化会话 ID。 |
 | `articles` | 知识库文章和 C 端文章来源。 | 所有者、私密状态、发布状态和 18R 分级共同决定访问。 |
 | `files` | 文件管理上传、回收站和 C 端媒体来源。 | 所有者、私密状态、软删除和 18R 分级共同决定访问。 |
+| `public_file_likes` | 登录用户对公开图片的点赞关系。 | `(file_id,user_id)` 复合主键保证每个账号每张图片最多一个点赞。 |
+| `public_file_comments` | 登录用户发送的公开图片纯文本评论。 | 关联文件和用户；文件或用户删除时级联清理对应互动记录。 |
 | `socket_conversations` | Socket 客服会话摘要。 | 与内部员工聊天严格区分。 |
 | `socket_messages` | Socket 客服消息和附件元数据。 | 附件通过客服鉴权接口读取。 |
 | `internal_chat_messages` | 内部员工私聊和群发消息。 | `recipient_id` 为空表示群发。 |
@@ -36,6 +38,7 @@
 文件公开条件是 `is_private=0 AND deleted_at IS NULL`。匿名请求还要求 `is_18r=0`；有效会话和 18R Cookie 同时存在时可包含 18R 文件。
 
 - `files.content_sha256`：服务端按“同一所有者 + 有效文件”过滤重复内容，不向客户端返回。
+- `files.tags`：JSON 数组形式的文件标签，最多 12 个、每个最多 24 个 Unicode 字符；用于 B 端管理、C 端展示和关键词搜索。
 - `files.image_width`、`files.image_height`：图片原始尺寸，用于预留瀑布流空间和减少布局跳动。
 - `files.is_18r`：18R 分级标记，默认 `0`。
 - `files.deleted_at`：非空表示进入回收站；永久删除才移除记录和物理文件。
@@ -46,6 +49,8 @@
 
 - `idx_articles_public(is_private,status,id)`：公开文章筛选和倒序列表。
 - `idx_files_public(is_private,deleted_at,id)`：公开文件筛选和倒序列表。
+- `idx_public_file_likes_file_id(file_id,user_id)`：按图片统计点赞和读取当前用户状态。
+- `idx_public_file_comments_file_id(file_id,id)`：按图片读取最近评论。
 - `idx_files_owner_content_sha256(owner_id,content_sha256)`：只覆盖未删除且哈希非空的文件，保证同一所有者有效内容唯一。
 - 聊天、访问日志、用户部门角色等索引以 `sqlite_store.go` 为权威来源，变更时同步本文。
 

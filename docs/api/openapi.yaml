@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: 采集数据管理平台 API
   version: 1.0.0
-  description: 管理端使用 Cookie 会话鉴权；公开门户接口默认匿名只读，只有有效会话同时携带 portal-r18=1 时才包含 18R 内容。
+  description: 管理端使用 Cookie 会话鉴权；公开门户内容默认匿名可读，图片点赞和评论写入要求有效会话，只有有效会话同时携带 portal-r18=1 时才包含 18R 内容。
 servers:
   - url: http://localhost:8080
     description: 本地后端服务
@@ -99,6 +99,59 @@ paths:
       responses:
         '200': { description: 文件下载流 }
         '404': { description: 文件不存在或未公开 }
+  /api/public/files/{id}/interactions:
+    get:
+      tags: [公开门户]
+      summary: 获取公开图片点赞和评论
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: 点赞总数、当前登录用户点赞状态和最近一百条评论
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicFileInteraction' }
+        '404': { description: 图片不存在、未公开或被当前 18R 可见性过滤 }
+  /api/public/files/{id}/like:
+    post:
+      tags: [公开门户]
+      summary: 切换当前登录用户的图片点赞
+      security: [{ cookieSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: 点赞切换后的权威互动状态；每个账号对每张图片最多一个点赞，再次调用会取消
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicFileInteraction' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: 图片不存在、未公开或被当前 18R 可见性过滤 }
+  /api/public/files/{id}/comments:
+    post:
+      tags: [公开门户]
+      summary: 发送公开图片评论
+      security: [{ cookieSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublicFileCommentRequest' }
+      responses:
+        '201':
+          description: 评论创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [item]
+                properties:
+                  item: { $ref: '#/components/schemas/PublicFileComment' }
+        '400': { description: 评论为空或超过 500 个 Unicode 字符 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: 图片不存在、未公开或被当前 18R 可见性过滤 }
   /api/public/categories:
     get:
       tags: [公开门户]
@@ -844,6 +897,29 @@ components:
     Forbidden:
       description: 已登录用户缺少所需菜单、动作或所有权权限。
   schemas:
+    PublicFileCommentRequest:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1, maxLength: 500, description: 去除首尾空白后保存的纯文本评论 }
+    PublicFileComment:
+      type: object
+      required: [id, userName, content, createdAt]
+      properties:
+        id: { type: integer, minimum: 1 }
+        userName: { type: string, description: 评论作者展示名称 }
+        content: { type: string, maxLength: 500 }
+        createdAt: { type: string, format: date-time }
+    PublicFileInteraction:
+      type: object
+      required: [likeCount, likedByCurrentUser, comments]
+      properties:
+        likeCount: { type: integer, minimum: 0 }
+        likedByCurrentUser: { type: boolean, description: 匿名请求固定为 false }
+        comments:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/PublicFileComment' }
     LoginRequest:
       type: object
       required: [username, password]

@@ -273,6 +273,8 @@ export type ManagedFile = {
   category: string;
   /** description 表示说明。 */
   description: string;
+  /** tags 表示用于检索和公开展示的文件标签。 */
+  tags: string[];
   /** contentType 表示内容。 */
   contentType: string;
   /** size 表示大小。 */
@@ -389,6 +391,8 @@ export type FileForm = {
   category: string;
   /** description 表示说明。 */
   description: string;
+  /** tags 表示上传或编辑时维护的文件标签。 */
+  tags: string[];
   /** isPrivate 表示私密状态。 */
   isPrivate: boolean;
   /** 是否开启 18R 限制。 */

@@ -15,7 +15,7 @@
 ## 当前实现状态
 
 - `portal/` 已是可安装、启动、构建和容器部署的 Next.js 16 应用，拥有独立 `package.json`、锁文件、App Router 源码、Dockerfile、三语言资源和 TypeDoc 配置。
-- 当前实现包含文章、图片、资源、分类、搜索、关于、文章详情、RSS、sitemap 和 robots；`/{locale}` 当前跳转到 `/{locale}/images`，图片瀑布流是第一屏主入口。
+- 当前实现包含文章、图片、资源、分类、搜索、关于、文章详情、图片标签与互动、RSS、sitemap 和 robots；`/{locale}` 当前跳转到 `/{locale}/images`，图片瀑布流是第一屏主入口。
 - C 端支持后端会话登录恢复和 18R 开关。匿名请求排除 18R 内容；只有有效 HttpOnly 会话且 `portal-r18=1` 时公开接口才返回 18R 内容。
 - 仓库根 `docker-compose.yml` 已编排门户服务，默认端口为 `3001`；部署配置变化时同步检查 Compose、根 `.env.example`、README 和部署说明。
 
@@ -26,7 +26,7 @@
 - 内容请求只能使用 `/api/public/*`。登录、会话恢复和退出可使用 `/api/auth/login`、`/api/auth/session`、`/api/auth/logout`，但不得调用后台写接口、读取或持久化会话 ID。
 - 公开文章条件为 `is_private=0 AND status='已发布'`；公开文件条件为 `is_private=0 AND deleted_at IS NULL`。前端不得自行放宽这些条件或 18R 过滤。
 - 客服入口只能复用现有客服聊天边界，不得调用或混用 `/api/internal-chat/*`、内部聊天状态和后台鉴权。
-- C 端不提供内容编辑、用户注册、评论、付费或投稿能力，除非后续需求明确扩展。
+- C 端不提供内容编辑、用户注册、付费或投稿能力。图片评论只允许登录用户通过 `/api/public/files/:id/comments` 发送纯文本，并由后端公开条件和会话鉴权共同约束。
 
 ## 技术栈与运行约定
 

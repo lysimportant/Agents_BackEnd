@@ -17,13 +17,13 @@
 
 ## 二、应用边界
 
-C 端内容请求只能调用 `/api/public/*`。为实现登录后 18R 可见性，允许调用以下认证接口：
+C 端内容读取和图片互动只能调用 `/api/public/*`。为实现登录、登录后 18R 可见性以及点赞和评论，允许调用以下认证接口：
 
 - `POST /api/auth/login`
 - `GET /api/auth/session`
 - `POST /api/auth/logout`
 
-C 端不得调用后台文章、文件、用户、权限或终端写接口。后端 HttpOnly Cookie 是唯一会话凭据；浏览器不得保存会话 ID、密码或访问令牌。
+C 端不得调用后台文章、文件、用户、权限或终端写接口。公开图片点赞和评论写入由 `/api/public/*` 在后端校验登录会话；后端 HttpOnly Cookie 是唯一会话凭据，浏览器不得保存会话 ID、密码或访问令牌。
 
 客服开关 `NEXT_PUBLIC_ENABLE_CUSTOMER_CHAT` 已保留，但当前核心门户页面不依赖客服组件。后续启用时只能复用 Socket 客服边界，不得调用 `/api/internal-chat/*`。
 
@@ -101,6 +101,9 @@ GET /api/public/files/:id/preview
 GET /api/public/files/:id/thumbnail
 GET /api/public/files/:id/medium
 GET /api/public/files/:id/download
+GET /api/public/files/:id/interactions
+POST /api/public/files/:id/like
+POST /api/public/files/:id/comments
 GET /api/public/categories
 GET /api/public/site-summary
 GET /api/public/search
@@ -126,6 +129,9 @@ GET /api/public/search
 - `sort` 当前会解析但不会影响数据库排序；列表固定按 ID 倒序。
 - 聚合搜索要求 `keyword`，超过 40 个字符时截断，每组最多返回 12 条。
 - 公开响应不返回 `storageName`、物理路径、所有者 ID、后台权限和删除字段。
+- 文件标签最多 12 个，每个最多 24 个 Unicode 字符；文件列表和聚合搜索的 `keyword` 会匹配标签。
+- 图片互动读取允许匿名，返回点赞总数、当前登录用户点赞状态和最近 100 条评论。
+- 点赞和评论要求有效登录会话；每个账号每张图片最多一个点赞，再次点赞会取消，评论以纯文本保存且最多 500 个 Unicode 字符。
 
 文章详情正文由后端白名单清洗，并把符合公开条件的本地媒体改写为 `/api/public/files/...`。相关文章最多 6 篇；封面从清洗后正文第一张图片派生；`tableOfContents` 后端字段当前为空，C 端可从正文生成展示目录。
 
@@ -147,7 +153,7 @@ GET /api/public/search
 - 已加载卡片按稳定的独立列分配，追加下一批时不得让旧卡片跨列重排或短暂消失。
 - 根据 `imageWidth/imageHeight` 预留比例空间，缩略图、中图、原图逐级加载。
 - 瀑布流共享队列限制中图并发：移动端最多 2 张，较宽视口最多 4 张；离开预加载范围时会取消尚未完成的中图请求。
-- 当前预览浮层一次只展示并请求当前原图。未来漫画阅读应创建独立队列，在视口附近逐张加载原图并预加载下一张，禁止无界并发。
+- 当前预览浮层一次只展示并请求当前原图，提供复制地址、下载原图、点赞、标签与评论区。未来漫画阅读应创建独立队列，在视口附近逐张加载原图并预加载下一张，禁止无界并发。
 - 新卡片进入视口时使用轻量透明度和位移动画；`prefers-reduced-motion` 下关闭或弱化。
 
 这些能力可复用于未来的纵向漫画阅读：列表先加载低清或中图，只在视口附近请求原图，并预加载下一张。

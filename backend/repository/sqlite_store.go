@@ -14,6 +14,7 @@ import (
 
 	"collector-backend/auth"
 	"collector-backend/models"
+	"collector-backend/utils"
 )
 
 // SQLiteStore 是所有 handler 共用的生产环境 SQLite 持久化实现。
@@ -282,6 +283,7 @@ func (s *SQLiteStore) migrate() error {
 			original_name TEXT NOT NULL,
 			category TEXT NOT NULL DEFAULT '',
 			description TEXT NOT NULL DEFAULT '',
+			tags TEXT NOT NULL DEFAULT '[]',
 			content_type TEXT NOT NULL DEFAULT '',
 			size INTEGER NOT NULL DEFAULT 0,
 			storage_name TEXT NOT NULL,
@@ -291,6 +293,25 @@ func (s *SQLiteStore) migrate() error {
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
 			deleted_at TEXT
+		)`,
+		// public_file_likes 保存登录用户对公开图片的唯一点赞关系。
+		`CREATE TABLE IF NOT EXISTS public_file_likes (
+			file_id INTEGER NOT NULL,
+			user_id INTEGER NOT NULL,
+			created_at TEXT NOT NULL,
+			PRIMARY KEY (file_id, user_id),
+			FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE,
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		)`,
+		// public_file_comments 保存登录用户对公开图片发送的纯文本评论。
+		`CREATE TABLE IF NOT EXISTS public_file_comments (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			file_id INTEGER NOT NULL,
+			user_id INTEGER NOT NULL,
+			content TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE,
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 		)`,
 		// socket_conversations 保存客服聊天会话摘要。
 		`CREATE TABLE IF NOT EXISTS socket_conversations (
@@ -397,6 +418,8 @@ func (s *SQLiteStore) migrate() error {
 		{"articles", "is_private", "ALTER TABLE articles ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0"},
 		{"files", "owner_id", "ALTER TABLE files ADD COLUMN owner_id INTEGER NOT NULL DEFAULT 0"},
 		{"files", "is_private", "ALTER TABLE files ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0"},
+		// tags 使用 JSON 数组保存文件标签，旧文件迁移后默认为空数组。
+		{"files", "tags", "ALTER TABLE files ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'"},
 		// content_sha256 仅用于同一所有者的有效文件按内容去重，不向客户端返回。
 		{"files", "content_sha256", "ALTER TABLE files ADD COLUMN content_sha256 TEXT NOT NULL DEFAULT ''"},
 		{"socket_conversations", "title", "ALTER TABLE socket_conversations ADD COLUMN title TEXT NOT NULL DEFAULT ''"},
@@ -459,6 +482,9 @@ func (s *SQLiteStore) migrate() error {
 		// C 端门户列表按私密与发布状态读取。
 		`CREATE INDEX IF NOT EXISTS idx_articles_public ON articles(is_private,status,id)`,
 		`CREATE INDEX IF NOT EXISTS idx_files_public ON files(is_private,deleted_at,id)`,
+		// 图片互动按文件读取点赞和最新评论。
+		`CREATE INDEX IF NOT EXISTS idx_public_file_likes_file_id ON public_file_likes(file_id,user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_public_file_comments_file_id ON public_file_comments(file_id,id)`,
 		// 同一所有者的有效文件内容唯一；空哈希兼容尚未回填的历史重复记录。
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_files_owner_content_sha256 ON files(owner_id,content_sha256) WHERE deleted_at IS NULL AND content_sha256 <> ''`,
 	}
@@ -1411,7 +1437,7 @@ func (s *SQLiteStore) DeleteArticle(id int) bool {
 func (s *SQLiteStore) ListFiles(includeDeleted bool) []models.ManagedFile {
 	// query 保存查询条件。
 	query := `
-		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.content_type,f.size,f.storage_name,f.content_sha256,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
+		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.tags,f.content_type,f.size,f.storage_name,f.content_sha256,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
 		FROM files f
 		LEFT JOIN users u ON u.id = f.owner_id
 	`
@@ -1547,7 +1573,7 @@ func buildChatDataFile(file models.ManagedFile, source, description, storagePath
 // FindFileByID 获取对应业务记录。
 func (s *SQLiteStore) FindFileByID(id int) (models.ManagedFile, bool) {
 	return scanFile(s.db.QueryRow(`
-		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.content_type,f.size,f.storage_name,f.content_sha256,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
+		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.tags,f.content_type,f.size,f.storage_name,f.content_sha256,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
 		FROM files f
 		LEFT JOIN users u ON u.id = f.owner_id
 		WHERE f.id=? AND f.deleted_at IS NULL
@@ -1557,7 +1583,7 @@ func (s *SQLiteStore) FindFileByID(id int) (models.ManagedFile, bool) {
 // FindDeletedFileByID 获取对应业务记录。
 func (s *SQLiteStore) FindDeletedFileByID(id int) (models.ManagedFile, bool) {
 	return scanFile(s.db.QueryRow(`
-		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.content_type,f.size,f.storage_name,f.content_sha256,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
+		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.tags,f.content_type,f.size,f.storage_name,f.content_sha256,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
 		FROM files f
 		LEFT JOIN users u ON u.id = f.owner_id
 		WHERE f.id=? AND f.deleted_at IS NOT NULL
@@ -1570,7 +1596,7 @@ func (s *SQLiteStore) FindActiveFileByOwnerAndHash(ownerID int, contentSHA256 st
 		return models.ManagedFile{}, false
 	}
 	return scanFile(s.db.QueryRow(`
-		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.content_type,f.size,f.storage_name,f.content_sha256,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
+		SELECT f.id,f.display_name,f.original_name,f.category,f.description,f.tags,f.content_type,f.size,f.storage_name,f.content_sha256,f.owner_id,COALESCE(u.name,''),f.is_private,f.is_18r,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at
 		FROM files f
 		LEFT JOIN users u ON u.id = f.owner_id
 		WHERE f.owner_id=? AND f.content_sha256=? AND f.deleted_at IS NULL
@@ -1584,9 +1610,9 @@ func (s *SQLiteStore) CreateFile(file models.ManagedFile) models.ManagedFile {
 	now := time.Now().UTC()
 	// result、err 保存当前操作结果以及可能返回的错误状态。
 	result, err := s.db.Exec(
-		`INSERT INTO files (display_name,original_name,category,description,content_type,size,storage_name,content_sha256,owner_id,is_private,is_18r,image_width,image_height,created_at,updated_at,deleted_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
-		file.DisplayName, file.OriginalName, file.Category, file.Description, file.ContentType, file.Size, file.StorageName, file.ContentSHA256, file.OwnerID, boolToInt(file.IsPrivate), boolToInt(file.Is18R), file.ImageWidth, file.ImageHeight, timeText(now), timeText(now),
+		`INSERT INTO files (display_name,original_name,category,description,tags,content_type,size,storage_name,content_sha256,owner_id,is_private,is_18r,image_width,image_height,created_at,updated_at,deleted_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
+		file.DisplayName, file.OriginalName, file.Category, file.Description, utils.EncodeFileTags(file.Tags), file.ContentType, file.Size, file.StorageName, file.ContentSHA256, file.OwnerID, boolToInt(file.IsPrivate), boolToInt(file.Is18R), file.ImageWidth, file.ImageHeight, timeText(now), timeText(now),
 	)
 	if err != nil {
 		return models.ManagedFile{}
@@ -1608,8 +1634,8 @@ func (s *SQLiteStore) UpdateFileMetadata(id int, request models.FileMetadataRequ
 	now := time.Now().UTC()
 	// err 保存当前操作结果以及可能返回的错误状态。
 	if _, err := s.db.Exec(
-		`UPDATE files SET display_name=?, category=?, description=?, is_private=?, is_18r=?, updated_at=? WHERE id=? AND deleted_at IS NULL`,
-		request.DisplayName, request.Category, request.Description, boolToInt(request.IsPrivate), boolToInt(request.Is18R), timeText(now), id,
+		`UPDATE files SET display_name=?, category=?, description=?, tags=?, is_private=?, is_18r=?, updated_at=? WHERE id=? AND deleted_at IS NULL`,
+		request.DisplayName, request.Category, request.Description, utils.EncodeFileTags(request.Tags), boolToInt(request.IsPrivate), boolToInt(request.Is18R), timeText(now), id,
 	); err != nil {
 		return models.ManagedFile{}, false
 	}
@@ -1850,13 +1876,16 @@ func scanFile(row scanner) (models.ManagedFile, bool) {
 	var c, up string
 	// deleted 保存文件删除时间的可空字符串。
 	var deleted sql.NullString
+	// encodedTags 保存 SQLite 中的 JSON 标签文本。
+	var encodedTags string
 	// err 保存扫描过程中的错误状态。
-	err := row.Scan(&f.ID, &f.DisplayName, &f.OriginalName, &f.Category, &f.Description, &f.ContentType, &f.Size, &f.StorageName, &f.ContentSHA256, &f.OwnerID, &f.OwnerName, &isPrivate, &is18R, &f.ImageWidth, &f.ImageHeight, &c, &up, &deleted)
+	err := row.Scan(&f.ID, &f.DisplayName, &f.OriginalName, &f.Category, &f.Description, &encodedTags, &f.ContentType, &f.Size, &f.StorageName, &f.ContentSHA256, &f.OwnerID, &f.OwnerName, &isPrivate, &is18R, &f.ImageWidth, &f.ImageHeight, &c, &up, &deleted)
 	if err != nil {
 		return models.ManagedFile{}, false
 	}
 	f.IsPrivate = intToBool(isPrivate)
 	f.Is18R = intToBool(is18R)
+	f.Tags = utils.DecodeFileTags(encodedTags)
 	f.CreatedAt = parseTime(c)
 	f.UpdatedAt = parseTime(up)
 	if deleted.Valid {
