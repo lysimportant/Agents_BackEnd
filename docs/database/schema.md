@@ -18,7 +18,7 @@
 | `user_action_permissions` | 用户个人附加动作权限。 | 编码格式为稳定的 `resource.action`。 |
 | `sessions` | 不透明 HttpOnly 会话 ID 和过期时间。 | 前端不得持久化会话 ID。 |
 | `articles` | 知识库文章和 C 端文章来源。 | 所有者、私密状态、发布状态和 18R 分级共同决定访问。 |
-| `files` | 文件管理上传、回收站和 C 端媒体来源。 | 所有者、私密状态、软删除和 18R 分级共同决定访问。 |
+| `files` | 文件管理上传、回收站和 C 端媒体来源。 | 所有者、私密状态、软删除和 18R 分级共同决定访问；管理上传不设置应用层单文件大小上限。 |
 | `public_file_likes` | 登录用户对公开图片的点赞关系。 | `(file_id,user_id)` 复合主键保证每个账号每张图片最多一个点赞。 |
 | `public_file_comments` | 登录用户发送的公开图片纯文本评论。 | 关联文件和用户；文件或用户删除时级联清理对应互动记录。 |
 | `socket_conversations` | Socket 客服会话摘要。 | 与内部员工聊天严格区分。 |
@@ -39,6 +39,7 @@
 
 - `files.content_sha256`：服务端按“同一所有者 + 有效文件”过滤重复内容，不向客户端返回。
 - `files.tags`：JSON 数组形式的文件标签，最多 12 个、每个最多 24 个 Unicode 字符；用于 B 端管理、C 端展示和关键词搜索。
+- 标签写入前去首尾空白、移除前导 `#`，再按不区分大小写去重；空标签丢弃，超过数量或长度时由请求校验拒绝。
 - `files.image_width`、`files.image_height`：图片原始尺寸，用于预留瀑布流空间和减少布局跳动。
 - `files.is_18r`：18R 分级标记，默认 `0`。
 - `files.deleted_at`：非空表示进入回收站；永久删除才移除记录和物理文件。
@@ -52,6 +53,11 @@
 - `idx_public_file_likes_file_id(file_id,user_id)`：按图片统计点赞和读取当前用户状态。
 - `idx_public_file_comments_file_id(file_id,id)`：按图片读取最近评论。
 - `idx_files_owner_content_sha256(owner_id,content_sha256)`：只覆盖未删除且哈希非空的文件，保证同一所有者有效内容唯一。
+- `.thumbnail-cache` 不属于 SQLite 表；它是由受保护缩略图接口按需生成的可再生派生缓存，丢失时可重新生成，不能替代 `files` 记录或上传原文件。
 - 聊天、访问日志、用户部门角色等索引以 `sqlite_store.go` 为权威来源，变更时同步本文。
+
+## 互动与删除语义
+
+`public_file_likes` 对 `(file_id,user_id)` 使用复合主键，点赞接口因此是幂等切换；`public_file_comments.content` 保存去首尾空白的纯文本，最长 500 个 Unicode 字符，读取按文件 ID 返回最新 100 条。文件永久删除或用户删除时，外键级联清理互动记录；软删除期间原记录和互动数据仍可恢复。
 
 所有时间戳使用 repository 统一文本格式保存。`storage_name`、`stored_name`、密码哈希、会话 ID 和物理路径仅供服务端使用，不得作为公开 URL 或公开响应字段返回。

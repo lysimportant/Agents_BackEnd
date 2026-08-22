@@ -364,6 +364,16 @@ ps -o user,group,pid,args -C collector-host-agent
 
 输出中的 `USER` 和 `GROUP` 应为 `root`。root 运行会让部署机直连具备整台主机的读写权限，只应在可信的超级管理员环境启用；仍然不要给后端容器添加 `privileged`、Docker Socket 或宿主机根目录挂载。
 
+### 7.4 部署机直连与 SSH 端口
+
+管理前端的“部署机直连”使用宿主机上的 `collector-host-agent` 主动建立 WebSocket，不是浏览器直接 SSH 到服务器，因此不需要开放或使用 `22` 端口。代理与后端在同一台宿主机时，优先使用：
+
+```dotenv
+HOST_AGENT_SERVER_URL=ws://127.0.0.1:30003/api/server/host-agent
+```
+
+如果代理通过 Nginx 访问后端，则使用后端域名的 `wss://` 地址，并确保 Nginx 转发 WebSocket。只有管理前端的普通“SSH”连接模式才需要目标主机的 SSH 端口（默认 `22`，也可以是自定义端口）；该连接由后端访问目标主机，浏览器不直接访问目标主机的 `22` 端口。
+
 ## 8. 日常更新
 
 更新前先确认容器状态和工作区：
@@ -375,7 +385,7 @@ git status --short
 git log -1 --oneline
 ```
 
-拉取并重建：
+拉取最新代码并重建：
 
 ```bash
 git pull --ff-only origin main
@@ -383,6 +393,50 @@ docker compose config --quiet
 docker compose up -d --build
 docker compose ps
 ```
+
+如果代码已经通过其他方式更新到服务器，并且当前目录就是 `/opt/Agents_BackEnd`，可以直接执行：
+
+```bash
+docker compose up -d --build
+```
+
+`git pull --ff-only origin main` 只负责更新源码，`docker compose config --quiet` 只负责提前检查配置；两者都不是镜像构建的必需步骤。`docker compose up -d --build` 会使用当前目录源码重建需要更新的镜像并后台启动 Compose 服务。不要默认添加 `--remove-orphans`，它可能删除同一 Compose 项目中但不在当前文件声明的其他容器。
+
+### 8.1 防止 B 端终端断开导致构建中断
+
+`-d` 只会让容器在启动后脱离终端，镜像构建过程仍然运行在当前 shell 中。如果后端容器重启会使 B 端 WebSocket 断开，建议把部署任务交给宿主机 `systemd`：
+
+```bash
+deploy_unit="agents-deploy-$(date +%Y%m%d-%H%M%S)"
+
+systemd-run \
+  --unit="$deploy_unit" \
+  --description="Agents_BackEnd deployment" \
+  --working-directory=/opt/Agents_BackEnd \
+  --property=Type=oneshot \
+  --property=TimeoutStartSec=infinity \
+  --remain-after-exit \
+  --no-block \
+  /bin/bash -lc '
+    set -Eeuo pipefail
+    git pull --ff-only origin main
+    docker compose config --quiet
+    docker compose up -d --build
+    docker compose ps
+  '
+
+echo "部署单元：$deploy_unit"
+```
+
+正常提交后终端只会显示 `Running as unit: ...service` 并返回提示符，不应继续显示 BuildKit 构建输出。命令提交后即可关闭 B 端终端；构建和容器重建由宿主机服务继续执行。动态单元名可以避免上一次部署仍在运行时发生名称冲突。重新连接后使用实际输出的单元名称检查结果：
+
+```bash
+journalctl -u agents-deploy-实际时间戳.service -n 200 --no-pager
+cd /opt/Agents_BackEnd
+docker compose ps
+```
+
+`--remain-after-exit` 会保留任务状态，便于查看 `systemctl status` 和 `journalctl`。该方案可以抵抗 B 端、后端或 Compose 容器重启；如果整台 Linux 主机发生真正的系统重启，正在执行的构建仍会中断，需要另行配置持久化部署服务或 CI/CD 重试。
 
 如果本次更新包含 `backend/cmd/host-agent/`、`backend/Dockerfile.host-agent` 或 `deploy/host-agent/`，重新构建并安装代理二进制，然后执行：
 

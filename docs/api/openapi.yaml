@@ -372,6 +372,12 @@ paths:
               required: [file]
               properties:
                 file: { type: string, format: binary }
+                displayName: { type: string, description: 管理端展示名称；为空时使用原始文件名 }
+                category: { type: string, description: 管理端分类 }
+                description: { type: string, description: 文件说明 }
+                tags: { type: string, description: 逗号或分号分隔的标签；最多 12 个，每个最多 24 个 Unicode 字符 }
+                isPrivate: { type: boolean, default: false, description: 是否私密 }
+                is18r: { type: boolean, default: false, description: 是否标记为 18R }
       responses:
         '201': { description: 文件已保存且元数据已持久化；文件管理接口不设置应用层单文件大小上限。 }
         '409':
@@ -696,6 +702,11 @@ paths:
       summary: 更新文件元数据
       security: [{ cookieSession: [] }]
       parameters: [{ $ref: '#/components/parameters/NumericID' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FileMetadataRequest' }
       responses: { '200': { description: 文件元数据更新成功。 } }
     delete:
       tags: [文件]
@@ -920,6 +931,19 @@ components:
           type: array
           maxItems: 100
           items: { $ref: '#/components/schemas/PublicFileComment' }
+    FileMetadataRequest:
+      type: object
+      required: [displayName]
+      properties:
+        displayName: { type: string, description: 管理端展示名称 }
+        category: { type: string, description: 文件分类 }
+        description: { type: string, description: 文件说明 }
+        tags:
+          type: array
+          maxItems: 12
+          items: { type: string, maxLength: 24, description: '去首尾空白、去前导 # 后按不区分大小写去重' }
+        isPrivate: { type: boolean }
+        is18r: { type: boolean }
     LoginRequest:
       type: object
       required: [username, password]

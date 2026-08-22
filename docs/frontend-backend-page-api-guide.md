@@ -245,6 +245,15 @@ C 端页面使用 `/{locale}/...` 真实路由。新增或修改公开功能时�
 
 图片页虽然不显示分页按钮，仍使用后端 `page/pageSize` 作为内部批次协议。接近底部时通过 `IntersectionObserver` 加载下一批；追加数据不得重新分配已加载卡片的瀑布流列。
 
+### 文件管理与图片互动的现有契约
+
+- `POST /api/files` 使用 `multipart/form-data`，字段为 `file`、`displayName`、`category`、`description`、`tags`、`isPrivate` 和 `is18r`；一次上传一个 multipart 请求，但 B 端可连续发送用户一次选择的多个文件。
+- 文件管理没有应用层单文件大小上限。`router.MaxMultipartMemory = 32 MiB` 只是 multipart 解析内存阈值，不能在前端或文档中当作文件大小限制；Nginx 生产配置也应使用 `client_max_body_size 0`。
+- 前端可过滤同批次重复选择，后端按同一所有者的完整 SHA-256 内容哈希权威去重，重复时返回 `409` 和 `code: DUPLICATE_FILE`。上传失败的文件应保留在待上传列表，方便重试。
+- 标签由后端规范化：去首尾空白、去掉前导 `#`、不区分大小写去重，最多 12 个，每个最多 24 个 Unicode 字符。
+- `PUT /api/files/{id}` 使用 JSON 元数据请求；文件删除默认软删除，永久删除必须由用户明确确认。缩略图缓存属于可再生派生文件，不改变权限和删除语义。
+- C 端预览调用 `/api/public/files/{id}/interactions` 读取互动，点赞与评论分别调用公开写接口；评论为最多 500 个 Unicode 字符的纯文本，读取最多返回最近 100 条。
+
 C 端验证命令：
 
 ```powershell

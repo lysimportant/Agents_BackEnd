@@ -65,7 +65,7 @@ npm run dev
 
 浏览器打开 `http://localhost:3001`，根地址会按语言偏好跳转，`/{locale}` 当前继续跳转到 `/{locale}/images`。支持 `zh-CN`、`en-US`、`ja-JP`。
 
-C 端图片页没有分页按钮。页面内部仍按后端分页批次读取数据，接近底部时自动预加载下一批，并显示加载或重试状态。缩略图用于低流量占位，中图用于瀑布流，打开预览后才读取原图。
+C 端图片页没有分页按钮。页面内部仍按后端分页批次读取数据，默认每批 24 条、最多 50 条，接近底部时自动预加载下一批，并显示加载或重试状态。缩略图用于低流量占位，中图用于瀑布流，打开预览后才读取当前原图；已加载卡片不会因离开视野而卸载。
 
 ## 五、第一次登录
 
@@ -97,9 +97,14 @@ C 端也可以复用后端登录会话。匿名访问不会看到 18R 内容；�
 - 前端过滤同一批选择中的重复文件。
 - 后端按“同一所有者 + SHA-256 内容哈希”过滤有效重复文件，后端结果是权威判断。
 - 文件管理上传不设置应用层单文件大小上限，前端上传请求也不主动设置超时。
+- 标签会去首尾空白、移除前导 `#` 并按不区分大小写去重，最多 12 个、每个最多 24 个 Unicode 字符；同一文件可在元数据编辑时更新标签。
 - 预览、下载、刷新、编辑元数据和将图片设为登录背景。
 - 默认软删除到回收站，确认后才可永久删除物理文件。
 - 超级管理员查看内部聊天和客服聊天附件分类。
+
+文件管理图片缩略图使用受保护的 `/api/files/:id/thumbnail`。`.thumbnail-cache` 仅是可再生成的派生缓存，可能占用磁盘但不属于业务文件；缓存缺失时会重新生成，不要手工清理正式上传目录。
+
+C 端图片预览支持复制原图 URL、下载原图、点赞切换、标签和评论。互动读取可匿名，点赞与评论要求登录；评论去首尾空白后最多 500 个 Unicode 字符，最新列表最多返回 100 条。
 
 聊天和文章附件仍保留各自的数量、大小或类型限制，不能把文件管理的无限制规则套用到其他接口。
 
@@ -116,6 +121,42 @@ C 端文章公开条件是非私密且状态为“已发布”。C 端文件公�
 内部聊天 `/chat` 与 Socket 客服是两套独立系统，状态、WebSocket 和附件权限不得混用。历史消息浏览时，只有用户接近底部或主动查看最新消息才自动跟随新消息。
 
 Header 中的 SSH 工作区对所有有效登录用户开放。只有 `roleCode=super-admin` 可以选择“部署机直连”；该入口连接 Linux 宿主机上的独立 root systemd 代理，因此具备 root 文件和命令权限。
+
+### Compose 更新不中断
+
+如果直接在 B 端终端执行 `docker compose up -d --build`，后端容器重建时 WebSocket/PTY 可能断开。生产更新使用宿主机动态 systemd 单元：
+
+```bash
+deploy_unit="agents-deploy-$(date +%Y%m%d-%H%M%S)"
+
+systemd-run \
+  --unit="$deploy_unit" \
+  --description="Agents_BackEnd deployment" \
+  --working-directory=/opt/Agents_BackEnd \
+  --property=Type=oneshot \
+  --property=TimeoutStartSec=infinity \
+  --remain-after-exit \
+  --no-block \
+  /bin/bash -lc '
+    set -Eeuo pipefail
+    git pull --ff-only origin main
+    docker compose config --quiet
+    docker compose up -d --build
+    docker compose ps
+  '
+
+echo "部署单元：$deploy_unit"
+```
+
+终端断开后查看结果：
+
+```bash
+systemctl status "$deploy_unit" --no-pager
+journalctl -u "$deploy_unit" -n 100 --no-pager
+docker compose ps
+```
+
+看到 `Finished ...service` 且 backend healthy、frontend/portal started、redis healthy，才算更新完成。该部署机直连模式不需要 SSH/22 端口；普通 SSH 工作区仍由后端连接目标主机 SSH 端口。
 
 ## 八、验证和生产构建
 
