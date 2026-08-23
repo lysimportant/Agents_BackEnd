@@ -50,6 +50,13 @@
     "password": "Password",
     "loginTitle": "Log in",
     "loginFailed": "Login failed, please check your username and password",
+    "register": "Sign up",
+    "registerTitle": "Create account",
+    "registerFailed": "Registration failed, please try again",
+    "email": "Email",
+    "verificationCode": "Email code",
+    "sendCode": "Send code",
+    "codeSent": "Code sent, please check your email",
     "r18": "18R",
     "r18Label": "Show 18R content"
   },

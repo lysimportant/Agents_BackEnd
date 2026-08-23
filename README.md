@@ -123,6 +123,8 @@ docker compose up --build
 登录账号由初始化数据或超级管理员创建，登录页不会预填任何账号或密码。密码使用 bcrypt 哈希存储，API 响应不会返回 `password` 或 `passwordHash`。
 
 - `POST /api/auth/login`: 登录并创建会话，Body 包含 `username` 和 `password`
+- `POST /api/auth/register/code`: 向待注册邮箱发送验证码，Body 包含 `username` 和 `email`
+- `POST /api/auth/register`: 校验验证码并创建最低权限 `viewer` 普通用户，Body 包含 `username`、`password`、`email` 和 `code`
 - `GET /api/auth/session`: 校验并恢复当前会话
 - `POST /api/auth/logout`: 退出登录并清除会话
 

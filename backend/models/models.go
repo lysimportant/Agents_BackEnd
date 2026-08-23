@@ -242,6 +242,26 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+// RegisterCodeRequest 表示申请注册邮箱验证码的请求体。
+type RegisterCodeRequest struct {
+	// Username 表示待注册账号。
+	Username string `json:"username" binding:"required"`
+	// Email 表示待验证邮箱。
+	Email string `json:"email" binding:"required"`
+}
+
+// RegisterRequest 表示完成注册的请求体。
+type RegisterRequest struct {
+	// Username 表示待注册账号。
+	Username string `json:"username" binding:"required"`
+	// Password 表示待注册密码。
+	Password string `json:"password" binding:"required"`
+	// Email 表示待验证邮箱。
+	Email string `json:"email" binding:"required"`
+	// Code 表示邮箱验证码。
+	Code string `json:"code" binding:"required"`
+}
+
 // Session 标识已登录用户及其会话过期时间。
 type Session struct {
 	// UserID 表示用户标识。

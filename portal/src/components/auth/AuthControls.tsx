@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Eye, LogIn, LogOut } from 'lucide-react';
+import { Eye, LogIn, LogOut, UserPlus } from 'lucide-react';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { LoginModal } from './LoginModal';
+import { RegisterModal } from './RegisterModal';
 import { cn } from '@/utils/cn';
 
 /** AuthControls 在导航中提供登录/退出与 18R 内容开关。 */
@@ -12,6 +13,7 @@ export function AuthControls() {
   const t = useTranslations('auth');
   const { isLoggedIn, isR18Enabled, username, logout, toggleR18 } = useAuth();
   const [loginOpen, setLoginOpen] = useState(false);
+  const [registerOpen, setRegisterOpen] = useState(false);
 
   if (!isLoggedIn) {
     return (
@@ -25,7 +27,17 @@ export function AuthControls() {
           <LogIn className="h-4 w-4" aria-hidden="true" />
           <span className="text-sm font-medium">{t('login')}</span>
         </button>
+        <button
+          type="button"
+          onClick={() => setRegisterOpen(true)}
+          aria-label={t('register')}
+          className="flex h-11 items-center gap-1.5 rounded-full px-3 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <UserPlus className="h-4 w-4" aria-hidden="true" />
+          <span className="text-sm font-medium">{t('register')}</span>
+        </button>
         {loginOpen ? <LoginModal onClose={() => setLoginOpen(false)} /> : null}
+        {registerOpen ? <RegisterModal onClose={() => setRegisterOpen(false)} onRegistered={() => setLoginOpen(true)} /> : null}
       </>
     );
   }

@@ -46,7 +46,7 @@ func Setup(router *gin.Engine, appStore Store, authService *auth.Service, passwo
 	api := router.Group("/api")
 	// socketHandler 保存实时连接。
 	socketHandler := handlers.NewSocketHandler(appStore, cfg.UploadDir)
-	registerAuthRoutes(api, handlers.NewAuthHandler(appStore, authService, socketHandler))
+	registerAuthRoutes(api, handlers.NewAuthHandler(appStore, authService, passwordCodes, socketHandler))
 	registerPublicSocketRoutes(api, socketHandler)
 	registerPublicRoutes(api, handlers.NewPublicHandler(appStore, cfg.UploadDir, authService))
 	// serverHandler 由公开代理通道和登录用户终端共享同一个会话转发中心。

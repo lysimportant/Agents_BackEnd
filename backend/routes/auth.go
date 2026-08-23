@@ -10,6 +10,8 @@ func registerAuthRoutes(api *gin.RouterGroup, handler *handlers.AuthHandler) {
 	// authRoutes 保存认证。
 	authRoutes := api.Group("/auth")
 	authRoutes.POST("/login", handler.Login)
+	authRoutes.POST("/register/code", handler.RegisterCode)
+	authRoutes.POST("/register", handler.Register)
 	authRoutes.GET("/session", handler.GetSession)
 	authRoutes.POST("/logout", handler.Logout)
 }

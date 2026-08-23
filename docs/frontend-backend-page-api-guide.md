@@ -20,7 +20,7 @@
 
 管理后台目前只有根页面 `/`。新增管理功能通常不是创建 `/products`，而是让 `app/page.tsx` 根据 `activePage === 'products'` 渲染 `ProductsPage`。
 
-C 端 `portal/` 使用真实 App Router URL，不使用 `activePage`。公开页面位于 `portal/app/[locale]/`，内容请求集中在 `portal/src/services/publicApi.ts`，只能读取 `/api/public/*`；登录、会话恢复和退出是唯一允许调用的认证接口。
+C 端 `portal/` 使用真实 App Router URL，不使用 `activePage`。公开页面位于 `portal/app/[locale]/`，内容请求集中在 `portal/src/services/publicApi.ts`，只能读取 `/api/public/*`；登录、会话恢复、退出和注册使用 `/api/auth/*` 公开认证接口。
 
 ## 二、后端开发顺序
 

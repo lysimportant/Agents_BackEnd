@@ -22,8 +22,12 @@ C 端内容读取和图片互动只能调用 `/api/public/*`。为实现登录�
 - `POST /api/auth/login`
 - `GET /api/auth/session`
 - `POST /api/auth/logout`
+- `POST /api/auth/register/code`
+- `POST /api/auth/register`
 
 C 端不得调用后台文章、文件、用户、权限或终端写接口。公开图片点赞和评论写入由 `/api/public/*` 在后端校验登录会话；后端 HttpOnly Cookie 是唯一会话凭据，浏览器不得保存会话 ID、密码或访问令牌。
+
+注册通过公开认证接口完成：先申请邮箱验证码，再提交账号、密码、邮箱和验证码。后端验证成功后创建 B 端 `viewer`（普通用户）角色账户；C 端不保存会话 ID，注册成功后使用普通登录流程建立会话。
 
 客服开关 `NEXT_PUBLIC_ENABLE_CUSTOMER_CHAT` 已保留，但当前核心门户页面不依赖客服组件。后续启用时只能复用 Socket 客服边界，不得调用 `/api/internal-chat/*`。
 

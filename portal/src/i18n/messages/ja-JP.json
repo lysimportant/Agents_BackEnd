@@ -50,6 +50,13 @@
     "password": "パスワード",
     "loginTitle": "ログイン",
     "loginFailed": "ログインに失敗しました。アカウントとパスワードを確認してください",
+    "register": "登録",
+    "registerTitle": "アカウント登録",
+    "registerFailed": "登録に失敗しました。もう一度お試しください",
+    "email": "メールアドレス",
+    "verificationCode": "メール認証コード",
+    "sendCode": "コード送信",
+    "codeSent": "コードを送信しました。メールを確認してください",
     "r18": "18R",
     "r18Label": "18Rコンテンツを表示"
   },
