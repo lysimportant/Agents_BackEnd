@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState } from '@/components/common/EmptyState';
 import { TiltImageCard } from './TiltImageCard';
 import { ImagePreviewOverlay } from './ImagePreviewOverlay';
@@ -69,6 +69,8 @@ export function ImageGallery({
 }) {
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [columnCount, setColumnCount] = useState(1);
+  // tagOverrides 保存本次浏览期间后端返回的最新标签，避免关闭预览后回退到旧列表值。
+  const [tagOverrides, setTagOverrides] = useState<Record<number, string[]>>({});
   const triggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -89,10 +91,21 @@ export function ImageGallery({
     };
   }, []);
 
-  const imageColumns = useMemo(
-    () => distributeMasonryImages(images, columnCount),
-    [columnCount, images],
+  /** displayedImages 合并本次浏览期间由门户新增的权威标签，供卡片重开预览时继续显示。 */
+  const displayedImages = useMemo(
+    () => images.map((image) => ({ ...image, tags: tagOverrides[image.id] ?? image.tags })),
+    [images, tagOverrides],
   );
+
+  const imageColumns = useMemo(
+    () => distributeMasonryImages(displayedImages, columnCount),
+    [columnCount, displayedImages],
+  );
+
+  /** 更新指定图片的权威标签，并保持其他图片的本地覆盖结果。 */
+  const updateImageTags = useCallback((imageID: number, tags: string[]) => {
+    setTagOverrides((currentOverrides) => ({ ...currentOverrides, [imageID]: tags }));
+  }, []);
 
   if (images.length === 0) {
     return <EmptyState title={emptyTitle} description={emptyDescription} />;
@@ -120,9 +133,10 @@ export function ImageGallery({
 
       {previewIndex !== null ? (
         <ImagePreviewOverlay
-          images={images}
+          images={displayedImages}
           index={previewIndex}
           onIndexChange={setPreviewIndex}
+          onTagsChange={updateImageTags}
           onClose={() => setPreviewIndex(null)}
           returnFocusRef={triggerRef}
         />

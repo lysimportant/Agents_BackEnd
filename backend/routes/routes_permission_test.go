@@ -74,6 +74,60 @@ func loginCookie(t *testing.T, router *gin.Engine, username, password string) st
 	return ""
 }
 
+// TestPublicFileTagWriteRequiresLogin 验证门户标签写入要求有效会话且只追加规范标签。
+func TestPublicFileTagWriteRequiresLogin(t *testing.T) {
+	// router、store 保存隔离路由与数据库仓库。
+	router, store, _ := setupTestRouter(t)
+	// canLogin 表示门户标签测试账号允许登录。
+	canLogin := true
+	// tagUser、createMessage 保存测试账号与创建结果。
+	tagUser, createMessage := store.CreateUser(models.UserRequest{
+		Username: "portal-tagger",
+		Name:     "门户标签用户",
+		Role:     "普通用户",
+		Status:   "在岗",
+		CanLogin: &canLogin,
+	}, auth.MustHashPassword("pass1234"))
+	if createMessage != "" {
+		t.Fatalf("create portal tag user: %s", createMessage)
+	}
+	// publicImage 保存允许门户追加标签的公开图片。
+	publicImage := store.CreateFile(models.ManagedFile{
+		DisplayName: "门户标签图片.png", OriginalName: "门户标签图片.png", ContentType: "image/png",
+		StorageName: "portal-tag-image.png", OwnerID: tagUser.ID, Tags: []string{"已有标签"},
+	})
+	// requestBody 保存门户追加标签请求正文。
+	requestBody := []byte(`{"tag":"#新标签"}`)
+	// anonymousRequest、anonymousResponse 保存匿名写入请求与响应。
+	anonymousRequest := httptest.NewRequest(http.MethodPost, "/api/public/files/"+strconv.Itoa(publicImage.ID)+"/tags", bytes.NewReader(requestBody))
+	anonymousRequest.Header.Set("Content-Type", "application/json")
+	anonymousResponse := httptest.NewRecorder()
+	router.ServeHTTP(anonymousResponse, anonymousRequest)
+	if anonymousResponse.Code != http.StatusUnauthorized || !strings.Contains(anonymousResponse.Body.String(), "login_required") {
+		t.Fatalf("anonymous tag status=%d body=%s", anonymousResponse.Code, anonymousResponse.Body.String())
+	}
+
+	// sessionID 保存测试账号登录后生成的 HttpOnly Cookie 值。
+	sessionID := loginCookie(t, router, tagUser.Username, "pass1234")
+	// authenticatedRequest、authenticatedResponse 保存已登录标签写入请求与响应。
+	authenticatedRequest := httptest.NewRequest(http.MethodPost, "/api/public/files/"+strconv.Itoa(publicImage.ID)+"/tags", bytes.NewReader(requestBody))
+	authenticatedRequest.Header.Set("Content-Type", "application/json")
+	authenticatedRequest.AddCookie(&http.Cookie{Name: "sessionId", Value: sessionID})
+	authenticatedResponse := httptest.NewRecorder()
+	router.ServeHTTP(authenticatedResponse, authenticatedRequest)
+	if authenticatedResponse.Code != http.StatusOK {
+		t.Fatalf("authenticated tag status=%d body=%s", authenticatedResponse.Code, authenticatedResponse.Body.String())
+	}
+	// tagResponse 保存接口返回的权威标签与实际新增状态。
+	var tagResponse models.PublicFileTagResponse
+	if decodeErr := json.Unmarshal(authenticatedResponse.Body.Bytes(), &tagResponse); decodeErr != nil {
+		t.Fatalf("decode tag response: %v", decodeErr)
+	}
+	if !tagResponse.Added || !reflect.DeepEqual(tagResponse.Tags, []string{"已有标签", "新标签"}) {
+		t.Fatalf("unexpected tag response: %+v", tagResponse)
+	}
+}
+
 func TestPrivateArticleVisibilityAndCanLogin(t *testing.T) {
 	router, store, _ := setupTestRouter(t)
 

@@ -135,6 +135,20 @@ type PublicFileCommentRequest struct {
 	Content string `json:"content" binding:"required"`
 }
 
+// PublicFileTagRequest 表示登录用户为公开图片追加一个标签的请求。
+type PublicFileTagRequest struct {
+	// Tag 待追加标签，服务端统一去空白、去井号前缀并应用长度边界。
+	Tag string `json:"tag" binding:"required"`
+}
+
+// PublicFileTagResponse 表示追加标签后的权威标签列表与实际写入状态。
+type PublicFileTagResponse struct {
+	// Tags 图片当前全部标签，包含管理端与门户端已写入的标签。
+	Tags []string `json:"tags"`
+	// Added 表示本次标签是否为新标签；重复或达到数量上限时为 false。
+	Added bool `json:"added"`
+}
+
 // PublicCategory 表示公开分类的聚合信息。
 type PublicCategory struct {
 	// Name 分类名称。

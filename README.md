@@ -110,6 +110,7 @@ docker compose up --build
 | GET | `/api/public/files/:id/download` | 公开文件下载 |
 | GET | `/api/public/files/:id/interactions` | 图片点赞数量、当前用户状态和最近评论 |
 | POST | `/api/public/files/:id/like` | 登录用户点赞或取消点赞 |
+| POST | `/api/public/files/:id/tags` | 登录用户为公开图片追加标签，不覆盖已有标签 |
 | POST | `/api/public/files/:id/comments` | 登录用户发送最多 500 字符的纯文本评论 |
 | GET | `/api/public/categories` | 公开分类聚合 |
 | GET | `/api/public/site-summary` | 站点聚合概览 |

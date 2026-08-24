@@ -558,3 +558,50 @@ func (s *SQLiteStore) CreatePublicFileComment(fileID, userID int, content string
 	comment.CreatedAt = parseTime(storedCreatedAt)
 	return comment, true
 }
+
+// AppendPublicFileTag 为登录用户可见的公开图片追加标签，并保留已有标签与统一数量边界。
+func (s *SQLiteStore) AppendPublicFileTag(fileID, userID int, tag string, includeR18 bool) ([]string, bool, bool) {
+	if userID <= 0 {
+		return []string{}, false, false
+	}
+	// transaction、beginErr 保存标签合并事务与开启错误。
+	transaction, beginErr := s.db.Begin()
+	if beginErr != nil {
+		return []string{}, false, false
+	}
+	defer transaction.Rollback()
+	// encodedTags 保存目标公开图片当前的 JSON 标签文本。
+	var encodedTags string
+	if queryErr := transaction.QueryRow(
+		"SELECT f.tags FROM files f WHERE f.id=? AND "+publicFileCondition(includeR18)+" AND f.content_type LIKE 'image/%'",
+		fileID,
+	).Scan(&encodedTags); queryErr != nil {
+		return []string{}, false, false
+	}
+	// existingTags 保存管理端与门户端此前已经写入的规范标签。
+	existingTags := utils.DecodeFileTags(encodedTags)
+	// mergedTags 保存追加候选标签并再次执行去重和数量限制后的权威列表。
+	mergedTags := utils.NormalizeFileTags(append(append([]string{}, existingTags...), tag))
+	// added 表示合并后标签数量确实增加，重复或已满时不执行写入。
+	added := len(mergedTags) > len(existingTags)
+	if !added {
+		return existingTags, false, true
+	}
+	// updateResult、updateErr 保存标签元数据更新结果与错误。
+	updateResult, updateErr := transaction.Exec(
+		`UPDATE files SET tags=?,updated_at=? WHERE id=? AND deleted_at IS NULL`,
+		utils.EncodeFileTags(mergedTags), timeText(time.Now().UTC()), fileID,
+	)
+	if updateErr != nil {
+		return []string{}, false, false
+	}
+	// affectedRows、affectedErr 保存更新命中的图片数量与读取错误。
+	affectedRows, affectedErr := updateResult.RowsAffected()
+	if affectedErr != nil || affectedRows == 0 {
+		return []string{}, false, false
+	}
+	if commitErr := transaction.Commit(); commitErr != nil {
+		return []string{}, false, false
+	}
+	return mergedTags, true, true
+}

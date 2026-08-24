@@ -64,9 +64,11 @@ type PublicStore interface {
 	TogglePublicFileLike(fileID, userID int, includeR18 bool) (models.PublicFileInteraction, bool)
 	// CreatePublicFileComment 保存登录用户发送的图片评论。
 	CreatePublicFileComment(fileID, userID int, content string, includeR18 bool) (models.PublicFileComment, bool)
+	// AppendPublicFileTag 为登录用户可见的公开图片追加一个标签。
+	AppendPublicFileTag(fileID, userID int, tag string, includeR18 bool) ([]string, bool, bool)
 }
 
-// PublicHandler 处理 C 端公开只读接口。
+// PublicHandler 处理 C 端公开内容读取与登录用户互动接口。
 type PublicHandler struct {
 	// store 保存公开数据访问仓库。
 	store PublicStore
@@ -325,6 +327,40 @@ func (h *PublicHandler) CreateFileComment(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"item": comment})
+}
+
+// AppendFileTag 处理 POST /api/public/files/:id/tags，要求登录并为公开图片追加一个规范标签。
+func (h *PublicHandler) AppendFileTag(c *gin.Context) {
+	// userID 保存当前登录用户编号。
+	userID := h.currentUserID(c)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "login_required", "error": "登录后才能添加标签"})
+		return
+	}
+	// fileID、ok 保存经过校验的公开文件编号。
+	fileID, ok := parsePublicFileID(c)
+	if !ok {
+		return
+	}
+	// request 保存单个标签请求正文。
+	var request models.PublicFileTagRequest
+	if bindErr := c.ShouldBindJSON(&request); bindErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_tag", "error": "请输入标签"})
+		return
+	}
+	// normalizedTags 保存按文件标签统一规则清理后的单个标签。
+	normalizedTags := utils.NormalizeFileTags([]string{request.Tag})
+	if len(normalizedTags) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_tag", "error": "请输入标签"})
+		return
+	}
+	// tags、added、found 保存追加后的权威标签、是否新增及目标图片可见性。
+	tags, added, found := h.store.AppendPublicFileTag(fileID, userID, normalizedTags[0], h.includeR18(c))
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"code": "file_not_found", "error": "图片不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, models.PublicFileTagResponse{Tags: tags, Added: added})
 }
 
 // PreviewFile 处理 GET /api/public/files/:id/preview 返回内联文件预览。

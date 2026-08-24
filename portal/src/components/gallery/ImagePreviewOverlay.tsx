@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { Check, ChevronLeft, ChevronRight, Copy, Download, Heart, LoaderCircle, Maximize2, Minimize2, Send, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Copy, Download, Heart, LoaderCircle, Maximize2, Minimize2, Plus, Send, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { useAuth } from '@/features/auth/AuthProvider';
-import { createImageComment, getImageInteraction, toggleImageLike } from '@/services/publicApi';
+import { addImageTag, createImageComment, getImageInteraction, toggleImageLike } from '@/services/publicApi';
 import type { PublicFileInteraction } from '@/types/publicContent';
 import type { GalleryImage } from './types';
 
@@ -13,12 +13,14 @@ export function ImagePreviewOverlay({
   images,
   index,
   onIndexChange,
+  onTagsChange,
   onClose,
   returnFocusRef,
 }: {
   images: GalleryImage[];
   index: number;
   onIndexChange: (index: number) => void;
+  onTagsChange: (imageID: number, tags: string[]) => void;
   onClose: () => void;
   returnFocusRef: React.RefObject<HTMLElement | null>;
 }) {
@@ -28,6 +30,8 @@ export function ImagePreviewOverlay({
   const { isLoggedIn } = useAuth();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const copiedResetTimerRef = useRef<number | null>(null);
+  // messageResetTimerRef 保存临时操作提示的关闭计时器，连续提示时用于重置时长。
+  const messageResetTimerRef = useRef<number | null>(null);
   const activeImageIDRef = useRef(images[index]?.id ?? 0);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -36,7 +40,13 @@ export function ImagePreviewOverlay({
   const [isInteractionLoading, setIsInteractionLoading] = useState(true);
   const [interactionError, setInteractionError] = useState('');
   const [commentContent, setCommentContent] = useState('');
+  // tagContent 保存当前图片待提交的单个标签输入。
+  const [tagContent, setTagContent] = useState('');
+  // portalMessage 保存匿名登录提示或标签写入结果的短暂可见文案。
+  const [portalMessage, setPortalMessage] = useState('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  // isSubmittingTag 防止同一个标签在请求完成前被重复提交。
+  const [isSubmittingTag, setIsSubmittingTag] = useState(false);
   const [isTogglingLike, setIsTogglingLike] = useState(false);
   const dragStart = useRef<{ x: number; y: number; startX: number; startY: number; scaled: boolean } | null>(null);
 
@@ -56,7 +66,10 @@ export function ImagePreviewOverlay({
     setIsInteractionLoading(true);
     setInteractionError('');
     setCommentContent('');
+    setTagContent('');
+    setPortalMessage('');
     setIsSubmittingComment(false);
+    setIsSubmittingTag(false);
     setIsTogglingLike(false);
     activeImageIDRef.current = images[nextIndex]?.id ?? 0;
     onIndexChange(nextIndex);
@@ -77,6 +90,18 @@ export function ImagePreviewOverlay({
   const resetTransform = useCallback(() => {
     setScale(1);
     setOffset({ x: 0, y: 0 });
+  }, []);
+
+  /** 显示短暂的门户操作 message，并让连续提示刷新停留时间。 */
+  const showPortalMessage = useCallback((message: string) => {
+    setPortalMessage(message);
+    if (messageResetTimerRef.current !== null) {
+      window.clearTimeout(messageResetTimerRef.current);
+    }
+    messageResetTimerRef.current = window.setTimeout(() => {
+      setPortalMessage('');
+      messageResetTimerRef.current = null;
+    }, 2200);
   }, []);
 
   // 切换图片时在渲染阶段重置缩放与位移（React 官方“根据上次渲染状态调整”模式）。
@@ -104,6 +129,9 @@ export function ImagePreviewOverlay({
     return () => {
       if (copiedResetTimerRef.current !== null) {
         window.clearTimeout(copiedResetTimerRef.current);
+      }
+      if (messageResetTimerRef.current !== null) {
+        window.clearTimeout(messageResetTimerRef.current);
       }
     };
   }, []);
@@ -234,8 +262,12 @@ export function ImagePreviewOverlay({
   /** 发送当前评论，并将后端返回的新评论追加到已加载列表。 */
   const submitCurrentComment = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!isLoggedIn) {
+      showPortalMessage(t('loginToComment'));
+      return;
+    }
     const normalizedContent = commentContent.trim();
-    if (!isLoggedIn || !normalizedContent || isSubmittingComment) {
+    if (!normalizedContent || isSubmittingComment) {
       return;
     }
     setIsSubmittingComment(true);
@@ -259,6 +291,46 @@ export function ImagePreviewOverlay({
     } finally {
       if (activeImageIDRef.current === requestFileID) {
         setIsSubmittingComment(false);
+      }
+    }
+  };
+
+  /** 追加当前图片标签，并用后端返回值刷新本次浏览中的权威标签。 */
+  const submitCurrentTag = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!isLoggedIn) {
+      showPortalMessage(t('loginToAddTag'));
+      return;
+    }
+    // normalizedTag 去除用户习惯输入的井号前缀，并按 Unicode 字符限制提交内容。
+    const normalizedTag = Array.from(tagContent.trim().replace(/^#+/, '').trim()).slice(0, 24).join('');
+    if (!normalizedTag || isSubmittingTag) {
+      return;
+    }
+    setIsSubmittingTag(true);
+    // requestFileID 标识本次标签所属图片，避免切图后旧响应覆盖新图片。
+    const requestFileID = current.id;
+    try {
+      // tagResponse 保存后端合并后的权威标签与实际新增状态。
+      const tagResponse = await addImageTag(requestFileID, normalizedTag);
+      if (activeImageIDRef.current === requestFileID) {
+        onTagsChange(requestFileID, tagResponse.tags);
+        setTagContent('');
+        // resultMessage 区分成功、重复和达到统一数量上限三种结果。
+        const resultMessage = tagResponse.added
+          ? t('tagAdded')
+          : tagResponse.tags.length >= 12
+            ? t('tagLimitReached')
+            : t('tagAlreadyExists');
+        showPortalMessage(resultMessage);
+      }
+    } catch {
+      if (activeImageIDRef.current === requestFileID) {
+        showPortalMessage(t('tagAddFailed'));
+      }
+    } finally {
+      if (activeImageIDRef.current === requestFileID) {
+        setIsSubmittingTag(false);
       }
     }
   };
@@ -331,6 +403,11 @@ export function ImagePreviewOverlay({
         }
       }}
     >
+      {portalMessage ? (
+        <div className="pointer-events-none fixed left-1/2 top-5 z-[70] max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-lg bg-white px-4 py-2 text-center text-sm font-medium text-black shadow-lg" role="status" aria-live="polite">
+          {portalMessage}
+        </div>
+      ) : null}
       <div className="flex items-center justify-between gap-2 px-4 py-3">
         <p className="truncate text-sm text-white/90">
           {index + 1} / {images.length}
@@ -346,7 +423,7 @@ export function ImagePreviewOverlay({
         </button>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(12rem,38vh)] gap-3 px-4 pb-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-1">
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(15rem,47vh)] gap-3 px-4 pb-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-1">
         <div className="relative flex min-h-0 items-center justify-center overflow-hidden">
           {hasPrevious ? (
             <button
@@ -406,6 +483,33 @@ export function ImagePreviewOverlay({
                 ))}
               </div>
             ) : null}
+            <form className="mt-2 flex items-center gap-2" onSubmit={(event) => void submitCurrentTag(event)}>
+              <label className="sr-only" htmlFor={'image-tag-' + current.id}>{t('tagPlaceholder')}</label>
+              <input
+                id={'image-tag-' + current.id}
+                value={tagContent}
+                onChange={(event) => setTagContent(Array.from(event.target.value).slice(0, 24).join(''))}
+                onFocus={() => {
+                  if (!isLoggedIn) {
+                    showPortalMessage(t('loginToAddTag'));
+                  }
+                }}
+                readOnly={!isLoggedIn}
+                disabled={isSubmittingTag}
+                maxLength={24}
+                placeholder={isLoggedIn ? t('tagPlaceholder') : t('loginToAddTag')}
+                className="min-h-11 min-w-0 flex-1 rounded-lg border border-white/20 bg-black/20 px-3 py-2 text-sm text-white outline-none placeholder:text-white/45 focus:border-white/50 disabled:opacity-60"
+              />
+              <button
+                type="submit"
+                disabled={isSubmittingTag || (isLoggedIn && !tagContent.trim())}
+                aria-label={t('addTag')}
+                title={t('addTag')}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-white/20 text-white transition-colors hover:bg-white/10 disabled:opacity-50"
+              >
+                {isSubmittingTag ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
+              </button>
+            </form>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
             <h2 className="text-sm font-semibold">{t('comments')}</h2>
@@ -424,7 +528,7 @@ export function ImagePreviewOverlay({
                 ))}
               </div>
             ) : (
-              <p className="py-6 text-sm text-white/60">{t('noComments')}</p>
+              <p className="py-3 text-sm text-white/60">{t('noComments')}</p>
             )}
           </div>
           <form className="border-t border-white/15 p-3" onSubmit={(event) => void submitCurrentComment(event)}>
@@ -433,14 +537,20 @@ export function ImagePreviewOverlay({
               id={'image-comment-' + current.id}
               value={commentContent}
               onChange={(event) => setCommentContent(Array.from(event.target.value).slice(0, 500).join(''))}
+              onFocus={() => {
+                if (!isLoggedIn) {
+                  showPortalMessage(t('loginToComment'));
+                }
+              }}
               rows={2}
-              disabled={!isLoggedIn || isSubmittingComment}
+              readOnly={!isLoggedIn}
+              disabled={isSubmittingComment}
               placeholder={isLoggedIn ? t('commentPlaceholder') : t('loginToComment')}
               className="w-full resize-none rounded-lg border border-white/20 bg-black/20 px-3 py-2 text-sm text-white outline-none placeholder:text-white/45 focus:border-white/50 disabled:opacity-60"
             />
             <div className="mt-2 flex items-center justify-between gap-3">
               <span className="text-xs text-white/55">{Array.from(commentContent).length} / 500</span>
-              <button type="submit" disabled={!isLoggedIn || !commentContent.trim() || isSubmittingComment} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-black transition-opacity disabled:opacity-50">
+              <button type="submit" disabled={isSubmittingComment || (isLoggedIn && !commentContent.trim())} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-black transition-opacity disabled:opacity-50">
                 {isSubmittingComment ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
                 {t('sendComment')}
               </button>

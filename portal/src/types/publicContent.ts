@@ -129,6 +129,14 @@ export interface PublicFileInteraction {
   comments: PublicFileComment[];
 }
 
+/** 门户追加图片标签后的权威结果。 */
+export interface PublicFileTagResponse {
+  /** 图片当前全部标签。 */
+  tags: string[];
+  /** 本次请求是否实际增加了新标签。 */
+  added: boolean;
+}
+
 /** 公开分类聚合信息，对应后端 PublicCategory。 */
 export interface PublicCategory {
   /** 分类名称。 */

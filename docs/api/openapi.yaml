@@ -127,6 +127,28 @@ paths:
               schema: { $ref: '#/components/schemas/PublicFileInteraction' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { description: 图片不存在、未公开或被当前 18R 可见性过滤 }
+  /api/public/files/{id}/tags:
+    post:
+      tags: [公开门户]
+      summary: 为公开图片追加标签
+      description: 登录用户可追加一个标签；不会覆盖或删除已有标签，重复标签或达到十二个标签上限时返回 added=false。
+      security: [{ cookieSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublicFileTagRequest' }
+      responses:
+        '200':
+          description: 图片当前权威标签与本次实际新增状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicFileTagResponse' }
+        '400': { description: 标签为空 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: 图片不存在、未公开或被当前 18R 可见性过滤 }
   /api/public/files/{id}/comments:
     post:
       tags: [公开门户]
@@ -938,6 +960,20 @@ components:
       required: [content]
       properties:
         content: { type: string, minLength: 1, maxLength: 500, description: 去除首尾空白后保存的纯文本评论 }
+    PublicFileTagRequest:
+      type: object
+      required: [tag]
+      properties:
+        tag: { type: string, minLength: 1, maxLength: 24, description: '去首尾空白、去前导 # 后按不区分大小写去重' }
+    PublicFileTagResponse:
+      type: object
+      required: [tags, added]
+      properties:
+        tags:
+          type: array
+          maxItems: 12
+          items: { type: string, maxLength: 24 }
+        added: { type: boolean, description: 重复标签或图片已有十二个标签时为 false }
     PublicFileComment:
       type: object
       required: [id, userName, content, createdAt]

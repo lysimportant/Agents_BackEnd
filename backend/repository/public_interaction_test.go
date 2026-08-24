@@ -65,6 +65,30 @@ func TestPublicFileTagsAndInteractions(t *testing.T) {
 		t.Fatalf("tag search did not return public image: total=%d items=%+v", matchedTotal, matchedImages)
 	}
 
+	// appendedTags、added、found 保存门户用户追加标签后的权威结果。
+	appendedTags, added, found := store.AppendPublicFileTag(publicImage.ID, firstUser.ID, "#城市", false)
+	if !found || !added || !reflect.DeepEqual(appendedTags, []string{"风景", "夜景", "abcdefghijklmnopqrstuvwx", "城市"}) {
+		t.Fatalf("append public tag failed: found=%v added=%v tags=%+v", found, added, appendedTags)
+	}
+	// duplicateTags、added、found 保存重复追加时不改写已有标签的结果。
+	duplicateTags, added, found := store.AppendPublicFileTag(publicImage.ID, secondUser.ID, "城市", false)
+	if !found || added || !reflect.DeepEqual(duplicateTags, appendedTags) {
+		t.Fatalf("duplicate public tag changed tags: found=%v added=%v tags=%+v", found, added, duplicateTags)
+	}
+	// fillTagIndex 表示用于填满十二个标签上限的测试标签序号。
+	for fillTagIndex := 1; fillTagIndex <= 8; fillTagIndex++ {
+		// fillTags、fillAdded、fillFound 保存当前补充标签的写入结果。
+		fillTags, fillAdded, fillFound := store.AppendPublicFileTag(publicImage.ID, firstUser.ID, "补充标签"+string(rune('A'+fillTagIndex-1)), false)
+		if !fillFound || !fillAdded || len(fillTags) != 4+fillTagIndex {
+			t.Fatalf("fill public tags failed at %d: found=%v added=%v tags=%+v", fillTagIndex, fillFound, fillAdded, fillTags)
+		}
+	}
+	// limitedTags、added、found 保存达到数量上限后拒绝覆盖旧标签的结果。
+	limitedTags, added, found := store.AppendPublicFileTag(publicImage.ID, firstUser.ID, "第十三个标签", false)
+	if !found || added || len(limitedTags) != 12 {
+		t.Fatalf("public tag limit failed: found=%v added=%v tags=%+v", found, added, limitedTags)
+	}
+
 	// firstLike 保存第一个账号首次点赞后的权威互动状态。
 	firstLike, updated := store.TogglePublicFileLike(publicImage.ID, firstUser.ID, false)
 	if !updated || firstLike.LikeCount != 1 || !firstLike.LikedByCurrentUser {
@@ -108,5 +132,14 @@ func TestPublicFileTagsAndInteractions(t *testing.T) {
 	}
 	if _, created := store.CreatePublicFileComment(publicDocument.ID, firstUser.ID, "不应写入", false); created {
 		t.Fatal("non-image file should not accept comments")
+	}
+	if _, added, found := store.AppendPublicFileTag(privateImage.ID, firstUser.ID, "不应写入", false); found || added {
+		t.Fatal("private image should not accept public tags")
+	}
+	if _, added, found := store.AppendPublicFileTag(publicDocument.ID, firstUser.ID, "不应写入", false); found || added {
+		t.Fatal("non-image file should not accept public tags")
+	}
+	if _, added, found := store.AppendPublicFileTag(publicImage.ID, 0, "不应写入", false); found || added {
+		t.Fatal("anonymous user should not append public tags")
 	}
 }

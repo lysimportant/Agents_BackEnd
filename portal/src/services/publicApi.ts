@@ -8,6 +8,7 @@ import type {
   PublicFileListItem,
   PublicFileComment,
   PublicFileInteraction,
+  PublicFileTagResponse,
   PublicListResponse,
   PublicSearchResult,
   PublicSiteSummary,
@@ -275,6 +276,14 @@ export function toggleImageLike(fileID: number): Promise<PublicFileInteraction> 
   return requestPublicMutationJson<PublicFileInteraction>(
     '/api/public/files/' + String(fileID) + '/like',
     { method: 'POST', body: '{}' },
+  );
+}
+
+/** 为当前登录用户可见的公开图片追加一个标签。 */
+export function addImageTag(fileID: number, tag: string): Promise<PublicFileTagResponse> {
+  return requestPublicMutationJson<PublicFileTagResponse>(
+    '/api/public/files/' + String(fileID) + '/tags',
+    { method: 'POST', body: JSON.stringify({ tag }) },
   );
 }
 
