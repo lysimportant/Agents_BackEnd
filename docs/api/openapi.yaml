@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: 采集数据管理平台 API
   version: 1.0.0
-  description: 管理端使用 Cookie 会话鉴权；公开门户内容默认匿名可读，图片点赞和评论写入要求有效会话，只有有效会话同时携带 portal-r18=1 时才包含 18R 内容。
+  description: 管理端使用 Cookie 会话鉴权；公开门户内容默认匿名可读，B 端标记为 18R 的内容只有在 C 端请求同时携带有效会话和后端域 portal-r18=1 偏好 Cookie 时才包含，图片点赞和评论写入要求有效会话。
 servers:
   - url: http://localhost:8080
     description: 本地后端服务
@@ -217,7 +217,25 @@ paths:
       tags: [认证]
       summary: 获取当前会话用户
       responses:
-        '200': { description: 当前已登录用户及其权限。 }
+        '200': { description: 当前已登录用户及其权限，以及 r18Enabled 可见性偏好。 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/auth/portal-r18:
+    post:
+      tags: [认证]
+      summary: 更新当前会话的 18R 内容可见性偏好
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        '200': { description: 偏好已写入后端域 portal-r18 Cookie。 }
+        '400': { description: 请求参数无效。 }
         '401': { $ref: '#/components/responses/Unauthorized' }
   /api/auth/logout:
     post:

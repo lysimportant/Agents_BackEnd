@@ -58,7 +58,9 @@
     "sendCode": "Send code",
     "codeSent": "Code sent, please check your email",
     "r18": "18R",
-    "r18Label": "Show 18R content"
+    "r18Label": "Show 18R content",
+    "r18EnableLabel": "Show 18R content",
+    "r18DisableLabel": "Hide 18R content"
   },
   "home": {
     "subtitle": "Explore public articles, images and resources",

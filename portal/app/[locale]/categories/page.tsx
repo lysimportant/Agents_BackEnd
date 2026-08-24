@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { Link } from '@/i18n/navigation';
 import { encodeCategorySlug } from '@/config/constants';
-import { defaultRevalidate, listCategories } from '@/services/publicApi';
+import { listCategories } from '@/services/publicApi';
+import { serverPublicFetchOptions } from '@/services/serverPublicApi';
 import { EmptyState } from '@/components/common/EmptyState';
 import type { PublicCategory } from '@/types/publicContent';
 import { buildPageMetadata } from '@/utils/metadata';
@@ -36,7 +37,7 @@ export default async function CategoriesPage({
 
   let categories: PublicCategory[] = [];
   try {
-    categories = await listCategories({ revalidate: defaultRevalidate() });
+    categories = await listCategories(await serverPublicFetchOptions());
   } catch {
     categories = [];
   }

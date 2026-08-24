@@ -158,6 +158,23 @@ func (s *Service) ClearSessionCookie(c *gin.Context) {
 	c.SetCookie(s.cookieName, "", -1, "/", "", s.secure, true)
 }
 
+// SetPortalR18Cookie 写入由后端域管理的 18R 可见性偏好，供公开接口与登录会话共同校验。
+func (s *Service) SetPortalR18Cookie(c *gin.Context, enabled bool) {
+	// value 保存后端识别的 18R 偏好值。
+	value := "0"
+	if enabled {
+		value = "1"
+	}
+	c.SetSameSite(s.sameSite)
+	c.SetCookie("portal-r18", value, int((365 * 24 * time.Hour).Seconds()), "/", "", s.secure, true)
+}
+
+// ClearPortalR18Cookie 清除当前后端域中的 18R 可见性偏好。
+func (s *Service) ClearPortalR18Cookie(c *gin.Context) {
+	c.SetSameSite(s.sameSite)
+	c.SetCookie("portal-r18", "", -1, "/", "", s.secure, true)
+}
+
 // newSessionID 构造并返回对应业务实例。
 func newSessionID() (string, error) {
 	// bytes 保存字节数。

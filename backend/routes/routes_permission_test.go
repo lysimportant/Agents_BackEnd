@@ -74,6 +74,88 @@ func loginCookie(t *testing.T, router *gin.Engine, username, password string) st
 	return ""
 }
 
+// TestPortalR18PreferenceUsesBackendCookie 验证跨域门户开关写入后端域 Cookie，公开接口才能读取 18R 可见性。
+func TestPortalR18PreferenceUsesBackendCookie(t *testing.T) {
+	// router、store 保存隔离路由与数据库仓库。
+	router, store, _ := setupTestRouter(t)
+	// canLogin 表示 18R 测试账号允许创建会话。
+	canLogin := true
+	// portalUser、createMessage 保存门户测试账号与创建结果。
+	portalUser, createMessage := store.CreateUser(models.UserRequest{
+		Username: "portal-r18-user", Name: "门户十八禁用户", Role: "普通用户", Status: "在岗", CanLogin: &canLogin,
+	}, auth.MustHashPassword("pass1234"))
+	if createMessage != "" {
+		t.Fatalf("create r18 user: %s", createMessage)
+	}
+	// r18Image 保存仅在登录且已确认 18R 后可见的公开图片。
+	r18Image := store.CreateFile(models.ManagedFile{
+		DisplayName: "十八禁图片.png", OriginalName: "十八禁图片.png", ContentType: "image/png",
+		StorageName: "portal-r18-image.png", OwnerID: portalUser.ID, Is18R: true,
+	})
+	if r18Image.ID == 0 {
+		t.Fatal("r18 image was not created")
+	}
+
+	// sessionID 保存登录后由后端写入的会话 Cookie。
+	sessionID := loginCookie(t, router, portalUser.Username, "pass1234")
+	// sessionRequest、sessionResponse 验证仅登录时仍未开启 18R 偏好。
+	sessionRequest := httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
+	sessionRequest.AddCookie(&http.Cookie{Name: "sessionId", Value: sessionID})
+	sessionResponse := httptest.NewRecorder()
+	router.ServeHTTP(sessionResponse, sessionRequest)
+	if sessionResponse.Code != http.StatusOK || strings.Contains(sessionResponse.Body.String(), `"r18Enabled":true`) {
+		t.Fatalf("unexpected initial r18 session: status=%d body=%s", sessionResponse.Code, sessionResponse.Body.String())
+	}
+	// hiddenImageRequest、hiddenImageResponse 验证仅登录但未开启 C 端 18R 时仍不能读取 B 端标记内容。
+	hiddenImageRequest := httptest.NewRequest(http.MethodGet, "/api/public/images", nil)
+	hiddenImageRequest.AddCookie(&http.Cookie{Name: "sessionId", Value: sessionID})
+	hiddenImageResponse := httptest.NewRecorder()
+	router.ServeHTTP(hiddenImageResponse, hiddenImageRequest)
+	if hiddenImageResponse.Code != http.StatusOK || strings.Contains(hiddenImageResponse.Body.String(), "十八禁图片.png") {
+		t.Fatalf("r18 image was visible before portal preference: status=%d body=%s", hiddenImageResponse.Code, hiddenImageResponse.Body.String())
+	}
+
+	// preferenceRequest、preferenceResponse 保存登录用户开启 18R 的请求与响应。
+	preferenceRequest := httptest.NewRequest(http.MethodPost, "/api/auth/portal-r18", strings.NewReader(`{"enabled":true}`))
+	preferenceRequest.Header.Set("Content-Type", "application/json")
+	preferenceRequest.AddCookie(&http.Cookie{Name: "sessionId", Value: sessionID})
+	preferenceResponse := httptest.NewRecorder()
+	router.ServeHTTP(preferenceResponse, preferenceRequest)
+	if preferenceResponse.Code != http.StatusOK {
+		t.Fatalf("enable r18 preference: status=%d body=%s", preferenceResponse.Code, preferenceResponse.Body.String())
+	}
+	// r18Cookie 保存需要随公开请求发送的后端域 Cookie。
+	var r18Cookie *http.Cookie
+	for _, responseCookie := range preferenceResponse.Result().Cookies() {
+		if responseCookie.Name == "portal-r18" {
+			r18Cookie = responseCookie
+			break
+		}
+	}
+	if r18Cookie == nil || r18Cookie.Value != "1" || !r18Cookie.HttpOnly {
+		t.Fatalf("invalid portal r18 cookie: %+v", r18Cookie)
+	}
+
+	// imageRequest、imageResponse 验证同时携带会话与后端域 18R Cookie 后可以读取 18R 图片。
+	imageRequest := httptest.NewRequest(http.MethodGet, "/api/public/images", nil)
+	imageRequest.AddCookie(&http.Cookie{Name: "sessionId", Value: sessionID})
+	imageRequest.AddCookie(r18Cookie)
+	imageResponse := httptest.NewRecorder()
+	router.ServeHTTP(imageResponse, imageRequest)
+	if imageResponse.Code != http.StatusOK || !strings.Contains(imageResponse.Body.String(), "十八禁图片.png") {
+		t.Fatalf("r18 image remained hidden: status=%d body=%s", imageResponse.Code, imageResponse.Body.String())
+	}
+	// searchRequest、searchResponse 验证 C 端开启 18R 后聚合搜索也能命中 B 端标记内容。
+	searchRequest := httptest.NewRequest(http.MethodGet, "/api/public/search?keyword=%E5%8D%81%E5%85%AB%E7%A6%81", nil)
+	searchRequest.AddCookie(&http.Cookie{Name: "sessionId", Value: sessionID})
+	searchRequest.AddCookie(r18Cookie)
+	searchResponse := httptest.NewRecorder()
+	router.ServeHTTP(searchResponse, searchRequest)
+	if searchResponse.Code != http.StatusOK || !strings.Contains(searchResponse.Body.String(), "十八禁图片.png") {
+		t.Fatalf("r18 image was not searchable: status=%d body=%s", searchResponse.Code, searchResponse.Body.String())
+	}
+}
+
 // TestPublicFileTagWriteRequiresLogin 验证门户标签写入要求有效会话且只追加规范标签。
 func TestPublicFileTagWriteRequiresLogin(t *testing.T) {
 	// router、store 保存隔离路由与数据库仓库。

@@ -242,6 +242,12 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+// PortalR18Request 表示登录用户更新 C 端 18R 内容可见性的请求。
+type PortalR18Request struct {
+	// Enabled 表示是否在当前后端域会话中包含 18R 内容。
+	Enabled bool `json:"enabled"`
+}
+
 // RegisterCodeRequest 表示申请注册邮箱验证码的请求体。
 type RegisterCodeRequest struct {
 	// Username 表示待注册账号。

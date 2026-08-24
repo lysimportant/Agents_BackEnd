@@ -5,7 +5,8 @@ import {
   encodeCategorySlug,
   resolveMediaUrl,
 } from '@/config/constants';
-import { defaultRevalidate, listArticles, listImages } from '@/services/publicApi';
+import { listArticles, listImages } from '@/services/publicApi';
+import { serverPublicFetchOptions } from '@/services/serverPublicApi';
 import { ArticleCard } from '@/components/common/ArticleCard';
 import { ErrorState } from '@/components/common/ErrorState';
 import { ImageGallery } from '@/components/gallery/ImageGallery';
@@ -51,10 +52,10 @@ export default async function CategoryDetailPage({
   let articles: PublicListResponse<PublicArticleListItem> | null = null;
   let images: PublicListResponse<PublicFileListItem> | null = null;
   try {
-    const revalidate = defaultRevalidate();
+    const requestOptions = await serverPublicFetchOptions();
     const [articleResult, imageResult] = await Promise.all([
-      listArticles({ page: 1, pageSize: 12, category: name }, { revalidate }),
-      listImages({ page: 1, pageSize: 12, category: name }, { revalidate }),
+      listArticles({ page: 1, pageSize: 12, category: name }, requestOptions),
+      listImages({ page: 1, pageSize: 12, category: name }, requestOptions),
     ]);
     articles = articleResult;
     images = imageResult;

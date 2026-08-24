@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Eye, LogIn, LogOut, UserPlus } from 'lucide-react';
+import { Eye, EyeOff, LogIn, LogOut, UserPlus } from 'lucide-react';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { LoginModal } from './LoginModal';
 import { RegisterModal } from './RegisterModal';
@@ -49,19 +49,22 @@ export function AuthControls() {
       </span>
       <button
         type="button"
-        onClick={toggleR18}
+        onClick={() => void toggleR18()}
         aria-pressed={isR18Enabled}
-        aria-label={t('r18Label')}
-        title={t('r18Label')}
+        aria-label={isR18Enabled ? t('r18DisableLabel') : t('r18EnableLabel')}
+        title={isR18Enabled ? t('r18DisableLabel') : t('r18EnableLabel')}
         className={cn(
-          'flex h-11 items-center gap-1.5 rounded-full px-3 transition-colors',
+          'flex h-11 w-11 items-center justify-center rounded-full transition-colors',
           isR18Enabled
             ? 'bg-primary text-primary-foreground'
             : 'text-muted-foreground hover:bg-muted hover:text-foreground',
         )}
       >
-        <Eye className="h-4 w-4" aria-hidden="true" />
-        <span className="text-sm font-bold">{t('r18')}</span>
+        {isR18Enabled ? (
+          <Eye className="h-5 w-5" aria-hidden="true" />
+        ) : (
+          <EyeOff className="h-5 w-5" aria-hidden="true" />
+        )}
       </button>
       <button
         type="button"

@@ -37,6 +37,8 @@ export interface PublicFetchOptions {
   signal?: AbortSignal;
   /** 是否携带门户偏好 Cookie，让后端按当前访客设置筛选内容。 */
   credentials?: RequestCredentials;
+  /** 服务端转发到后端的认证 Cookie。 */
+  headers?: HeadersInit;
   /** 服务端内容缓存秒数，传入时启用 Next.js revalidation。 */
   revalidate?: number;
   /** 服务端缓存标签，便于后续主动失效。 */
@@ -127,6 +129,7 @@ async function requestPublicJson<T>(
       const init: PortalFetchInit = {
         signal: controller.signal,
         credentials: options.credentials,
+        headers: options.headers,
       };
       if (options.revalidate !== undefined) {
         init.next = { revalidate: options.revalidate, tags: options.tags };

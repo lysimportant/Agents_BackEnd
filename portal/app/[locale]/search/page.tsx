@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { resolveMediaUrl } from '@/config/constants';
-import { defaultRevalidate, getSiteSummary, searchPublic } from '@/services/publicApi';
+import { getSiteSummary, searchPublic } from '@/services/publicApi';
+import { serverPublicFetchOptions } from '@/services/serverPublicApi';
 import { SearchForm } from '@/components/search/SearchForm';
 import { ArticleCard } from '@/components/common/ArticleCard';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -51,7 +52,7 @@ export default async function SearchPage({
   let hasError = false;
   if (keyword) {
     try {
-      result = await searchPublic(keyword, { revalidate: defaultRevalidate() });
+      result = await searchPublic(keyword, await serverPublicFetchOptions());
     } catch {
       hasError = true;
       result = null;
@@ -59,7 +60,7 @@ export default async function SearchPage({
   } else {
     // 无关键词时展示推荐内容。
     try {
-      const summary = await getSiteSummary({ revalidate: defaultRevalidate() });
+      const summary = await getSiteSummary(await serverPublicFetchOptions());
       result = {
         articles: summary.latestArticles,
         images: summary.featuredImages,

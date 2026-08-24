@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { DEFAULT_PAGE_SIZE, SORT_OPTIONS } from '@/config/constants';
-import { defaultRevalidate, listArticles, listCategories } from '@/services/publicApi';
+import { listArticles, listCategories } from '@/services/publicApi';
+import { serverPublicFetchOptions } from '@/services/serverPublicApi';
 import { ArticleCard } from '@/components/common/ArticleCard';
 import { EmptyState } from '@/components/common/EmptyState';
 import { ErrorState } from '@/components/common/ErrorState';
@@ -50,12 +51,12 @@ export default async function ArticlesPage({
   let categories: string[] = [];
   let result: PublicListResponse<PublicArticleListItem> | null = null;
   try {
-    const revalidate = defaultRevalidate();
+    const requestOptions = await serverPublicFetchOptions();
     const [categoryList, articleResult] = await Promise.all([
-      listCategories({ revalidate }),
+      listCategories(requestOptions),
       listArticles(
         { page, pageSize: DEFAULT_PAGE_SIZE, category, keyword, sort },
-        { revalidate },
+        requestOptions,
       ),
     ]);
     categories = categoryList.map((item) => item.name);

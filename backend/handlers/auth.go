@@ -186,6 +186,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	h.sessions.SetSessionCookie(c, sessionID, expiresAt)
+	// 新登录会话默认关闭 18R，避免过期会话留下的后端域偏好误影响新账号。
+	h.sessions.SetPortalR18Cookie(c, false)
 	// authUser 保存认证用户。
 	authUser := auth.ToAuthUser(user, actionPermissions)
 	c.JSON(http.StatusOK, gin.H{"user": authUser})
@@ -216,12 +218,32 @@ func (h *AuthHandler) GetSession(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"user": auth.ToAuthUser(user, actionPermissions)})
+	// r18Enabled 保存当前后端域 Cookie 中的 18R 可见性偏好，前端恢复会话时据此重建开关状态。
+	r18Cookie, _ := c.Cookie("portal-r18")
+	c.JSON(http.StatusOK, gin.H{"user": auth.ToAuthUser(user, actionPermissions), "r18Enabled": r18Cookie == "1"})
+}
+
+// SetPortalR18 处理 POST /api/auth/portal-r18，要求有效会话并更新当前后端域的 18R 偏好 Cookie。
+func (h *AuthHandler) SetPortalR18(c *gin.Context) {
+	// ok 表示当前请求是否携带有效会话，用于禁止匿名篡改 18R 可见性偏好。
+	if _, ok := h.sessions.UserIDFromRequest(c); !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录或会话已过期"})
+		return
+	}
+	// request 保存门户 18R 可见性开关请求。
+	var request models.PortalR18Request
+	if bindErr := c.ShouldBindJSON(&request); bindErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "18R 开关参数无效"})
+		return
+	}
+	h.sessions.SetPortalR18Cookie(c, request.Enabled)
+	c.JSON(http.StatusOK, gin.H{"enabled": request.Enabled})
 }
 
 // Logout 实现对应业务逻辑。
 func (h *AuthHandler) Logout(c *gin.Context) {
 	h.sessions.DeleteFromRequest(c)
 	h.sessions.ClearSessionCookie(c)
+	h.sessions.ClearPortalR18Cookie(c)
 	c.JSON(http.StatusOK, gin.H{"message": "已退出登录"})
 }

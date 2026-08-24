@@ -7,6 +7,12 @@ export interface AuthUser {
   name: string;
 }
 
+/** 登录会话恢复结果，包含后端域持久化的 18R 内容偏好。 */
+export interface AuthSession {
+  user: AuthUser;
+  r18Enabled: boolean;
+}
+
 /**
  * 调用后端登录接口，成功时后端会写入 HttpOnly 会话 Cookie。
  */
@@ -76,7 +82,7 @@ export async function logoutRequest(): Promise<void> {
 }
 
 /** 查询当前登录会话，未登录或请求失败返回 null。 */
-export async function fetchSession(): Promise<AuthUser | null> {
+export async function fetchSession(): Promise<AuthSession | null> {
   try {
     const res = await fetch(API_BASE_URL + '/api/auth/session', {
       credentials: 'include',
@@ -84,9 +90,27 @@ export async function fetchSession(): Promise<AuthUser | null> {
     if (!res.ok) {
       return null;
     }
-    const body = (await res.json()) as { user?: AuthUser };
-    return body.user ?? null;
+    const body = (await res.json()) as { user?: AuthUser; r18Enabled?: boolean };
+    if (!body.user) {
+      return null;
+    }
+    return { user: body.user, r18Enabled: body.r18Enabled === true };
   } catch {
     return null;
+  }
+}
+
+/** 更新当前登录会话在后端域中的 18R 内容可见性偏好。 */
+export async function setPortalR18Preference(enabled: boolean): Promise<boolean> {
+  try {
+    const res = await fetch(API_BASE_URL + '/api/auth/portal-r18', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ enabled }),
+    });
+    return res.ok;
+  } catch {
+    return false;
   }
 }

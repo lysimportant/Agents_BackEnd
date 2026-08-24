@@ -29,13 +29,13 @@
 
 ## 公开内容字段
 
-文章公开条件是 `is_private=0 AND status='已发布'`。匿名请求还要求 `is_18r=0`；有效后台会话同时携带 `portal-r18=1` Cookie 时可包含 18R 文章。
+文章公开条件是 `is_private=0 AND status='已发布'`。B 端标记为 18R 的文章仅在 C 端有效会话同时携带后端域 `portal-r18=1` Cookie 时可见；匿名或关闭 C 端开关时要求 `is_18r=0`。
 
 - `articles.portal_published_at`：保留的发布时间元数据；为空时公开响应回退到 `updated_at`。它不是公开开关。
 - `articles.content_locale`：正文实际语言，默认 `zh-CN`。
 - `articles.is_18r`：18R 分级标记，默认 `0`。
 
-文件公开条件是 `is_private=0 AND deleted_at IS NULL`。匿名请求还要求 `is_18r=0`；有效会话和 18R Cookie 同时存在时可包含 18R 文件。
+文件公开条件是 `is_private=0 AND deleted_at IS NULL`。B 端标记为 18R 的文件仅在 C 端有效会话同时携带后端域 `portal-r18=1` Cookie 时可见；匿名或关闭 C 端开关时要求 `is_18r=0`。
 
 - `files.content_sha256`：服务端按“同一所有者 + 有效文件”过滤重复内容，不向客户端返回。
 - `files.tags`：JSON 数组形式的文件标签，最多 12 个、每个最多 24 个 Unicode 字符；用于 B 端管理、C 端展示和关键词搜索。

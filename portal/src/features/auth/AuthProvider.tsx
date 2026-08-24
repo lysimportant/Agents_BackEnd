@@ -1,18 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { fetchSession, loginRequest, logoutRequest } from '@/services/authApi';
-
-/** 18R 偏好 Cookie 名，与后端校验一致。 */
-const R18_COOKIE = 'portal-r18';
-
-/** 读取 18R 偏好 Cookie 是否开启。 */
-function readR18Cookie(): boolean {
-  if (typeof document === 'undefined') {
-    return false;
-  }
-  return document.cookie.split('; ').some((item) => item === R18_COOKIE + '=1');
-}
+import { fetchSession, loginRequest, logoutRequest, setPortalR18Preference } from '@/services/authApi';
 
 /** 认证上下文暴露的登录态、18R 偏好与操作。 */
 interface AuthContextValue {
@@ -21,13 +10,13 @@ interface AuthContextValue {
   username: string;
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
-  toggleR18: () => void;
+  toggleR18: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 /**
- * AuthProvider 管理 C 端登录态与 18R 偏好；18R 偏好写入 portal-r18 Cookie 供后端过滤。
+ * AuthProvider 管理 C 端登录态与 18R 偏好；偏好由后端域 Cookie 保存，确保公开接口可接收该状态。
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -38,13 +27,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const user = await fetchSession();
+      const session = await fetchSession();
       if (cancelled) {
         return;
       }
-      setIsLoggedIn(Boolean(user));
-      setUsername(user?.username ?? '');
-      setIsR18Enabled(readR18Cookie());
+      setIsLoggedIn(Boolean(session));
+      setUsername(session?.user.username ?? '');
+      setIsR18Enabled(session?.r18Enabled ?? false);
     })();
     return () => {
       cancelled = true;
@@ -56,6 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (ok) {
       setIsLoggedIn(true);
       setUsername(inputUsername);
+      setIsR18Enabled(false);
     }
     return ok;
   }, []);
@@ -65,17 +55,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoggedIn(false);
     setUsername('');
     setIsR18Enabled(false);
-    document.cookie = R18_COOKIE + '=0; path=/; max-age=0';
   }, []);
 
-  const toggleR18 = useCallback(() => {
-    setIsR18Enabled((prev) => {
-      const next = !prev;
-      document.cookie =
-        R18_COOKIE + '=' + (next ? '1' : '0') + '; path=/; max-age=31536000; SameSite=Lax';
-      return next;
-    });
-  }, []);
+  const toggleR18 = useCallback(async () => {
+    const next = !isR18Enabled;
+    if (await setPortalR18Preference(next)) {
+      setIsR18Enabled(next);
+    }
+  }, [isR18Enabled]);
 
   const value = useMemo<AuthContextValue>(
     () => ({ isLoggedIn, isR18Enabled, username, login, logout, toggleR18 }),

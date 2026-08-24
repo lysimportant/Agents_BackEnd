@@ -58,7 +58,9 @@
     "sendCode": "发送验证码",
     "codeSent": "验证码已发送，请检查邮箱",
     "r18": "18R",
-    "r18Label": "显示18R内容"
+    "r18Label": "显示18R内容",
+    "r18EnableLabel": "开启18R内容",
+    "r18DisableLabel": "关闭18R内容"
   },
   "home": {
     "subtitle": "探索公开的文章、图片与资源",

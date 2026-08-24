@@ -3,7 +3,8 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { Link } from '@/i18n/navigation';
 import { SITE_BRAND_NAME, resolveMediaUrl } from '@/config/constants';
-import { PublicApiError, defaultRevalidate, getArticle } from '@/services/publicApi';
+import { PublicApiError, getArticle } from '@/services/publicApi';
+import { serverPublicFetchOptions } from '@/services/serverPublicApi';
 import { sanitizeArticle } from '@/content/sanitizeArticle';
 import { ArticleCard } from '@/components/common/ArticleCard';
 import { ArticleReader } from '@/components/article/ArticleReader';
@@ -31,7 +32,7 @@ export async function generateMetadata({
 
   let article: PublicArticleDetail | null = null;
   try {
-    article = await getArticle(id, { revalidate: defaultRevalidate() });
+    article = await getArticle(id, await serverPublicFetchOptions());
   } catch {
     article = null;
   }
@@ -79,7 +80,7 @@ export default async function ArticleDetailPage({
 
   let article: PublicArticleDetail | null = null;
   try {
-    article = await getArticle(id, { revalidate: defaultRevalidate() });
+    article = await getArticle(id, await serverPublicFetchOptions());
   } catch (error) {
     if (error instanceof PublicApiError && error.status === 404) {
       notFound();

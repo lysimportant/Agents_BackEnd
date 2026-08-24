@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { DEFAULT_PAGE_SIZE, SORT_OPTIONS } from '@/config/constants';
-import { defaultRevalidate, listCategories, listResources } from '@/services/publicApi';
+import { listCategories, listResources } from '@/services/publicApi';
+import { serverPublicFetchOptions } from '@/services/serverPublicApi';
 import { EmptyState } from '@/components/common/EmptyState';
 import { ErrorState } from '@/components/common/ErrorState';
 import { ListFilterBar } from '@/components/common/ListFilterBar';
@@ -50,12 +51,12 @@ export default async function ResourcesPage({
   let categories: string[] = [];
   let result: PublicListResponse<PublicFileListItem> | null = null;
   try {
-    const revalidate = defaultRevalidate();
+    const requestOptions = await serverPublicFetchOptions();
     const [categoryList, resourceResult] = await Promise.all([
-      listCategories({ revalidate }),
+      listCategories(requestOptions),
       listResources(
         { page, pageSize: DEFAULT_PAGE_SIZE, category, keyword, sort },
-        { revalidate },
+        requestOptions,
       ),
     ]);
     categories = categoryList.map((item) => item.name);

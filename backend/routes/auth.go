@@ -13,5 +13,6 @@ func registerAuthRoutes(api *gin.RouterGroup, handler *handlers.AuthHandler) {
 	authRoutes.POST("/register/code", handler.RegisterCode)
 	authRoutes.POST("/register", handler.Register)
 	authRoutes.GET("/session", handler.GetSession)
+	authRoutes.POST("/portal-r18", handler.SetPortalR18)
 	authRoutes.POST("/logout", handler.Logout)
 }
