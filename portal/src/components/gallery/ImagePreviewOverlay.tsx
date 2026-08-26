@@ -14,6 +14,7 @@ export function ImagePreviewOverlay({
   index,
   onIndexChange,
   onTagsChange,
+  onLikeCountChange,
   onClose,
   returnFocusRef,
 }: {
@@ -21,6 +22,7 @@ export function ImagePreviewOverlay({
   index: number;
   onIndexChange: (index: number) => void;
   onTagsChange: (imageID: number, tags: string[]) => void;
+  onLikeCountChange: (imageID: number, likeCount: number) => void;
   onClose: () => void;
   returnFocusRef: React.RefObject<HTMLElement | null>;
 }) {
@@ -143,7 +145,10 @@ export function ImagePreviewOverlay({
     }
     const requestController = new AbortController();
     void getImageInteraction(currentID, { signal: requestController.signal })
-      .then((nextInteraction) => setInteraction(nextInteraction))
+      .then((nextInteraction) => {
+        setInteraction(nextInteraction);
+        onLikeCountChange(currentID, nextInteraction.likeCount);
+      })
       .catch(() => {
         if (!requestController.signal.aborted) {
           setInteractionError(t('interactionLoadFailed'));
@@ -155,7 +160,7 @@ export function ImagePreviewOverlay({
         }
       });
     return () => requestController.abort();
-  }, [currentID, t]);
+  }, [currentID, onLikeCountChange, t]);
 
   // 键盘交互：左右切换、缩放、Esc 关闭。
   useEffect(() => {
@@ -247,6 +252,7 @@ export function ImagePreviewOverlay({
       const nextInteraction = await toggleImageLike(requestFileID);
       if (activeImageIDRef.current === requestFileID) {
         setInteraction(nextInteraction);
+        onLikeCountChange(requestFileID, nextInteraction.likeCount);
       }
     } catch {
       if (activeImageIDRef.current === requestFileID) {

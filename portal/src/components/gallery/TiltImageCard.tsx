@@ -1,13 +1,13 @@
 'use client';
 
-import { Eye, UserRound } from 'lucide-react';
+import { Eye, Heart, UserRound } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { ProgressiveImage } from '@/components/common/ProgressiveImage';
 import type { GalleryImage } from './types';
 
 /**
- * TiltImageCard 是瀑布流中的单张图片卡片，显示公开标签、上传人和浏览量。
+ * TiltImageCard 是瀑布流中的单张图片卡片，显示公开标签、上传人、浏览量和点赞数量。
  */
 export function TiltImageCard({
   image,
@@ -81,9 +81,15 @@ export function TiltImageCard({
             <UserRound className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span className="truncate">{image.ownerName || '—'}</span>
           </span>
-          <span className="flex shrink-0 items-center gap-1" title={t('views')}>
-            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-            {image.views}
+          <span className="flex shrink-0 items-center gap-3">
+            <span className="inline-flex items-center gap-1" title={t('views')}>
+              <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+              {image.views}
+            </span>
+            <span className="inline-flex items-center gap-1" title={t('likeCount')}>
+              <Heart className="h-3.5 w-3.5" aria-hidden="true" />
+              {image.likeCount}
+            </span>
           </span>
         </div>
         {image.tags.length > 0 ? (

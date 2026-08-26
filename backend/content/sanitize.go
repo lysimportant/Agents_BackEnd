@@ -7,6 +7,27 @@ import (
 	"golang.org/x/net/html"
 )
 
+// ExtractPlainText 返回 HTML 中用户可见的纯文本，用于日常内容长度和空值校验。
+func ExtractPlainText(input string) string {
+	doc, err := html.Parse(strings.NewReader(input))
+	if err != nil {
+		return ""
+	}
+	var builder strings.Builder
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		if node.Type == html.TextNode {
+			builder.WriteString(node.Data)
+			return
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(doc)
+	return strings.TrimSpace(builder.String())
+}
+
 // allowedTags 记录正文清洗后允许保留的 HTML 标签白名单。
 var allowedTags = map[string]bool{
 	"a": true, "b": true, "strong": true, "i": true, "em": true, "u": true, "s": true,
@@ -17,6 +38,14 @@ var allowedTags = map[string]bool{
 	"thead": true, "tbody": true, "tr": true, "th": true, "td": true,
 }
 
+// dailyAllowedTags 记录日常富文本可保存的格式标签，不允许嵌入图片、视频等外部媒体。
+var dailyAllowedTags = map[string]bool{
+	"a": true, "b": true, "strong": true, "i": true, "em": true, "u": true, "s": true,
+	"p": true, "br": true, "blockquote": true, "pre": true, "code": true,
+	"h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
+	"ul": true, "ol": true, "li": true, "div": true, "span": true,
+}
+
 // allowedProtocols 记录允许保留的链接协议白名单，防止危险协议注入。
 var allowedProtocols = map[string]bool{
 	"http:": true, "https:": true, "mailto:": true, "#": true,
@@ -24,6 +53,16 @@ var allowedProtocols = map[string]bool{
 
 // SanitizeArticleContent 清洗文章正文，仅保留白名单标签与安全属性，返回清理后的 HTML。
 func SanitizeArticleContent(input string) string {
+	return sanitizeHTML(input, allowedTags)
+}
+
+// SanitizeDailyContent 清洗日常富文本，仅保留文字格式和安全链接，禁止嵌入外部媒体。
+func SanitizeDailyContent(input string) string {
+	return sanitizeHTML(input, dailyAllowedTags)
+}
+
+// sanitizeHTML 按传入的标签白名单清洗 HTML，并保留各业务允许的安全属性。
+func sanitizeHTML(input string, allowedTagSet map[string]bool) string {
 	doc, err := html.Parse(strings.NewReader(input))
 	if err != nil {
 		return ""
@@ -35,7 +74,7 @@ func SanitizeArticleContent(input string) string {
 		case html.TextNode:
 			builder.WriteString(node.Data)
 		case html.ElementNode:
-			if !allowedTags[strings.ToLower(node.Data)] {
+			if !allowedTagSet[strings.ToLower(node.Data)] {
 				for child := node.FirstChild; child != nil; child = child.NextSibling {
 					writeNode(child)
 				}

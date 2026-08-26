@@ -100,7 +100,7 @@ func (s *SQLiteStore) FindPublicDaily(id, userID int) (models.Daily, bool) {
 	return daily, true
 }
 
-// CreateDaily 写入一条由登录用户拥有的已发布日常。
+// CreateDaily 写入一条由登录用户拥有的已发布日常；正文由 handler 负责白名单清洗。
 func (s *SQLiteStore) CreateDaily(ownerID int, request models.DailyRequest) (models.Daily, bool) {
 	if ownerID <= 0 || strings.TrimSpace(request.Content) == "" {
 		return models.Daily{}, false

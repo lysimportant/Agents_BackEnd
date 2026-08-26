@@ -58,7 +58,8 @@
 | <code>/{locale}/categories</code> | 分类总览 |
 | <code>/{locale}/categories/[category]</code> | 分类详情 |
 | <code>/{locale}/search</code> | 搜索 |
-| <code>/{locale}/daily</code> | 日常浏览与发布 |
+| <code>/{locale}/daily</code> | 日常浏览 |
+| <code>/{locale}/daily/publish</code> | 富文本日常发布 |
 | <code>/{locale}/feed.xml</code> | RSS 订阅 |
 | <code>/sitemap.xml</code>、<code>/robots.txt</code> | SEO 元数据路由 |
 

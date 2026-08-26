@@ -317,8 +317,10 @@ func (h *PublicHandler) CreateDaily(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_daily", "error": "请输入日常内容"})
 		return
 	}
-	// contentRunes 保存去除首尾空白后的正文 Unicode 字符。
-	contentRunes := []rune(strings.TrimSpace(request.Content))
+	// sanitizedContent 保存通过正文白名单清洗后的富文本 HTML，阻止脚本和危险链接进入公开响应。
+	sanitizedContent := content.SanitizeDailyContent(strings.TrimSpace(request.Content))
+	// contentRunes 保存清洗后用户可见文字的 Unicode 字符，用于空值和长度校验。
+	contentRunes := []rune(content.ExtractPlainText(sanitizedContent))
 	if len(contentRunes) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_daily", "error": "请输入日常内容"})
 		return
@@ -327,7 +329,7 @@ func (h *PublicHandler) CreateDaily(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "daily_too_long", "error": "日常内容不能超过 2000 个字符"})
 		return
 	}
-	request.Content = string(contentRunes)
+	request.Content = sanitizedContent
 	// daily、created 保存新日常和写入结果。
 	daily, created := store.CreateDaily(userIDForDaily, request)
 	if !created {

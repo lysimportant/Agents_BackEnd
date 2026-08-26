@@ -6,7 +6,7 @@ import "time"
 type Daily struct {
 	// ID 表示日常唯一标识。
 	ID int `json:"id"`
-	// Content 表示日常正文纯文本。
+	// Content 表示经过白名单清洗的日常富文本 HTML；兼容历史纯文本记录。
 	Content string `json:"content"`
 	// OwnerID 表示发布用户标识；该字段仅用于服务端所有权判断。
 	OwnerID int `json:"-"`
@@ -26,7 +26,7 @@ type Daily struct {
 
 // DailyRequest 表示 C 端发布日常时提交的正文和隐私选项。
 type DailyRequest struct {
-	// Content 表示待发布的日常正文。
+	// Content 表示待发布的日常富文本 HTML，服务端会再次清洗。
 	Content string `json:"content" binding:"required"`
 	// IsPrivate 表示是否仅个人可见。
 	IsPrivate bool `json:"isPrivate"`

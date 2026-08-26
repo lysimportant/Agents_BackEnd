@@ -2,7 +2,7 @@
   "name": "portal",
   "version": "0.1.0",
   "private": true,
-  "description": "HuaJian_AI 公开内容门户（C 端），只读消费后端 /api/public/* 接口。",
+  "description": "HuaJian_AI 公开内容门户（C 端），消费后端 /api/public/* 接口并支持日常富文本发布。",
   "scripts": {
     "dev": "next dev --port 3001",
     "build": "next build",

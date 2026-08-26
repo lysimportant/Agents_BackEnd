@@ -71,6 +71,8 @@ export function ImageGallery({
   const [columnCount, setColumnCount] = useState(1);
   // tagOverrides 保存本次浏览期间后端返回的最新标签，避免关闭预览后回退到旧列表值。
   const [tagOverrides, setTagOverrides] = useState<Record<number, string[]>>({});
+  // likeCountOverrides 保存预览互动返回的最新点赞数，保证卡片与浮层显示一致。
+  const [likeCountOverrides, setLikeCountOverrides] = useState<Record<number, number>>({});
   const triggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -91,10 +93,14 @@ export function ImageGallery({
     };
   }, []);
 
-  /** displayedImages 合并本次浏览期间由门户新增的权威标签，供卡片重开预览时继续显示。 */
+  /** displayedImages 合并本次浏览期间更新的权威标签和点赞数量，供卡片与预览保持一致。 */
   const displayedImages = useMemo(
-    () => images.map((image) => ({ ...image, tags: tagOverrides[image.id] ?? image.tags })),
-    [images, tagOverrides],
+    () => images.map((image) => ({
+      ...image,
+      tags: tagOverrides[image.id] ?? image.tags,
+      likeCount: likeCountOverrides[image.id] ?? image.likeCount,
+    })),
+    [images, likeCountOverrides, tagOverrides],
   );
 
   const imageColumns = useMemo(
@@ -105,6 +111,11 @@ export function ImageGallery({
   /** 更新指定图片的权威标签，并保持其他图片的本地覆盖结果。 */
   const updateImageTags = useCallback((imageID: number, tags: string[]) => {
     setTagOverrides((currentOverrides) => ({ ...currentOverrides, [imageID]: tags }));
+  }, []);
+
+  /** 更新指定图片的权威点赞数量，供卡片在预览互动后即时刷新。 */
+  const updateImageLikeCount = useCallback((imageID: number, likeCount: number) => {
+    setLikeCountOverrides((currentOverrides) => ({ ...currentOverrides, [imageID]: likeCount }));
   }, []);
 
   if (images.length === 0) {
@@ -137,6 +148,7 @@ export function ImageGallery({
           index={previewIndex}
           onIndexChange={setPreviewIndex}
           onTagsChange={updateImageTags}
+          onLikeCountChange={updateImageLikeCount}
           onClose={() => setPreviewIndex(null)}
           returnFocusRef={triggerRef}
         />

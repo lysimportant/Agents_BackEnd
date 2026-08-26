@@ -26,7 +26,7 @@
 - 内容请求只能使用 `/api/public/*`。登录、会话恢复和退出可使用 `/api/auth/login`、`/api/auth/session`、`/api/auth/logout`，但不得调用后台写接口、读取或持久化会话 ID。
 - 公开文章条件为 `is_private=0 AND status='已发布'`；公开文件条件为 `is_private=0 AND deleted_at IS NULL`。前端不得自行放宽这些条件或 18R 过滤。
 - 客服入口只能复用现有客服聊天边界，不得调用或混用 `/api/internal-chat/*`、内部聊天状态和后台鉴权。
-- C 端不提供内容编辑、付费或投稿能力；支持通过 `/api/auth/register/*` 完成账号、密码和邮箱验证码注册，后端固定分配最低权限 `viewer` 角色。图片评论只允许登录用户通过 `/api/public/files/:id/comments` 发送纯文本，并由后端公开条件和会话鉴权共同约束。
+- C 端不提供文章、文件编辑、付费或投稿能力；日常内容通过独立的 `/{locale}/daily/publish` 富文本页面发布。支持通过 `/api/auth/register/*` 完成账号、密码和邮箱验证码注册，后端固定分配最低权限 `viewer` 角色。图片评论只允许登录用户通过 `/api/public/files/:id/comments` 发送纯文本，并由后端公开条件和会话鉴权共同约束。
 
 ## 技术栈与运行约定
 

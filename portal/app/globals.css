@@ -321,6 +321,16 @@
   background: var(--muted);
 }
 
+/* ===== 日常富文本编辑器 ===== */
+.rich-text-editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+.rich-text-editor:focus:empty::before {
+  opacity: 0.7;
+}
+
 /* ===== 减少动态效果 ===== */
 @media (prefers-reduced-motion: reduce) {
   html {

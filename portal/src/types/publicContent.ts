@@ -195,11 +195,11 @@ export interface PublicApiError {
   error?: string;
 }
 
-/** C 端日常内容条目，公开列表和个人列表共用。 */
+/** C 端日常内容条目，正文为后端白名单清洗后的富文本 HTML。 */
 export interface PublicDailyItem {
   /** 日常唯一标识。 */
   id: number;
-  /** 日常正文纯文本。 */
+  /** 日常正文富文本 HTML，兼容历史纯文本记录。 */
   content: string;
   /** 发布人的公开名称。 */
   authorName: string;
