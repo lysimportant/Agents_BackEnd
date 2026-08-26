@@ -181,6 +181,8 @@ export function ImagesPageClient() {
     category: file.category,
     tags: file.tags ?? [],
     likeCount: file.likeCount ?? 0,
+    ownerName: file.ownerName ?? '',
+    views: file.views ?? 0,
   }));
 
   return (

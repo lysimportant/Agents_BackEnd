@@ -36,6 +36,9 @@ const publicMediumMaxWidth = 1280
 // publicCommentMaxLength 限制单条公开图片评论的 Unicode 字符数量。
 const publicCommentMaxLength = 500
 
+// publicDailyMaxLength 限制单条日常正文的 Unicode 字符数量。
+const publicDailyMaxLength = 2000
+
 // PublicStore 定义 C 端公开接口所需的数据访问能力。
 type PublicStore interface {
 	// ListPublicArticles 返回公开文章列表及分页信息。
@@ -66,6 +69,18 @@ type PublicStore interface {
 	CreatePublicFileComment(fileID, userID int, content string, includeR18 bool) (models.PublicFileComment, bool)
 	// AppendPublicFileTag 为登录用户可见的公开图片追加一个标签。
 	AppendPublicFileTag(fileID, userID int, tag string, includeR18 bool) ([]string, bool, bool)
+}
+
+// dailyStore 定义日常接口所需的数据访问能力，避免改变既有公开 handler 测试替身契约。
+type dailyStore interface {
+	ListPublicDailies(userID int, keyword string, page, pageSize int) ([]models.Daily, int, int)
+	FindPublicDaily(id, userID int) (models.Daily, bool)
+	CreateDaily(ownerID int, request models.DailyRequest) (models.Daily, bool)
+}
+
+// publicFileViewStore 定义公开文件浏览量写入能力。
+type publicFileViewStore interface {
+	IncrementPublicFileViews(id int, includeR18 bool) bool
 }
 
 // PublicHandler 处理 C 端公开内容读取与登录用户互动接口。
@@ -104,6 +119,15 @@ func (h *PublicHandler) currentUserID(c *gin.Context) int {
 	userID, ok := h.sessionService.UserIDFromRequest(c)
 	if !ok {
 		return 0
+	}
+	// 可选的用户状态复核确保停用账户的旧会话不再获得私密日常和互动权限。
+	if userStore, supportsUsers := h.store.(interface {
+		FindUserByID(int) (models.User, bool)
+	}); supportsUsers {
+		user, found := userStore.FindUserByID(userID)
+		if !found || !user.LoginAllowed() {
+			return 0
+		}
 	}
 	return userID
 }
@@ -226,6 +250,91 @@ func (h *PublicHandler) ListResources(c *gin.Context) {
 		items = append(items, file)
 	}
 	c.JSON(http.StatusOK, buildListResponse(items, page, pageSize, total, totalPages))
+}
+
+// ListDailies 处理 GET /api/public/dailies，公开返回所有公开日常及当前用户自己的私密日常。
+func (h *PublicHandler) ListDailies(c *gin.Context) {
+	store, supportsDailies := h.store.(dailyStore)
+	if !supportsDailies {
+		c.JSON(http.StatusNotImplemented, gin.H{"code": "daily_unavailable", "error": "日常功能不可用"})
+		return
+	}
+	// keyword、_category、_sort、page、pageSize 保存解析后的列表参数。
+	keyword, _category, _sort, page, pageSize := parsePageParams(c, PublicDefaultPageSize)
+	_ = _category
+	_ = _sort
+	// dailies、total、totalPages 保存按当前会话可见范围查询的结果。
+	dailies, total, totalPages := store.ListPublicDailies(h.currentUserID(c), keyword, page, pageSize)
+	items := make([]interface{}, 0, len(dailies))
+	for _, daily := range dailies {
+		items = append(items, daily)
+	}
+	c.JSON(http.StatusOK, buildListResponse(items, page, pageSize, total, totalPages))
+}
+
+// GetDaily 处理 GET /api/public/dailies/:id，返回当前访客可见的日常详情并记录一次浏览。
+func (h *PublicHandler) GetDaily(c *gin.Context) {
+	store, supportsDailies := h.store.(dailyStore)
+	if !supportsDailies {
+		c.JSON(http.StatusNotImplemented, gin.H{"code": "daily_unavailable", "error": "日常功能不可用"})
+		return
+	}
+	// rawID 保存路由参数中的原始日常编号。
+	rawID := strings.TrimSpace(c.Param("id"))
+	// dailyID、parseErr 保存解析后的日常编号及错误。
+	dailyID, parseErr := strconv.Atoi(rawID)
+	if parseErr != nil || dailyID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_id", "error": "无效的日常 ID"})
+		return
+	}
+	// daily、found 保存详情查询结果及当前访客是否有权查看。
+	daily, found := store.FindPublicDaily(dailyID, h.currentUserID(c))
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"code": "not_found", "error": "日常不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"item": daily})
+}
+
+// CreateDaily 处理 POST /api/public/dailies，要求有效登录用户发布日常。
+func (h *PublicHandler) CreateDaily(c *gin.Context) {
+	store, supportsDailies := h.store.(dailyStore)
+	if !supportsDailies {
+		c.JSON(http.StatusNotImplemented, gin.H{"code": "daily_unavailable", "error": "日常功能不可用"})
+		return
+	}
+	// userID 保存当前请求的会话用户编号。
+	userID := h.currentUserID(c)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "login_required", "error": "登录后才能发布日常"})
+		return
+	}
+	// userIDForDaily 保存会话服务解析出的发布人编号。
+	userIDForDaily := userID
+	// request 保存正文和隐私选项。
+	var request models.DailyRequest
+	if bindErr := c.ShouldBindJSON(&request); bindErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_daily", "error": "请输入日常内容"})
+		return
+	}
+	// contentRunes 保存去除首尾空白后的正文 Unicode 字符。
+	contentRunes := []rune(strings.TrimSpace(request.Content))
+	if len(contentRunes) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_daily", "error": "请输入日常内容"})
+		return
+	}
+	if len(contentRunes) > publicDailyMaxLength {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "daily_too_long", "error": "日常内容不能超过 2000 个字符"})
+		return
+	}
+	request.Content = string(contentRunes)
+	// daily、created 保存新日常和写入结果。
+	daily, created := store.CreateDaily(userIDForDaily, request)
+	if !created {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": "create_failed", "error": "发布日常失败"})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"item": daily})
 }
 
 // ListCategories handles GET /api/public/categories
@@ -365,6 +474,11 @@ func (h *PublicHandler) AppendFileTag(c *gin.Context) {
 
 // PreviewFile 处理 GET /api/public/files/:id/preview 返回内联文件预览。
 func (h *PublicHandler) PreviewFile(c *gin.Context) {
+	if fileID, parseErr := strconv.Atoi(strings.TrimSpace(c.Param("id"))); parseErr == nil && fileID > 0 {
+		if viewStore, supportsViews := h.store.(publicFileViewStore); supportsViews {
+			_ = viewStore.IncrementPublicFileViews(fileID, h.includeR18(c))
+		}
+	}
 	h.servePublicFile(c, false)
 }
 

@@ -17,7 +17,7 @@
 
 ## 二、应用边界
 
-C 端内容读取和图片互动只能调用 `/api/public/*`。为实现登录、登录后 18R 可见性以及点赞和评论，允许调用以下认证接口：
+C 端内容读取、日常发布和图片互动使用 `/api/public/*`。为实现登录、登录后 18R 可见性以及点赞和评论，允许调用以下认证接口：
 
 - `POST /api/auth/login`
 - `GET /api/auth/session`
@@ -85,7 +85,7 @@ is_private = 0 AND deleted_at IS NULL
 | `/{locale}/categories` | 公开分类聚合。 |
 | `/{locale}/categories/{category}` | 分类下文章与图片。 |
 | `/{locale}/search` | 跨文章、图片和资源搜索，页面 noindex。 |
-| `/{locale}/about` | 关于页面。 |
+| `/{locale}/daily` | 日常列表和登录用户发布入口；发布时选择公开或仅自己可见。 |
 | `/{locale}/feed.xml` | 当前语言文章 RSS。 |
 | `/sitemap.xml` | 静态页面、文章和分类 sitemap。 |
 | `/robots.txt` | 允许抓取内容页并排除搜索页。 |
@@ -100,6 +100,9 @@ is_private = 0 AND deleted_at IS NULL
 GET /api/public/articles
 GET /api/public/articles/:id
 GET /api/public/images
+GET /api/public/dailies
+GET /api/public/dailies/:id
+POST /api/public/dailies
 GET /api/public/resources
 GET /api/public/files/:id/preview
 GET /api/public/files/:id/thumbnail
@@ -134,10 +137,12 @@ GET /api/public/search
 - `sort` 当前会解析但不会影响数据库排序；列表固定按 ID 倒序。
 - 聚合搜索要求 `keyword`，超过 40 个字符时截断，每组最多返回 12 条。
 - 公开响应不返回 `storageName`、物理路径、所有者 ID、后台权限和删除字段。
+- 图片列表项返回 `ownerName`（上传人展示名称）和 `views`（公开预览浏览量），卡片可直接展示；请求 `/api/public/files/:id/preview` 会原子增加一次浏览量。
 - 文件标签最多 12 个，每个最多 24 个 Unicode 字符；文件列表和聚合搜索的 `keyword` 会匹配标签。
 - 图片互动读取允许匿名，返回点赞总数、当前登录用户点赞状态和最近 100 条评论。
 - 点赞和评论要求有效登录会话；每个账号每张图片最多一个点赞，再次点赞会取消，评论以纯文本保存且最多 500 个 Unicode 字符。
 - 追加标签要求有效登录会话，只能在现有标签后增加一个规范标签，不能覆盖或删除管理端及其他用户已有标签；重复标签不重复写入，全部标签仍遵循最多 12 个、每个最多 24 个 Unicode 字符的统一规则。
+- 日常发布要求有效登录会话，正文去首尾空白且最多 2000 个 Unicode 字符；公开日常匿名可读，私密日常仅发布人本人登录后可读。详情读取会增加一次浏览量。
 
 文章详情正文由后端白名单清洗，并把符合公开条件的本地媒体改写为 `/api/public/files/...`。相关文章最多 6 篇；封面从清洗后正文第一张图片派生；`tableOfContents` 后端字段当前为空，C 端可从正文生成展示目录。
 

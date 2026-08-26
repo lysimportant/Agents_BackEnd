@@ -84,6 +84,8 @@ export default async function CategoryDetailPage({
     category: file.category,
     tags: file.tags ?? [],
     likeCount: file.likeCount ?? 0,
+    ownerName: file.ownerName ?? '',
+    views: file.views ?? 0,
   }));
 
   const hasAnyContent = articles.items.length > 0 || galleryImages.length > 0;

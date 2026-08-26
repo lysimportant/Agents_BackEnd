@@ -25,7 +25,7 @@
     "images": "图片",
     "resources": "资源",
     "categories": "分类",
-    "about": "关于",
+    "daily": "日常",
     "searchPlaceholder": "搜索内容…",
     "searchToggle": "搜索",
     "openMenu": "打开菜单",
@@ -167,6 +167,26 @@
     "resources": "资源",
     "recommended": "推荐内容"
   },
+  "daily": {
+    "title": "日常",
+    "description": "分享此刻的想法与生活记录",
+    "contentLabel": "日常内容",
+    "placeholder": "写下今天想分享的内容…",
+    "publish": "发布日常",
+    "confirmTitle": "确认发布",
+    "confirmDescription": "请选择这条日常的可见范围。",
+    "publicOption": "公开发布",
+    "publicHint": "不登录也可以查看。",
+    "privateOption": "仅自己可见",
+    "privateHint": "只有你登录后可以查看。",
+    "confirmPublish": "确认发布",
+    "private": "仅自己可见",
+    "empty": "还没有日常记录。",
+    "loginRequired": "登录后才能发布日常。",
+    "contentRequired": "请先输入日常内容。",
+    "publishFailed": "发布失败，请稍后重试。",
+    "loadFailed": "日常加载失败，请稍后重试。"
+  },
   "about": {
     "title": "关于",
     "description": "了解本内容门户",
@@ -207,6 +227,8 @@
     "openImage": "查看图片",
     "articleToc": "文章目录",
     "readingProgress": "阅读进度"
+    ,"views": "浏览量"
+    ,"tags": "标签"
   },
   "metadata": {
     "siteTitle": "HuaJian_AI 内容门户",
@@ -224,6 +246,8 @@
     "searchTitle": "搜索",
     "searchDescription": "搜索公开的文章、图片与资源",
     "aboutTitle": "关于",
-    "aboutDescription": "了解本内容门户"
+    "aboutDescription": "了解本内容门户",
+    "dailyTitle": "日常",
+    "dailyDescription": "分享此刻的想法与生活记录"
   }
 }

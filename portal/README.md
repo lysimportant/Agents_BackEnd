@@ -1,12 +1,12 @@
 # 门户（C 端）
 
-面向普通访问者的公开内容门户，通过后端 <code>/api/public/*</code> 展示经 B 端明确发布的文章、图片与文件资源，并支持登录后图片点赞和评论。
+面向普通访问者的公开内容门户，通过后端 <code>/api/public/*</code> 展示公开文章、图片、文件和日常内容；登录后可发布日常并进行图片点赞和评论。
 
 - 技术栈：Next.js 16 App Router + React + strict TypeScript + Tailwind CSS 4 + next-intl + Lucide React。
 - 默认地址：<code>http://localhost:3001</code>，后端默认 <code>http://localhost:8080</code>。
 - 支持语言：<code>zh-CN</code>（默认）、<code>en-US</code>、<code>ja-JP</code>。
 - 主题：浅色、深色、海洋品牌、跟随系统。
-- 边界：只调用 <code>/api/public/*</code>，不携带后台 Cookie，不提供任何写能力。
+- 边界：内容读取和日常发布只调用 <code>/api/public/*</code>；登录、会话恢复和退出使用 <code>/api/auth/*</code>，浏览器不保存会话 ID。
 
 ## 安装
 
@@ -58,7 +58,7 @@
 | <code>/{locale}/categories</code> | 分类总览 |
 | <code>/{locale}/categories/[category]</code> | 分类详情 |
 | <code>/{locale}/search</code> | 搜索 |
-| <code>/{locale}/about</code> | 关于 |
+| <code>/{locale}/daily</code> | 日常浏览与发布 |
 | <code>/{locale}/feed.xml</code> | RSS 订阅 |
 | <code>/sitemap.xml</code>、<code>/robots.txt</code> | SEO 元数据路由 |
 
@@ -69,6 +69,9 @@
 | GET | <code>/api/public/articles</code> | 公开文章列表 |
 | GET | <code>/api/public/articles/:id</code> | 公开文章详情 |
 | GET | <code>/api/public/images</code> | 公开图片列表 |
+| GET | <code>/api/public/dailies</code> | 公开日常列表；登录后额外包含本人私密日常 |
+| GET | <code>/api/public/dailies/:id</code> | 日常详情并增加一次浏览量 |
+| POST | <code>/api/public/dailies</code> | 登录用户发布日常，可选择公开或仅自己可见 |
 | GET | <code>/api/public/resources</code> | 公开资源列表 |
 | GET | <code>/api/public/files/:id/preview</code> | 文件内联预览 |
 | GET | <code>/api/public/files/:id/thumbnail</code> | 图片缩略图 |

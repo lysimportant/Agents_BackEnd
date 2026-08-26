@@ -25,7 +25,7 @@
     "images": "画像",
     "resources": "リソース",
     "categories": "カテゴリ",
-    "about": "概要",
+    "daily": "日常",
     "searchPlaceholder": "コンテンツを検索…",
     "searchToggle": "検索",
     "openMenu": "メニューを開く",
@@ -167,6 +167,26 @@
     "resources": "リソース",
     "recommended": "おすすめコンテンツ"
   },
+  "daily": {
+    "title": "日常",
+    "description": "思いや日々の出来事を共有",
+    "contentLabel": "日常の内容",
+    "placeholder": "共有したいことを書いてください…",
+    "publish": "日常を公開",
+    "confirmTitle": "公開を確認",
+    "confirmDescription": "この日常を誰に公開するか選択してください。",
+    "publicOption": "公開",
+    "publicHint": "ログインしていない訪問者も閲覧できます。",
+    "privateOption": "自分だけ",
+    "privateHint": "ログイン中の自分だけが閲覧できます。",
+    "confirmPublish": "公開する",
+    "private": "非公開",
+    "empty": "日常の記録はまだありません。",
+    "loginRequired": "日常を公開するにはログインしてください。",
+    "contentRequired": "内容を入力してください。",
+    "publishFailed": "公開に失敗しました。もう一度お試しください。",
+    "loadFailed": "日常の読み込みに失敗しました。"
+  },
   "about": {
     "title": "概要",
     "description": "このコンテンツポータルについて",
@@ -207,6 +227,8 @@
     "openImage": "画像を見る",
     "articleToc": "目次",
     "readingProgress": "読書の進捗"
+    ,"views": "閲覧数"
+    ,"tags": "タグ"
   },
   "metadata": {
     "siteTitle": "HuaJian_AI コンテンツポータル",
@@ -224,6 +246,8 @@
     "searchTitle": "検索",
     "searchDescription": "公開記事・画像・リソースを検索",
     "aboutTitle": "概要",
-    "aboutDescription": "このコンテンツポータルについて"
+    "aboutDescription": "このコンテンツポータルについて",
+    "dailyTitle": "日常",
+    "dailyDescription": "思いや日々の出来事を共有"
   }
 }

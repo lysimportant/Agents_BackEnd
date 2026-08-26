@@ -266,7 +266,7 @@ func scanPublicFile(row scanner) (models.PublicFileListItem, bool) {
 	// encodedTags 保存 SQLite 中的 JSON 标签文本。
 	var encodedTags string
 	// err 保存扫描过程的错误。
-	err := row.Scan(&item.ID, &item.DisplayName, &item.Category, &item.Description, &encodedTags, &item.ContentType, &item.Size, &isPrivate, &item.ImageWidth, &item.ImageHeight, &c, &up, &deleted, &item.LikeCount)
+	err := row.Scan(&item.ID, &item.DisplayName, &item.Category, &item.Description, &encodedTags, &item.ContentType, &item.Size, &isPrivate, &item.ImageWidth, &item.ImageHeight, &item.OwnerName, &item.Views, &c, &up, &deleted, &item.LikeCount)
 	if err != nil {
 		return models.PublicFileListItem{}, false
 	}
@@ -292,7 +292,7 @@ func scanPublicFile(row scanner) (models.PublicFileListItem, bool) {
 }
 
 // publicFileSelect 保存公开文件列表查询需要扫描的列。
-const publicFileSelect = "f.id,f.display_name,f.category,f.description,f.tags,f.content_type,f.size,f.is_private,f.image_width,f.image_height,f.created_at,f.updated_at,f.deleted_at,(SELECT COUNT(1) FROM public_file_likes pfl WHERE pfl.file_id=f.id)"
+const publicFileSelect = "f.id,f.display_name,f.category,f.description,f.tags,f.content_type,f.size,f.is_private,f.image_width,f.image_height,COALESCE(NULLIF(u.name,''),u.username,''),f.views,f.created_at,f.updated_at,f.deleted_at,(SELECT COUNT(1) FROM public_file_likes pfl WHERE pfl.file_id=f.id)"
 
 // ListPublicFiles 返回公开文件列表及分页信息，isImageOnly 为 true 时仅返回图片。
 func (s *SQLiteStore) ListPublicFiles(isImageOnly bool, keyword, category string, page, pageSize int, includeR18 bool) ([]models.PublicFileListItem, int, int) {
@@ -324,7 +324,7 @@ func (s *SQLiteStore) ListPublicFiles(isImageOnly bool, keyword, category string
 	// offset 保存分页偏移量。
 	offset := (page - 1) * pageSize
 	// rows、err 保存分页查询结果与查询错误。
-	rows, err := s.db.Query("SELECT "+publicFileSelect+" FROM files f WHERE "+whereSQL+" ORDER BY f.id DESC LIMIT ? OFFSET ?", append(args, pageSize, offset)...)
+	rows, err := s.db.Query("SELECT "+publicFileSelect+" FROM files f LEFT JOIN users u ON u.id=f.owner_id WHERE "+whereSQL+" ORDER BY f.id DESC LIMIT ? OFFSET ?", append(args, pageSize, offset)...)
 	if err != nil {
 		return []models.PublicFileListItem{}, 0, 0
 	}
@@ -346,16 +346,26 @@ func (s *SQLiteStore) ListPublicFiles(isImageOnly bool, keyword, category string
 // FindPublicFile 返回公开文件摘要，并校验公开条件。
 func (s *SQLiteStore) FindPublicFile(id int, includeR18 bool) (models.PublicFileListItem, bool) {
 	// row 保存查询结果行。
-	row := s.db.QueryRow("SELECT "+publicFileSelect+" FROM files f WHERE f.id=? AND "+publicFileCondition(includeR18), id)
+	row := s.db.QueryRow("SELECT "+publicFileSelect+" FROM files f LEFT JOIN users u ON u.id=f.owner_id WHERE f.id=? AND "+publicFileCondition(includeR18), id)
 	// item 保存扫描得到的公开文件。
 	item, ok := scanPublicFile(row)
 	return item, ok
 }
 
+// IncrementPublicFileViews 为公开文件详情增加一次浏览量，并隐藏私密或已删除文件。
+func (s *SQLiteStore) IncrementPublicFileViews(id int, includeR18 bool) bool {
+	result, err := s.db.Exec("UPDATE files SET views=views+1 WHERE id=? AND "+publicFileCondition(includeR18), id)
+	if err != nil {
+		return false
+	}
+	affected, err := result.RowsAffected()
+	return err == nil && affected > 0
+}
+
 // FeaturedPublicImages 返回最新的公开图片列表（已废除精选逻辑）。
 func (s *SQLiteStore) FeaturedPublicImages(limit int, includeR18 bool) []models.PublicFileListItem {
 	// rows、err 保存最新图片查询结果与查询错误。
-	rows, err := s.db.Query("SELECT "+publicFileSelect+" FROM files f WHERE "+publicFileCondition(includeR18)+" AND f.content_type LIKE 'image/%' ORDER BY f.id DESC LIMIT ?", limit)
+	rows, err := s.db.Query("SELECT "+publicFileSelect+" FROM files f LEFT JOIN users u ON u.id=f.owner_id WHERE "+publicFileCondition(includeR18)+" AND f.content_type LIKE 'image/%' ORDER BY f.id DESC LIMIT ?", limit)
 	if err != nil {
 		return []models.PublicFileListItem{}
 	}

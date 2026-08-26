@@ -103,6 +103,9 @@ docker compose up --build
 | GET | `/api/public/articles` | 公开文章列表，支持 `page`、`pageSize`、`category`、`keyword` |
 | GET | `/api/public/articles/:id` | 公开文章详情 |
 | GET | `/api/public/images` | 公开图片列表 |
+| GET | `/api/public/dailies` | 公开日常列表；登录后额外包含本人私密日常 |
+| GET | `/api/public/dailies/:id` | 日常详情并增加一次浏览量 |
+| POST | `/api/public/dailies` | 登录用户发布日常，可选择公开或仅自己可见 |
 | GET | `/api/public/resources` | 公开资源列表 |
 | GET | `/api/public/files/:id/preview` | 公开文件内联预览 |
 | GET | `/api/public/files/:id/thumbnail` | 最大 `480×480`、质量 80 的 JPEG 缩略图 |

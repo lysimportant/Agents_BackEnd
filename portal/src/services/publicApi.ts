@@ -12,6 +12,7 @@ import type {
   PublicListResponse,
   PublicSearchResult,
   PublicSiteSummary,
+  PublicDailyItem,
 } from '@/types/publicContent';
 
 /** 单次请求超时时间（毫秒）。 */
@@ -341,6 +342,25 @@ export function searchPublic(
     '/api/public/search?keyword=' + encodeURIComponent(keyword),
     options,
   );
+}
+
+/** 获取公开日常与当前登录用户自己的私密日常。 */
+export function listDailies(
+  options?: PublicFetchOptions,
+): Promise<PublicListResponse<PublicDailyItem>> {
+  return requestPublicJson<PublicListResponse<PublicDailyItem>>('/api/public/dailies', {
+    ...options,
+    credentials: 'include',
+  });
+}
+
+/** 发布一条日常，后端根据会话用户和 isPrivate 决定可见范围。 */
+export async function createDaily(content: string, isPrivate: boolean): Promise<PublicDailyItem> {
+  const response = await requestPublicMutationJson<{ item: PublicDailyItem }>('/api/public/dailies', {
+    method: 'POST',
+    body: JSON.stringify({ content, isPrivate }),
+  });
+  return response.item;
 }
 
 /** 获取服务端内容缓存秒数的快捷常量，供页面统一传入 revalidate。 */

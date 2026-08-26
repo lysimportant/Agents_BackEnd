@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { FileText, Folder, Images, Info, LayoutGrid, Menu, Search, X } from 'lucide-react';
+import { FileText, Folder, Images, LayoutGrid, Menu, Search, X, CalendarDays } from 'lucide-react';
 import { Link, usePathname } from '@/i18n/navigation';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { LanguageSwitcher } from '@/components/language/LanguageSwitcher';
@@ -11,7 +11,7 @@ import { cn } from '@/utils/cn';
 
 /** 顶部导航项，图片作为首页，故不单独列首页；每个项带图标美化。 */
 const NAV_ITEMS: {
-  key: 'images' | 'articles' | 'resources' | 'categories' | 'about';
+  key: 'images' | 'articles' | 'resources' | 'categories' | 'daily';
   href: string;
   icon: typeof Images;
 }[] = [
@@ -19,7 +19,7 @@ const NAV_ITEMS: {
   { key: 'articles', href: '/articles', icon: FileText },
   { key: 'resources', href: '/resources', icon: Folder },
   { key: 'categories', href: '/categories', icon: LayoutGrid },
-  { key: 'about', href: '/about', icon: Info },
+  { key: 'daily', href: '/daily', icon: CalendarDays },
 ];
 
 /** 判断导航项是否处于激活状态。 */

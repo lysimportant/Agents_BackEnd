@@ -105,6 +105,10 @@ type PublicFileListItem struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 	// LikeCount 图片当前点赞数量。
 	LikeCount int `json:"likeCount"`
+	// OwnerName 图片上传人的展示名称。
+	OwnerName string `json:"ownerName"`
+	// Views 图片公开查看次数。
+	Views int `json:"views"`
 }
 
 // PublicFileComment 表示公开图片下的一条登录用户评论。

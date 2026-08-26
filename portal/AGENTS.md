@@ -15,7 +15,7 @@
 ## 当前实现状态
 
 - `portal/` 已是可安装、启动、构建和容器部署的 Next.js 16 应用，拥有独立 `package.json`、锁文件、App Router 源码、Dockerfile、三语言资源和 TypeDoc 配置。
-- 当前实现包含文章、图片、资源、分类、搜索、关于、文章详情、图片标签与互动、RSS、sitemap 和 robots；`/{locale}` 当前跳转到 `/{locale}/images`，图片瀑布流是第一屏主入口。
+- 当前实现包含文章、图片、资源、日常、分类、搜索、文章详情、图片标签与互动、RSS、sitemap 和 robots；`/{locale}` 当前跳转到 `/{locale}/images`，图片瀑布流是第一屏主入口。
 - C 端支持后端会话登录恢复和 18R 开关。匿名请求排除 18R 内容；只有有效 HttpOnly 会话且 `portal-r18=1` 时公开接口才返回 18R 内容。
 - 仓库根 `docker-compose.yml` 已编排门户服务，默认端口为 `3001`；部署配置变化时同步检查 Compose、根 `.env.example`、README 和部署说明。
 

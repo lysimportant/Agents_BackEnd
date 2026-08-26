@@ -105,6 +105,10 @@ export interface PublicFileListItem {
   updatedAt: string;
   /** 图片当前点赞数量。 */
   likeCount: number;
+  /** 文件上传人的公开展示名称。 */
+  ownerName?: string;
+  /** 文件被公开浏览的次数。 */
+  views: number;
 }
 
 /** 公开图片下的一条登录用户评论。 */
@@ -189,4 +193,22 @@ export interface PublicApiError {
   code?: string;
   /** 可记录的错误说明，不直接展示给用户。 */
   error?: string;
+}
+
+/** C 端日常内容条目，公开列表和个人列表共用。 */
+export interface PublicDailyItem {
+  /** 日常唯一标识。 */
+  id: number;
+  /** 日常正文纯文本。 */
+  content: string;
+  /** 发布人的公开名称。 */
+  authorName: string;
+  /** 是否仅发布人可见。 */
+  isPrivate: boolean;
+  /** 浏览量。 */
+  views: number;
+  /** 创建时间。 */
+  createdAt: string;
+  /** 更新时间。 */
+  updatedAt: string;
 }

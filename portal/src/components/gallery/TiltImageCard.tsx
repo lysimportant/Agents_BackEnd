@@ -1,13 +1,13 @@
 'use client';
 
+import { Eye, UserRound } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { ProgressiveImage } from '@/components/common/ProgressiveImage';
 import type { GalleryImage } from './types';
 
 /**
- * TiltImageCard 是瀑布流中的单张裸图瓦片：
- * 不使用卡片边框与说明条，仅保留圆角、缩略图懒加载与悬停轻微 3D 摆动和缩放。
+ * TiltImageCard 是瀑布流中的单张图片卡片，显示公开标签、上传人和浏览量。
  */
 export function TiltImageCard({
   image,
@@ -59,7 +59,7 @@ export function TiltImageCard({
       onPointerMove={handlePointerMove}
       onPointerLeave={() => setTransform('')}
       aria-label={t('openImage') + ': ' + image.alt}
-      className="masonry-item tilt-image-card group relative block w-full overflow-hidden rounded-lg text-left"
+      className="masonry-item tilt-image-card group relative block w-full overflow-hidden rounded-lg border border-border bg-surface text-left shadow-sm"
       style={{
         transform,
       }}
@@ -75,6 +75,27 @@ export function TiltImageCard({
         priority={index === 0}
         imageClassName="transition-transform duration-300 group-hover:scale-[1.03]"
       />
+      <div className="space-y-2 border-t border-border px-3 py-3">
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span className="flex min-w-0 items-center gap-1 truncate" title={image.ownerName || undefined}>
+            <UserRound className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span className="truncate">{image.ownerName || '—'}</span>
+          </span>
+          <span className="flex shrink-0 items-center gap-1" title={t('views')}>
+            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+            {image.views}
+          </span>
+        </div>
+        {image.tags.length > 0 ? (
+          <div className="flex flex-wrap gap-1" aria-label={t('tags')}>
+            {image.tags.slice(0, 8).map((tag) => (
+              <span key={tag} className="max-w-full truncate rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                #{tag}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
     </button>
   );
 }

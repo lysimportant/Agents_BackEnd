@@ -50,7 +50,71 @@ paths:
         - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 24 } }
       responses:
-        '200': { description: 公开图片分页列表 }
+        '200': { description: 公开图片分页列表；每项包含 tags、ownerName（上传人展示名称）和 views（公开预览浏览量） }
+  /api/public/dailies:
+    get:
+      tags: [公开门户]
+      summary: 获取公开日常列表
+      description: 匿名请求返回所有公开日常；登录请求额外返回当前用户自己的私密日常。支持 keyword、page 和 pageSize，默认每页 24 条、最多 50 条。
+      security: [{ cookieSession: [] }]
+      parameters:
+        - { name: keyword, in: query, schema: { type: string }, description: 按日常正文或发布人展示名称模糊搜索 }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 24 } }
+      responses:
+        '200':
+          description: 日常分页列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, pagination]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PublicDaily' }
+                  pagination: { $ref: '#/components/schemas/PublicPagination' }
+    post:
+      tags: [公开门户]
+      summary: 发布一条日常
+      description: 仅登录用户可发布；正文去首尾空白后最多 2000 个 Unicode 字符，isPrivate=true 时仅发布人本人可见。
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublicDailyRequest' }
+      responses:
+        '201':
+          description: 日常发布成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [item]
+                properties:
+                  item: { $ref: '#/components/schemas/PublicDaily' }
+        '400': { description: 日常为空或超过 2000 个 Unicode 字符 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/public/dailies/{id}:
+    get:
+      tags: [公开门户]
+      summary: 获取日常详情
+      description: 仅返回当前访客可见的日常，并在成功读取时原子增加一次浏览量。
+      security: [{ cookieSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: 日常详情
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [item]
+                properties:
+                  item: { $ref: '#/components/schemas/PublicDaily' }
+        '404': { description: 日常不存在、私密或当前访客无权查看 }
   /api/public/resources:
     get:
       tags: [公开门户]
@@ -973,6 +1037,31 @@ components:
     Forbidden:
       description: 已登录用户缺少所需菜单、动作或所有权权限。
   schemas:
+    PublicPagination:
+      type: object
+      required: [page, pageSize, total, totalPages]
+      properties:
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1, maximum: 50 }
+        total: { type: integer, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
+    PublicDaily:
+      type: object
+      required: [id, content, authorName, isPrivate, views, createdAt, updatedAt]
+      properties:
+        id: { type: integer, minimum: 1 }
+        content: { type: string, maxLength: 2000 }
+        authorName: { type: string, description: 发布人的公开展示名称 }
+        isPrivate: { type: boolean, description: 是否仅发布人本人可见 }
+        views: { type: integer, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PublicDailyRequest:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1, maxLength: 2000, description: 去除首尾空白后保存的纯文本日常 }
+        isPrivate: { type: boolean, default: false, description: 是否仅发布人本人可见 }
     PublicFileCommentRequest:
       type: object
       required: [content]

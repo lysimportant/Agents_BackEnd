@@ -25,7 +25,7 @@
     "images": "Images",
     "resources": "Resources",
     "categories": "Categories",
-    "about": "About",
+    "daily": "Daily",
     "searchPlaceholder": "Search content…",
     "searchToggle": "Search",
     "openMenu": "Open menu",
@@ -167,6 +167,26 @@
     "resources": "Resources",
     "recommended": "Recommended"
   },
+  "daily": {
+    "title": "Daily",
+    "description": "Share thoughts and everyday moments",
+    "contentLabel": "Daily note",
+    "placeholder": "Write something you want to share…",
+    "publish": "Publish",
+    "confirmTitle": "Confirm publication",
+    "confirmDescription": "Choose who can see this daily note.",
+    "publicOption": "Public",
+    "publicHint": "Anyone can view it, including visitors who are not signed in.",
+    "privateOption": "Private",
+    "privateHint": "Only you can view it while signed in.",
+    "confirmPublish": "Publish now",
+    "private": "Private",
+    "empty": "No daily notes yet.",
+    "loginRequired": "Sign in to publish a daily note.",
+    "contentRequired": "Enter some content first.",
+    "publishFailed": "Publishing failed. Please try again.",
+    "loadFailed": "Could not load daily notes."
+  },
   "about": {
     "title": "About",
     "description": "Learn about this content portal",
@@ -207,6 +227,8 @@
     "openImage": "View image",
     "articleToc": "Table of contents",
     "readingProgress": "Reading progress"
+    ,"views": "Views"
+    ,"tags": "Tags"
   },
   "metadata": {
     "siteTitle": "HuaJian_AI Content Portal",
@@ -224,6 +246,8 @@
     "searchTitle": "Search",
     "searchDescription": "Search public articles, images and resources",
     "aboutTitle": "About",
-    "aboutDescription": "Learn about this content portal"
+    "aboutDescription": "Learn about this content portal",
+    "dailyTitle": "Daily",
+    "dailyDescription": "Share thoughts and everyday moments"
   }
 }

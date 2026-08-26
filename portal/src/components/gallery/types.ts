@@ -26,6 +26,10 @@ export interface GalleryImage {
   likeCount: number;
   /** 文件描述。 */
   description?: string;
+  /** 上传人的公开展示名称。 */
+  ownerName?: string;
+  /** 图片在门户中的浏览次数。 */
+  views: number;
   /** 发布时间（RFC 3339）。 */
   publishedAt?: string;
 }

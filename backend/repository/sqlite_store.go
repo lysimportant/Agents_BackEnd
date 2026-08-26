@@ -276,6 +276,17 @@ func (s *SQLiteStore) migrate() error {
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		)`,
+		// dailies 保存 C 端日常正文、发布人、隐私状态和浏览量。
+		`CREATE TABLE IF NOT EXISTS dailies (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			content TEXT NOT NULL,
+			owner_id INTEGER NOT NULL,
+			is_private INTEGER NOT NULL DEFAULT 0,
+			views INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+		)`,
 		// files 保存文件管理上传资源和软删除元数据。
 		`CREATE TABLE IF NOT EXISTS files (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -290,6 +301,7 @@ func (s *SQLiteStore) migrate() error {
 			content_sha256 TEXT NOT NULL DEFAULT '',
 			owner_id INTEGER NOT NULL DEFAULT 0,
 			is_private INTEGER NOT NULL DEFAULT 0,
+			views INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
 			deleted_at TEXT
@@ -418,6 +430,7 @@ func (s *SQLiteStore) migrate() error {
 		{"articles", "is_private", "ALTER TABLE articles ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0"},
 		{"files", "owner_id", "ALTER TABLE files ADD COLUMN owner_id INTEGER NOT NULL DEFAULT 0"},
 		{"files", "is_private", "ALTER TABLE files ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0"},
+		{"files", "views", "ALTER TABLE files ADD COLUMN views INTEGER NOT NULL DEFAULT 0"},
 		// tags 使用 JSON 数组保存文件标签，旧文件迁移后默认为空数组。
 		{"files", "tags", "ALTER TABLE files ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'"},
 		// content_sha256 仅用于同一所有者的有效文件按内容去重，不向客户端返回。
@@ -482,6 +495,8 @@ func (s *SQLiteStore) migrate() error {
 		// C 端门户列表按私密与发布状态读取。
 		`CREATE INDEX IF NOT EXISTS idx_articles_public ON articles(is_private,status,id)`,
 		`CREATE INDEX IF NOT EXISTS idx_files_public ON files(is_private,deleted_at,id)`,
+		// 日常列表按隐私、发布人和时间倒序读取。
+		`CREATE INDEX IF NOT EXISTS idx_dailies_visibility ON dailies(is_private,owner_id,created_at,id)`,
 		// 图片互动按文件读取点赞和最新评论。
 		`CREATE INDEX IF NOT EXISTS idx_public_file_likes_file_id ON public_file_likes(file_id,user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_public_file_comments_file_id ON public_file_comments(file_id,id)`,

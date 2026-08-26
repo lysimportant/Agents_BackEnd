@@ -588,6 +588,8 @@ type ManagedFile struct {
 	ImageWidth int `json:"imageWidth,omitempty"`
 	// ImageHeight 表示公开图片原始高度，首期用于瀑布流占位。
 	ImageHeight int `json:"imageHeight,omitempty"`
+	// Views 表示文件公开查看次数。
+	Views int `json:"views"`
 	// ReadOnly 表示只读状态。
 	ReadOnly bool `json:"readOnly"`
 	// PreviewURL 表示预览地址。

@@ -10,7 +10,7 @@ import { localizedPath } from '@/utils/seo';
 
 /** 静态可索引页面路径（不带语言前缀）。 */
 // 首页已跳转到图片页，故不再单列首页路径。
-const STATIC_PATHS = ['/images', '/articles', '/resources', '/categories', '/about'];
+const STATIC_PATHS = ['/images', '/articles', '/resources', '/categories', '/daily'];
 
 /** 分页拉取全部公开文章，设置合理上限避免无界循环。 */
 async function fetchAllArticles(): Promise<PublicArticleListItem[]> {

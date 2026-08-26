@@ -132,6 +132,8 @@ export default async function SearchPage({
                         category: file.category,
                         tags: file.tags ?? [],
                         likeCount: file.likeCount ?? 0,
+                        ownerName: file.ownerName ?? '',
+                        views: file.views ?? 0,
                       }),
                     )}
                     emptyTitle={t('noResultsTitle')}
