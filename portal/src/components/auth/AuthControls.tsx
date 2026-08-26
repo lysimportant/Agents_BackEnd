@@ -73,7 +73,7 @@ export function AuthControls() {
         className="flex h-11 items-center gap-1.5 rounded-full px-3 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
         <LogOut className="h-4 w-4" aria-hidden="true" />
-        <span className="text-sm font-medium">{t('logout')}</span>
+        <span className="hidden text-sm font-medium sm:inline">{t('logout')}</span>
       </button>
     </div>
   );

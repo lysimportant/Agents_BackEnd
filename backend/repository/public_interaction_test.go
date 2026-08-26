@@ -143,3 +143,45 @@ func TestPublicFileTagsAndInteractions(t *testing.T) {
 		t.Fatal("anonymous user should not append public tags")
 	}
 }
+
+// TestDailyCoverAndInteractions 验证日常封面回退、唯一点赞、评论和私密边界。
+func TestDailyCoverAndInteractions(t *testing.T) {
+	store, _ := openTempStore(t)
+	defer store.db.Close()
+	canLogin := true
+	owner, message := store.CreateUser(models.UserRequest{Username: "daily-owner", Name: "日常作者", Role: "普通用户", Status: "在岗", CanLogin: &canLogin}, auth.MustHashPassword("pass1234"))
+	if message != "" {
+		t.Fatalf("create daily owner: %s", message)
+	}
+	cover := store.CreateFile(models.ManagedFile{DisplayName: "daily-cover.png", OriginalName: "daily-cover.png", ContentType: "image/png", StorageName: "daily-cover.png", OwnerID: owner.ID})
+	if cover.ID == 0 {
+		t.Fatal("create daily cover failed")
+	}
+	daily, created := store.CreateDaily(owner.ID, models.DailyRequest{Content: "<h2>今天</h2><p>记录</p>", CoverFileID: cover.ID})
+	if !created || daily.ID == 0 || daily.CoverFileID != cover.ID || daily.LikeCount != 0 {
+		t.Fatalf("create daily failed: created=%v daily=%+v", created, daily)
+	}
+	liked, updated := store.TogglePublicDailyLike(daily.ID, owner.ID)
+	if !updated || liked.LikeCount != 1 || !liked.LikedByCurrentUser {
+		t.Fatalf("daily like failed: updated=%v interaction=%+v", updated, liked)
+	}
+	unliked, updated := store.TogglePublicDailyLike(daily.ID, owner.ID)
+	if !updated || unliked.LikeCount != 0 || unliked.LikedByCurrentUser {
+		t.Fatalf("daily unlike failed: updated=%v interaction=%+v", updated, unliked)
+	}
+	comment, created := store.CreatePublicDailyComment(daily.ID, owner.ID, "写得不错")
+	if !created || comment.UserName != owner.Name || comment.Content != "写得不错" {
+		t.Fatalf("daily comment failed: created=%v comment=%+v", created, comment)
+	}
+	interaction, found := store.GetPublicDailyInteraction(daily.ID, 0)
+	if !found || len(interaction.Comments) != 1 || interaction.Comments[0].ID != comment.ID {
+		t.Fatalf("daily interaction read failed: found=%v interaction=%+v", found, interaction)
+	}
+	privateDaily, created := store.CreateDaily(owner.ID, models.DailyRequest{Content: "<p>私密</p>", IsPrivate: true})
+	if !created {
+		t.Fatal("create private daily failed")
+	}
+	if _, found := store.GetPublicDailyInteraction(privateDaily.ID, 0); found {
+		t.Fatal("anonymous user should not read private daily interaction")
+	}
+}

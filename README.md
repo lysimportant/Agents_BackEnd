@@ -106,6 +106,10 @@ docker compose up --build
 | GET | `/api/public/dailies` | 公开日常列表；登录后额外包含本人私密日常 |
 | GET | `/api/public/dailies/:id` | 日常详情并增加一次浏览量 |
 | POST | `/api/public/dailies` | 登录用户发布富文本日常，可选择公开或仅自己可见 |
+| POST | `/api/public/dailies/media` | 登录用户上传日常正文图片或视频 |
+| GET | `/api/public/dailies/:id/interactions` | 日常点赞和评论 |
+| POST | `/api/public/dailies/:id/like` | 切换日常点赞 |
+| POST | `/api/public/dailies/:id/comments` | 发送日常评论 |
 | GET | `/api/public/resources` | 公开资源列表 |
 | GET | `/api/public/files/:id/preview` | 公开文件内联预览 |
 | GET | `/api/public/files/:id/thumbnail` | 最大 `480×480`、质量 80 的 JPEG 缩略图 |

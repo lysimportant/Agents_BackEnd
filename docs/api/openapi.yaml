@@ -96,6 +96,27 @@ paths:
                   item: { $ref: '#/components/schemas/PublicDaily' }
         '400': { description: 日常为空或超过 2000 个 Unicode 字符 }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/public/dailies/media:
+    post:
+      tags: [公开门户]
+      summary: 上传日常正文图片或视频
+      description: 仅登录用户可上传常见图片或视频；文件会作为公开媒体写入文件库，正文只能引用返回的受控公开预览地址。
+      security: [{ cookieSession: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201': { description: 媒体上传成功，返回公开文件摘要 }
+        '400': { description: 文件为空或类型不受支持 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /api/public/dailies/{id}:
     get:
       tags: [公开门户]
@@ -115,6 +136,59 @@ paths:
                 properties:
                   item: { $ref: '#/components/schemas/PublicDaily' }
         '404': { description: 日常不存在、私密或当前访客无权查看 }
+  /api/public/dailies/{id}/interactions:
+    get:
+      tags: [公开门户]
+      summary: 获取公开日常点赞和评论
+      security: [{ cookieSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: 点赞总数、当前登录用户点赞状态和最近一百条评论
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicDailyInteraction' }
+        '404': { description: 日常不存在、私密或当前访客无权查看 }
+  /api/public/dailies/{id}/like:
+    post:
+      tags: [公开门户]
+      summary: 切换当前登录用户的日常点赞
+      security: [{ cookieSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: 点赞切换后的权威互动状态
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicDailyInteraction' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: 日常不存在、私密或当前访客无权查看 }
+  /api/public/dailies/{id}/comments:
+    post:
+      tags: [公开门户]
+      summary: 发送公开日常评论
+      security: [{ cookieSession: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublicFileCommentRequest' }
+      responses:
+        '201':
+          description: 评论发送成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [item]
+                properties:
+                  item: { $ref: '#/components/schemas/PublicDailyComment' }
+        '400': { description: 评论为空或超过 500 个 Unicode 字符 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /api/public/resources:
     get:
       tags: [公开门户]
@@ -1047,13 +1121,18 @@ components:
         totalPages: { type: integer, minimum: 0 }
     PublicDaily:
       type: object
-      required: [id, content, authorName, isPrivate, views, createdAt, updatedAt]
+      required: [id, content, authorName, isPrivate, views, likeCount, createdAt, updatedAt]
       properties:
         id: { type: integer, minimum: 1 }
         content: { type: string, description: 经过白名单清洗的富文本 HTML，用户可见文字最多 2000 个 Unicode 字符 }
         authorName: { type: string, description: 发布人的公开展示名称 }
         isPrivate: { type: boolean, description: 是否仅发布人本人可见 }
         views: { type: integer, minimum: 0 }
+        likeCount: { type: integer, minimum: 0 }
+        coverImage: { type: string, description: 公开封面中图地址，可缺省 }
+        coverAlt: { type: string }
+        coverWidth: { type: integer, minimum: 1 }
+        coverHeight: { type: integer, minimum: 1 }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     PublicDailyRequest:
@@ -1062,6 +1141,25 @@ components:
       properties:
         content: { type: string, minLength: 1, description: 待发布的富文本 HTML；服务端会清洗危险标签并限制用户可见文字最多 2000 个 Unicode 字符 }
         isPrivate: { type: boolean, default: false, description: 是否仅发布人本人可见 }
+        coverFileId: { type: integer, minimum: 1, description: 可选的公开图片封面编号；缺省时随机选择匿名可见公开图片 }
+    PublicDailyComment:
+      type: object
+      required: [id, userName, content, createdAt]
+      properties:
+        id: { type: integer, minimum: 1 }
+        userName: { type: string }
+        content: { type: string, maxLength: 500 }
+        createdAt: { type: string, format: date-time }
+    PublicDailyInteraction:
+      type: object
+      required: [likeCount, likedByCurrentUser, comments]
+      properties:
+        likeCount: { type: integer, minimum: 0 }
+        likedByCurrentUser: { type: boolean }
+        comments:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/PublicDailyComment' }
     PublicFileCommentRequest:
       type: object
       required: [content]

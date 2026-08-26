@@ -19,6 +19,9 @@
 | `sessions` | 不透明 HttpOnly 会话 ID 和过期时间。 | 前端不得持久化会话 ID。 |
 | `articles` | 知识库文章和 C 端文章来源。 | 所有者、私密状态、发布状态和 18R 分级共同决定访问。 |
 | `files` | 文件管理上传、回收站和 C 端媒体来源。 | 所有者、私密状态、软删除和 18R 分级共同决定访问；管理上传不设置应用层单文件大小上限。 |
+| `dailies` | C 端日常正文、隐私、浏览量和公开图片封面。 | `cover_file_id` 仅引用匿名可见的公开图片；正文媒体仍由公开文件接口校验。 |
+| `daily_likes` | 登录用户对日常的点赞关系。 | `(daily_id,user_id)` 复合主键保证每个账号每条日常最多一个点赞。 |
+| `daily_comments` | 登录用户发送的日常纯文本评论。 | 关联日常和用户；日常或用户删除时级联清理。 |
 | `public_file_likes` | 登录用户对公开图片的点赞关系。 | `(file_id,user_id)` 复合主键保证每个账号每张图片最多一个点赞。 |
 | `public_file_comments` | 登录用户发送的公开图片纯文本评论。 | 关联文件和用户；文件或用户删除时级联清理对应互动记录。 |
 | `socket_conversations` | Socket 客服会话摘要。 | 与内部员工聊天严格区分。 |
@@ -52,6 +55,8 @@
 - `idx_files_public(is_private,deleted_at,id)`：公开文件筛选和倒序列表。
 - `idx_public_file_likes_file_id(file_id,user_id)`：按图片统计点赞和读取当前用户状态。
 - `idx_public_file_comments_file_id(file_id,id)`：按图片读取最近评论。
+- `idx_daily_likes_daily_id(daily_id,user_id)`：按日常统计点赞和读取当前用户状态。
+- `idx_daily_comments_daily_id(daily_id,id)`：按日常读取最近评论。
 - `idx_files_owner_content_sha256(owner_id,content_sha256)`：只覆盖未删除且哈希非空的文件，保证同一所有者有效内容唯一。
 - `.thumbnail-cache` 不属于 SQLite 表；它是由受保护缩略图接口按需生成的可再生派生缓存，丢失时可重新生成，不能替代 `files` 记录或上传原文件。
 - 聊天、访问日志、用户部门角色等索引以 `sqlite_store.go` 为权威来源，变更时同步本文。

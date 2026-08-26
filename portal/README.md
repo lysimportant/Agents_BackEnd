@@ -73,6 +73,10 @@
 | GET | <code>/api/public/dailies</code> | 公开日常列表；登录后额外包含本人私密日常 |
 | GET | <code>/api/public/dailies/:id</code> | 日常详情并增加一次浏览量 |
 | POST | <code>/api/public/dailies</code> | 登录用户发布日常，可选择公开或仅自己可见 |
+| POST | <code>/api/public/dailies/media</code> | 登录用户上传日常正文图片或视频 |
+| GET | <code>/api/public/dailies/:id/interactions</code> | 日常点赞和评论 |
+| POST | <code>/api/public/dailies/:id/like</code> | 切换日常点赞 |
+| POST | <code>/api/public/dailies/:id/comments</code> | 发送日常评论 |
 | GET | <code>/api/public/resources</code> | 公开资源列表 |
 | GET | <code>/api/public/files/:id/preview</code> | 文件内联预览 |
 | GET | <code>/api/public/files/:id/thumbnail</code> | 图片缩略图 |

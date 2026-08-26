@@ -276,16 +276,37 @@ func (s *SQLiteStore) migrate() error {
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		)`,
-		// dailies 保存 C 端日常正文、发布人、隐私状态和浏览量。
+		// dailies 保存 C 端日常正文、发布人、隐私状态、浏览量和公开图片封面。
 		`CREATE TABLE IF NOT EXISTS dailies (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			content TEXT NOT NULL,
 			owner_id INTEGER NOT NULL,
 			is_private INTEGER NOT NULL DEFAULT 0,
 			views INTEGER NOT NULL DEFAULT 0,
+			cover_file_id INTEGER,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
-			FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+			FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
+			FOREIGN KEY (cover_file_id) REFERENCES files(id) ON DELETE SET NULL
+		)`,
+		// daily_likes 保存登录用户对日常的唯一点赞关系。
+		`CREATE TABLE IF NOT EXISTS daily_likes (
+			daily_id INTEGER NOT NULL,
+			user_id INTEGER NOT NULL,
+			created_at TEXT NOT NULL,
+			PRIMARY KEY (daily_id,user_id),
+			FOREIGN KEY (daily_id) REFERENCES dailies(id) ON DELETE CASCADE,
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		)`,
+		// daily_comments 保存登录用户对日常发送的纯文本评论。
+		`CREATE TABLE IF NOT EXISTS daily_comments (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			daily_id INTEGER NOT NULL,
+			user_id INTEGER NOT NULL,
+			content TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY (daily_id) REFERENCES dailies(id) ON DELETE CASCADE,
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 		)`,
 		// files 保存文件管理上传资源和软删除元数据。
 		`CREATE TABLE IF NOT EXISTS files (
@@ -445,6 +466,8 @@ func (s *SQLiteStore) migrate() error {
 		{"files", "is_18r", "ALTER TABLE files ADD COLUMN is_18r INTEGER NOT NULL DEFAULT 0"},
 		// 文章同样支持 18R 分级限制。
 		{"articles", "is_18r", "ALTER TABLE articles ADD COLUMN is_18r INTEGER NOT NULL DEFAULT 0"},
+		// 日常封面引用公开图片，旧记录缺省为空并在读取时保持无封面。
+		{"dailies", "cover_file_id", "ALTER TABLE dailies ADD COLUMN cover_file_id INTEGER"},
 	}
 	// migration 表示当前循环中的索引、键或业务元素。
 	for _, migration := range columnMigrations {
@@ -497,6 +520,8 @@ func (s *SQLiteStore) migrate() error {
 		`CREATE INDEX IF NOT EXISTS idx_files_public ON files(is_private,deleted_at,id)`,
 		// 日常列表按隐私、发布人和时间倒序读取。
 		`CREATE INDEX IF NOT EXISTS idx_dailies_visibility ON dailies(is_private,owner_id,created_at,id)`,
+		`CREATE INDEX IF NOT EXISTS idx_daily_likes_daily_id ON daily_likes(daily_id,user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_daily_comments_daily_id ON daily_comments(daily_id,id)`,
 		// 图片互动按文件读取点赞和最新评论。
 		`CREATE INDEX IF NOT EXISTS idx_public_file_likes_file_id ON public_file_likes(file_id,user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_public_file_comments_file_id ON public_file_comments(file_id,id)`,

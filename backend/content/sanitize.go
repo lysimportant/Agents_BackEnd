@@ -2,6 +2,7 @@
 package content
 
 import (
+	"strconv"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -38,12 +39,13 @@ var allowedTags = map[string]bool{
 	"thead": true, "tbody": true, "tr": true, "th": true, "td": true,
 }
 
-// dailyAllowedTags 记录日常富文本可保存的格式标签，不允许嵌入图片、视频等外部媒体。
+// dailyAllowedTags 记录日常富文本可保存的格式标签以及受控公开图片、视频媒体。
 var dailyAllowedTags = map[string]bool{
 	"a": true, "b": true, "strong": true, "i": true, "em": true, "u": true, "s": true,
 	"p": true, "br": true, "blockquote": true, "pre": true, "code": true,
 	"h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
 	"ul": true, "ol": true, "li": true, "div": true, "span": true,
+	"img": true, "video": true, "source": true,
 }
 
 // allowedProtocols 记录允许保留的链接协议白名单，防止危险协议注入。
@@ -53,16 +55,16 @@ var allowedProtocols = map[string]bool{
 
 // SanitizeArticleContent 清洗文章正文，仅保留白名单标签与安全属性，返回清理后的 HTML。
 func SanitizeArticleContent(input string) string {
-	return sanitizeHTML(input, allowedTags)
+	return sanitizeHTML(input, allowedTags, true)
 }
 
-// SanitizeDailyContent 清洗日常富文本，仅保留文字格式和安全链接，禁止嵌入外部媒体。
+// SanitizeDailyContent 清洗日常富文本，仅保留文字格式、安全链接和受控公开媒体地址。
 func SanitizeDailyContent(input string) string {
-	return sanitizeHTML(input, dailyAllowedTags)
+	return sanitizeHTML(input, dailyAllowedTags, false)
 }
 
-// sanitizeHTML 按传入的标签白名单清洗 HTML，并保留各业务允许的安全属性。
-func sanitizeHTML(input string, allowedTagSet map[string]bool) string {
+// sanitizeHTML 按传入的标签白名单清洗 HTML；allowExternalMedia 控制是否保留安全外部媒体地址。
+func sanitizeHTML(input string, allowedTagSet map[string]bool, allowExternalMedia bool) string {
 	doc, err := html.Parse(strings.NewReader(input))
 	if err != nil {
 		return ""
@@ -90,12 +92,12 @@ func sanitizeHTML(input string, allowedTagSet map[string]bool) string {
 				switch {
 				case node.Data == "a" && name == "href" && isSafeURL(value):
 					href = value
-				case (node.Data == "img" || node.Data == "video" || node.Data == "source") && name == "src" && isSafeURL(value):
+				case (node.Data == "img" || node.Data == "video" || node.Data == "source") && name == "src" && isSafeMediaURL(value, allowExternalMedia):
 					srcAttr = value
 				case node.Data == "img" && (name == "alt" || name == "title" || name == "width" || name == "height"):
-					builder.WriteString(" " + attr.Key + "\"" + html.EscapeString(value) + "\"")
+					builder.WriteString(" " + attr.Key + "=\"" + html.EscapeString(value) + "\"")
 				case node.Data == "video" && (name == "controls" || name == "preload"):
-					builder.WriteString(" " + attr.Key + "\"" + html.EscapeString(value) + "\"")
+					builder.WriteString(" " + attr.Key + "=\"" + html.EscapeString(value) + "\"")
 				}
 			}
 			if href != "" {
@@ -125,6 +127,53 @@ func sanitizeHTML(input string, allowedTagSet map[string]bool) string {
 		}
 	}
 	return builder.String()
+}
+
+// isSafeMediaURL 判断媒体地址是否允许；日常只接受受控公开文件预览路径。
+func isSafeMediaURL(value string, allowExternalMedia bool) bool {
+	if allowExternalMedia {
+		return isSafeURL(value)
+	}
+	trimmed := strings.TrimSpace(value)
+	const prefix = "/api/public/files/"
+	const suffix = "/preview"
+	if !strings.HasPrefix(trimmed, prefix) || !strings.HasSuffix(trimmed, suffix) {
+		return false
+	}
+	fileIDText := strings.TrimSuffix(strings.TrimPrefix(trimmed, prefix), suffix)
+	fileID, err := strconv.Atoi(fileIDText)
+	return err == nil && fileID > 0 && strconv.Itoa(fileID) == fileIDText
+}
+
+// ExtractDailyMediaFileIDs 返回清洗后日常正文引用的受控公开媒体编号并去重。
+func ExtractDailyMediaFileIDs(input string) []int {
+	doc, err := html.Parse(strings.NewReader(input))
+	if err != nil {
+		return []int{}
+	}
+	fileIDs := make([]int, 0)
+	seen := make(map[int]bool)
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		if node.Type == html.ElementNode && (node.Data == "img" || node.Data == "video" || node.Data == "source") {
+			for _, attribute := range node.Attr {
+				if strings.ToLower(attribute.Key) != "src" || !isSafeMediaURL(attribute.Val, false) {
+					continue
+				}
+				fileIDText := strings.TrimSuffix(strings.TrimPrefix(attribute.Val, "/api/public/files/"), "/preview")
+				fileID, parseErr := strconv.Atoi(fileIDText)
+				if parseErr == nil && !seen[fileID] {
+					seen[fileID] = true
+					fileIDs = append(fileIDs, fileID)
+				}
+			}
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(doc)
+	return fileIDs
 }
 
 // isSafeURL 判断 URL 是否安全，拦截 javascript 等危险协议与协议相对地址。

@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"image"
 	"image/color"
@@ -8,11 +10,14 @@ import (
 	_ "image/gif"
 	"image/jpeg"
 	_ "image/png"
+	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"collector-backend/auth"
 	"collector-backend/content"
@@ -78,6 +83,19 @@ type dailyStore interface {
 	CreateDaily(ownerID int, request models.DailyRequest) (models.Daily, bool)
 }
 
+// dailyInteractionStore 定义日常点赞和评论接口所需的数据访问能力。
+type dailyInteractionStore interface {
+	GetPublicDailyInteraction(dailyID, userID int) (models.PublicDailyInteraction, bool)
+	TogglePublicDailyLike(dailyID, userID int) (models.PublicDailyInteraction, bool)
+	CreatePublicDailyComment(dailyID, userID int, content string) (models.PublicDailyComment, bool)
+}
+
+// dailyMediaStore 定义日常本地媒体上传所需的文件数据访问能力。
+type dailyMediaStore interface {
+	FindActiveFileByOwnerAndHash(ownerID int, contentSHA256 string) (models.ManagedFile, bool)
+	CreateFile(file models.ManagedFile) models.ManagedFile
+}
+
 // publicFileViewStore 定义公开文件浏览量写入能力。
 type publicFileViewStore interface {
 	IncrementPublicFileViews(id int, includeR18 bool) bool
@@ -130,6 +148,24 @@ func (h *PublicHandler) currentUserID(c *gin.Context) int {
 		}
 	}
 	return userID
+}
+
+// decorateDailyCover 将日常封面关联解析为受控公开中图地址，不向客户端暴露文件编号或存储名。
+func (h *PublicHandler) decorateDailyCover(daily *models.Daily) {
+	if daily == nil || daily.CoverFileID <= 0 {
+		return
+	}
+	cover, found := h.store.FindPublicFile(daily.CoverFileID, false)
+	if !found || !strings.HasPrefix(cover.ContentType, "image/") {
+		return
+	}
+	daily.CoverImage = cover.MediumURL
+	if daily.CoverImage == "" {
+		daily.CoverImage = cover.ThumbnailURL
+	}
+	daily.CoverAlt = cover.AltText
+	daily.CoverWidth = cover.ImageWidth
+	daily.CoverHeight = cover.ImageHeight
 }
 
 // parsePublicFileID 校验公开文件路由参数并输出统一错误响应。
@@ -267,6 +303,7 @@ func (h *PublicHandler) ListDailies(c *gin.Context) {
 	dailies, total, totalPages := store.ListPublicDailies(h.currentUserID(c), keyword, page, pageSize)
 	items := make([]interface{}, 0, len(dailies))
 	for _, daily := range dailies {
+		h.decorateDailyCover(&daily)
 		items = append(items, daily)
 	}
 	c.JSON(http.StatusOK, buildListResponse(items, page, pageSize, total, totalPages))
@@ -293,6 +330,7 @@ func (h *PublicHandler) GetDaily(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": "not_found", "error": "日常不存在"})
 		return
 	}
+	h.decorateDailyCover(&daily)
 	c.JSON(http.StatusOK, gin.H{"item": daily})
 }
 
@@ -321,12 +359,28 @@ func (h *PublicHandler) CreateDaily(c *gin.Context) {
 	sanitizedContent := content.SanitizeDailyContent(strings.TrimSpace(request.Content))
 	// contentRunes 保存清洗后用户可见文字的 Unicode 字符，用于空值和长度校验。
 	contentRunes := []rune(content.ExtractPlainText(sanitizedContent))
-	if len(contentRunes) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_daily", "error": "请输入日常内容"})
-		return
-	}
 	if len(contentRunes) > publicDailyMaxLength {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "daily_too_long", "error": "日常内容不能超过 2000 个字符"})
+		return
+	}
+	if request.CoverFileID > 0 {
+		// 封面必须是匿名可见的公开图片，避免日常封面因私密或 18R 规则泄露。
+		cover, found := h.store.FindPublicFile(request.CoverFileID, false)
+		if !found || !strings.HasPrefix(cover.ContentType, "image/") {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_cover", "error": "封面图片不可用"})
+			return
+		}
+	}
+	mediaFileIDs := content.ExtractDailyMediaFileIDs(sanitizedContent)
+	for _, mediaFileID := range mediaFileIDs {
+		mediaFile, found := h.store.FindPublicFile(mediaFileID, false)
+		if !found || (!strings.HasPrefix(mediaFile.ContentType, "image/") && !strings.HasPrefix(mediaFile.ContentType, "video/")) {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_media", "error": "正文包含不可用的媒体"})
+			return
+		}
+	}
+	if visibleTextEmpty := len(contentRunes) == 0 && len(mediaFileIDs) == 0; visibleTextEmpty {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_daily", "error": "请输入日常内容"})
 		return
 	}
 	request.Content = sanitizedContent
@@ -336,7 +390,211 @@ func (h *PublicHandler) CreateDaily(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": "create_failed", "error": "发布日常失败"})
 		return
 	}
+	h.decorateDailyCover(&daily)
 	c.JSON(http.StatusCreated, gin.H{"item": daily})
+}
+
+// UploadDailyMedia 处理 POST /api/public/dailies/media，登录用户可上传图片或视频供正文引用。
+func (h *PublicHandler) UploadDailyMedia(c *gin.Context) {
+	store, supported := h.store.(dailyMediaStore)
+	if !supported {
+		c.JSON(http.StatusNotImplemented, gin.H{"code": "daily_unavailable", "error": "日常功能不可用"})
+		return
+	}
+	userID := h.currentUserID(c)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "login_required", "error": "登录后才能上传媒体"})
+		return
+	}
+	fileHeader, err := c.FormFile("file")
+	if err != nil || fileHeader.Size <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_media", "error": "请选择图片或视频"})
+		return
+	}
+	source, err := fileHeader.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": "media_read_failed", "error": "读取媒体失败"})
+		return
+	}
+	defer source.Close()
+	header := make([]byte, 512)
+	headerLength, _ := io.ReadFull(source, header)
+	detectedType := http.DetectContentType(header[:headerLength])
+	contentType := normalizeDailyMediaType(detectedType, fileHeader.Header.Get("Content-Type"))
+	if !isAllowedDailyMediaType(contentType) {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_media_type", "error": "仅支持常见图片和视频格式"})
+		return
+	}
+	if err := os.MkdirAll(h.uploadDir, 0o755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": "media_save_failed", "error": "创建上传目录失败"})
+		return
+	}
+	temporaryFile, err := os.CreateTemp(h.uploadDir, ".daily-upload-*")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": "media_save_failed", "error": "保存媒体失败"})
+		return
+	}
+	temporaryPath := temporaryFile.Name()
+	defer os.Remove(temporaryPath)
+	hasher := sha256.New()
+	size, copyErr := io.Copy(io.MultiWriter(temporaryFile, hasher), io.MultiReader(bytes.NewReader(header[:headerLength]), source))
+	closeErr := temporaryFile.Close()
+	if copyErr != nil || closeErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": "media_save_failed", "error": "保存媒体失败"})
+		return
+	}
+	contentHash := fmt.Sprintf("%x", hasher.Sum(nil))
+	if existing, found := store.FindActiveFileByOwnerAndHash(userID, contentHash); found {
+		if existing.IsPrivate || existing.Is18R || (!strings.HasPrefix(existing.ContentType, "image/") && !strings.HasPrefix(existing.ContentType, "video/")) {
+			c.JSON(http.StatusConflict, gin.H{"code": "duplicate_media", "error": "相同媒体已存在但不可用于公开日常"})
+			return
+		}
+		if publicFile, found := h.store.FindPublicFile(existing.ID, false); found {
+			c.JSON(http.StatusOK, gin.H{"item": publicFile})
+			return
+		}
+	}
+	extension := filepath.Ext(fileHeader.Filename)
+	if extension == "" {
+		if extensions, lookupErr := mime.ExtensionsByType(contentType); lookupErr == nil && len(extensions) > 0 {
+			extension = extensions[0]
+		}
+	}
+	storageName := fmt.Sprintf("%d_%s%s", time.Now().UnixNano(), utils.SanitizeFileName(strings.TrimSuffix(fileHeader.Filename, filepath.Ext(fileHeader.Filename))), extension)
+	finalPath := filepath.Join(h.uploadDir, storageName)
+	if err := os.Rename(temporaryPath, finalPath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": "media_save_failed", "error": "保存媒体失败"})
+		return
+	}
+	imageWidth, imageHeight := 0, 0
+	if strings.HasPrefix(contentType, "image/") {
+		if dimensionFile, openErr := os.Open(finalPath); openErr == nil {
+			if dimensions, dimensionsOK := utils.DetectImageDimensions(dimensionFile); dimensionsOK {
+				imageWidth, imageHeight = dimensions.Width, dimensions.Height
+			}
+			_ = dimensionFile.Close()
+		}
+	}
+	created := store.CreateFile(models.ManagedFile{
+		DisplayName: strings.TrimSpace(fileHeader.Filename), OriginalName: fileHeader.Filename,
+		Category: "日常媒体", ContentType: contentType, Size: size, StorageName: storageName,
+		ContentSHA256: contentHash, OwnerID: userID, IsPrivate: false, Is18R: false,
+		ImageWidth: imageWidth, ImageHeight: imageHeight,
+	})
+	if created.ID == 0 {
+		_ = os.Remove(finalPath)
+		c.JSON(http.StatusInternalServerError, gin.H{"code": "media_save_failed", "error": "保存媒体记录失败"})
+		return
+	}
+	publicFile, found := h.store.FindPublicFile(created.ID, false)
+	if !found {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": "media_save_failed", "error": "读取媒体记录失败"})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"item": publicFile})
+}
+
+// normalizeDailyMediaType 优先采用文件头识别结果，视频格式无法可靠嗅探时回退到允许的浏览器声明。
+func normalizeDailyMediaType(detectedType, declaredType string) string {
+	if isAllowedDailyMediaType(detectedType) {
+		return detectedType
+	}
+	declared := strings.ToLower(strings.TrimSpace(strings.Split(declaredType, ";")[0]))
+	if isAllowedDailyMediaType(declared) {
+		return declared
+	}
+	return ""
+}
+
+// isAllowedDailyMediaType 定义日常正文允许上传的媒体类型，明确排除 SVG 和可执行格式。
+func isAllowedDailyMediaType(contentType string) bool {
+	switch strings.ToLower(contentType) {
+	case "image/jpeg", "image/png", "image/gif", "image/webp", "image/avif", "video/mp4", "video/webm", "video/ogg", "video/quicktime":
+		return true
+	default:
+		return false
+	}
+}
+
+// GetDailyInteraction 处理 GET /api/public/dailies/:id/interactions，匿名可读取点赞和评论。
+func (h *PublicHandler) GetDailyInteraction(c *gin.Context) {
+	store, supported := h.store.(dailyInteractionStore)
+	if !supported {
+		c.JSON(http.StatusNotImplemented, gin.H{"code": "daily_unavailable", "error": "日常功能不可用"})
+		return
+	}
+	dailyID, ok := parsePublicFileID(c)
+	if !ok {
+		return
+	}
+	interaction, found := store.GetPublicDailyInteraction(dailyID, h.currentUserID(c))
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"code": "daily_not_found", "error": "日常不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, interaction)
+}
+
+// ToggleDailyLike 处理 POST /api/public/dailies/:id/like，要求登录并切换唯一点赞。
+func (h *PublicHandler) ToggleDailyLike(c *gin.Context) {
+	store, supported := h.store.(dailyInteractionStore)
+	if !supported {
+		c.JSON(http.StatusNotImplemented, gin.H{"code": "daily_unavailable", "error": "日常功能不可用"})
+		return
+	}
+	userID := h.currentUserID(c)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "login_required", "error": "登录后才能点赞"})
+		return
+	}
+	dailyID, ok := parsePublicFileID(c)
+	if !ok {
+		return
+	}
+	interaction, updated := store.TogglePublicDailyLike(dailyID, userID)
+	if !updated {
+		c.JSON(http.StatusNotFound, gin.H{"code": "daily_not_found", "error": "日常不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, interaction)
+}
+
+// CreateDailyComment 处理 POST /api/public/dailies/:id/comments，要求登录并保存纯文本评论。
+func (h *PublicHandler) CreateDailyComment(c *gin.Context) {
+	store, supported := h.store.(dailyInteractionStore)
+	if !supported {
+		c.JSON(http.StatusNotImplemented, gin.H{"code": "daily_unavailable", "error": "日常功能不可用"})
+		return
+	}
+	userID := h.currentUserID(c)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "login_required", "error": "登录后才能评论"})
+		return
+	}
+	dailyID, ok := parsePublicFileID(c)
+	if !ok {
+		return
+	}
+	var request models.PublicFileCommentRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_comment", "error": "请输入评论内容"})
+		return
+	}
+	commentText := strings.TrimSpace(request.Content)
+	if commentText == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_comment", "error": "请输入评论内容"})
+		return
+	}
+	if len([]rune(commentText)) > publicCommentMaxLength {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "comment_too_long", "error": "评论不能超过 500 个字符"})
+		return
+	}
+	comment, created := store.CreatePublicDailyComment(dailyID, userID, commentText)
+	if !created {
+		c.JSON(http.StatusNotFound, gin.H{"code": "daily_not_found", "error": "日常不存在"})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"item": comment})
 }
 
 // ListCategories handles GET /api/public/categories

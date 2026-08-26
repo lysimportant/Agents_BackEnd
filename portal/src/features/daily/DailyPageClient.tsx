@@ -1,18 +1,22 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useTranslations } from 'next-intl';
-import { Eye, Lock, Plus, UserRound } from 'lucide-react';
+import { useLocale, useTranslations } from 'next-intl';
+import Image from 'next/image';
+import { Eye, Heart, Lock, UserRound } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { listDailies } from '@/services/publicApi';
 import { sanitizeArticle } from '@/content/sanitizeArticle';
 import type { PublicDailyItem } from '@/types/publicContent';
+import { resolveMediaUrl } from '@/config/constants';
+import { formatCount, formatDateTime } from '@/utils/format';
 
 /** 日常页面只负责加载公开内容和个人内容，发布入口通过按钮进入独立编辑页。 */
 export function DailyPageClient() {
   const t = useTranslations('daily');
   const common = useTranslations('common');
+  const locale = useLocale();
   const { isLoggedIn } = useAuth();
   const [dailies, setDailies] = useState<PublicDailyItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -20,7 +24,7 @@ export function DailyPageClient() {
 
   useEffect(() => {
     let cancelled = false;
-    listDailies({ credentials: 'include' })
+    listDailies({}, { credentials: 'include' })
       .then((response) => {
         if (!cancelled) {
           setDailies(response.items);
@@ -51,13 +55,6 @@ export function DailyPageClient() {
     <div className="mt-8 space-y-6">
       <section className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-6">
         <p className="text-sm text-muted-foreground">{t('listHint')}</p>
-        <Link
-          href="/daily/publish"
-          className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          {t('publish')}
-        </Link>
       </section>
 
       {isLoading ? <p className="text-sm text-muted-foreground">{common('loading')}</p> : null}
@@ -65,29 +62,45 @@ export function DailyPageClient() {
       {!isLoading && !error && dailies.length === 0 ? <p className="text-sm text-muted-foreground">{t('empty')}</p> : null}
       <div className="space-y-4">
         {renderedDailies.map(({ daily, html }) => (
-          <article key={daily.id} className="rounded-lg border border-border bg-surface p-4">
-            <div
-              className="article-content max-w-none text-sm"
-              dangerouslySetInnerHTML={{ __html: html || '<p></p>' }}
-            />
-            <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1">
-                <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
-                {daily.authorName}
-              </span>
-              <span className="inline-flex items-center gap-1" title={t('views')}>
-                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                {daily.views}
-              </span>
+          <Link key={daily.id} href={`/daily/${daily.id}`} className="block rounded-lg border border-border bg-surface transition-colors hover:border-primary/60">
+            {daily.coverImage ? (
+              <Image
+                src={resolveMediaUrl(daily.coverImage)}
+                alt={daily.coverAlt || t('coverAlt')}
+                width={daily.coverWidth || 1280}
+                height={daily.coverHeight || 720}
+                unoptimized
+                className="h-48 w-full rounded-t-lg object-cover sm:h-56"
+              />
+            ) : null}
+            <article className="p-4">
+              <div
+                className="article-content line-clamp-5 max-w-none text-sm"
+                dangerouslySetInnerHTML={{ __html: html || '<p></p>' }}
+              />
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
+                  {daily.authorName}
+                </span>
+                <span className="inline-flex items-center gap-1" title={t('views')}>
+                  <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                  {formatCount(daily.views, locale)}
+                </span>
+                <span className="inline-flex items-center gap-1" title={t('likes')}>
+                  <Heart className="h-3.5 w-3.5" aria-hidden="true" />
+                  {formatCount(daily.likeCount ?? 0, locale)}
+                </span>
               {daily.isPrivate ? (
                 <span className="inline-flex items-center gap-1">
                   <Lock className="h-3.5 w-3.5" aria-hidden="true" />
                   {t('private')}
                 </span>
               ) : null}
-              <time dateTime={daily.createdAt}>{new Date(daily.createdAt).toLocaleString()}</time>
-            </div>
-          </article>
+                <time dateTime={daily.createdAt}>{formatDateTime(daily.createdAt, locale)}</time>
+              </div>
+            </article>
+          </Link>
         ))}
       </div>
     </div>

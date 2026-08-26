@@ -13,6 +13,8 @@ import type {
   PublicSearchResult,
   PublicSiteSummary,
   PublicDailyItem,
+  PublicDailyComment,
+  PublicDailyInteraction,
 } from '@/types/publicContent';
 
 /** 单次请求超时时间（毫秒）。 */
@@ -346,20 +348,84 @@ export function searchPublic(
 
 /** 获取公开日常与当前登录用户自己的私密日常。 */
 export function listDailies(
+	params: PublicListParams = {},
   options?: PublicFetchOptions,
 ): Promise<PublicListResponse<PublicDailyItem>> {
-  return requestPublicJson<PublicListResponse<PublicDailyItem>>('/api/public/dailies', {
+  return requestPublicJson<PublicListResponse<PublicDailyItem>>('/api/public/dailies' + buildQueryString(params), {
     ...options,
     credentials: 'include',
   });
 }
 
 /** 发布一条日常，后端根据会话用户和 isPrivate 决定可见范围。 */
-export async function createDaily(content: string, isPrivate: boolean): Promise<PublicDailyItem> {
+export async function createDaily(content: string, isPrivate: boolean, coverFileId?: number): Promise<PublicDailyItem> {
   const response = await requestPublicMutationJson<{ item: PublicDailyItem }>('/api/public/dailies', {
     method: 'POST',
-    body: JSON.stringify({ content, isPrivate }),
+    body: JSON.stringify({ content, isPrivate, coverFileId: coverFileId ?? 0 }),
   });
+  return response.item;
+}
+
+/** 上传登录用户的日常正文媒体，后端返回公开文件的受控预览地址。 */
+export async function uploadDailyMedia(file: File): Promise<PublicFileListItem> {
+  const controller = new AbortController();
+  const timeoutID = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const response = await fetch(API_BASE_URL + '/api/public/dailies/media', {
+      method: 'POST',
+      body: formData,
+      signal: controller.signal,
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      const code = await readErrorCode(response);
+      throw new PublicApiError(response.status, code);
+    }
+    const result = (await response.json()) as { item: PublicFileListItem };
+    return result.item;
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new PublicApiError(0, 'timeout');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutID);
+  }
+}
+
+/** 获取公开日常详情；后端成功读取时会记录一次浏览。 */
+export async function getDaily(id: number, options?: PublicFetchOptions): Promise<PublicDailyItem> {
+  const response = await requestPublicJson<PublicDetailResponse<PublicDailyItem>>(
+    '/api/public/dailies/' + String(id),
+    { ...options, credentials: 'include' },
+  );
+  return response.item;
+}
+
+/** 获取公开日常点赞状态和最近评论。 */
+export function getDailyInteraction(id: number, options?: PublicFetchOptions): Promise<PublicDailyInteraction> {
+  return requestPublicJson<PublicDailyInteraction>(
+    '/api/public/dailies/' + String(id) + '/interactions',
+    { ...options, credentials: 'include' },
+  );
+}
+
+/** 切换当前登录用户对公开日常的点赞状态。 */
+export function toggleDailyLike(id: number): Promise<PublicDailyInteraction> {
+  return requestPublicMutationJson<PublicDailyInteraction>(
+    '/api/public/dailies/' + String(id) + '/like',
+    { method: 'POST', body: '{}' },
+  );
+}
+
+/** 发送当前登录用户的公开日常评论。 */
+export async function createDailyComment(id: number, content: string): Promise<PublicDailyComment> {
+  const response = await requestPublicMutationJson<{ item: PublicDailyComment }>(
+    '/api/public/dailies/' + String(id) + '/comments',
+    { method: 'POST', body: JSON.stringify({ content }) },
+  );
   return response.item;
 }
 

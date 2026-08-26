@@ -207,8 +207,40 @@ export interface PublicDailyItem {
   isPrivate: boolean;
   /** 浏览量。 */
   views: number;
+  /** 点赞量。 */
+  likeCount: number;
+  /** 日常封面公开中图地址。 */
+  coverImage?: string;
+  /** 日常封面替代文本。 */
+  coverAlt?: string;
+  /** 日常封面原始宽度。 */
+  coverWidth?: number;
+  /** 日常封面原始高度。 */
+  coverHeight?: number;
   /** 创建时间。 */
   createdAt: string;
   /** 更新时间。 */
   updatedAt: string;
+}
+
+/** 公开日常评论。 */
+export interface PublicDailyComment {
+  /** 评论唯一标识。 */
+  id: number;
+  /** 评论作者展示名称。 */
+  userName: string;
+  /** 评论纯文本内容。 */
+  content: string;
+  /** 评论时间。 */
+  createdAt: string;
+}
+
+/** 公开日常点赞状态与评论列表。 */
+export interface PublicDailyInteraction {
+  /** 日常点赞总数。 */
+  likeCount: number;
+  /** 当前用户是否已点赞。 */
+  likedByCurrentUser: boolean;
+  /** 最近评论。 */
+  comments: PublicDailyComment[];
 }

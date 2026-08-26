@@ -271,6 +271,11 @@
   height: auto;
   border-radius: 8px;
 }
+.daily-detail-content img,
+.daily-detail-content video {
+  display: block;
+  margin-inline: auto;
+}
 .article-content a {
   color: var(--primary);
   text-decoration: underline;

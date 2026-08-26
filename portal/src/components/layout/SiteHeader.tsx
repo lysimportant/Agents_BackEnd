@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { FileText, Folder, Images, LayoutGrid, Menu, Search, X, CalendarDays } from 'lucide-react';
+import { FileText, Folder, Images, LayoutGrid, Menu, Search, X, CalendarDays, PenLine } from 'lucide-react';
 import { Link, usePathname } from '@/i18n/navigation';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { LanguageSwitcher } from '@/components/language/LanguageSwitcher';
 import { AuthControls } from '@/components/auth/AuthControls';
+import { useAuth } from '@/features/auth/AuthProvider';
 import { cn } from '@/utils/cn';
 
 /** 顶部导航项，图片作为首页，故不单独列首页；每个项带图标美化。 */
@@ -34,6 +35,7 @@ function isNavActive(pathname: string, href: string): boolean {
 export function SiteHeader() {
   const t = useTranslations('navigation');
   const pathname = usePathname();
+  const { isLoggedIn } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -118,6 +120,16 @@ export function SiteHeader() {
 
         {/* 右侧：搜索 + 主题 + 语言 */}
         <div className="flex shrink-0 items-center gap-1">
+          {isLoggedIn ? (
+            <Link
+              href="/daily/publish"
+              aria-label={t('publishDaily')}
+              title={t('publishDaily')}
+              className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <PenLine className="h-5 w-5" aria-hidden="true" />
+            </Link>
+          ) : null}
           <Link
             href="/search"
             aria-label={t('searchToggle')}
