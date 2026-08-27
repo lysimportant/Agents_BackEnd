@@ -223,7 +223,6 @@ export default function Home() {
           actions={articleActions}
           filteredArticles={workspace.filteredArticles}
           articleForm={workspace.articleForm}
-          editingArticleId={workspace.editingArticleId}
           articleKeyword={workspace.articleKeyword}
           articleStatus={workspace.articleStatus}
           isSavingArticle={workspace.isSavingArticle}

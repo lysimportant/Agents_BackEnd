@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   AppstoreOutlined,
   BoldOutlined,
@@ -37,8 +38,6 @@ type ArticlesPageProps = {
   actions: ResourceActionAccess;
   /** articleForm 表示文章表单。 */
   articleForm: ArticleForm;
-  /** editingArticleId 表示文章标识。 */
-  editingArticleId: number | null;
   /** articleKeyword 表示文章搜索关键词。 */
   articleKeyword: string;
   /** articleStatus 表示文章状态。 */
@@ -69,8 +68,10 @@ type ArticlesPageProps = {
 export function ArticlesPage(props: ArticlesPageProps) {
   /** message、feedbackMessage 保存消息、消息。 */
   const { message: feedbackMessage } = App.useApp();
+  /** router 负责从文章列表进入独立的新建文章路由。 */
+  const router = useRouter();
   const {
-    filteredArticles, actions, articleForm, editingArticleId, articleKeyword, articleStatus, isSavingArticle,
+    filteredArticles, actions, articleForm, articleKeyword, articleStatus, isSavingArticle,
     onArticleFormChange, onSubmitArticle, onResetArticleForm, onArticleKeywordChange,
     onArticleStatusChange, onResetFilters, onEditArticle, onToggleArticleStatus, onDeleteArticle,
   } = props;
@@ -78,28 +79,27 @@ export function ArticlesPage(props: ArticlesPageProps) {
   const [previewArticle, setPreviewArticle] = useState<Article | null>(null);
   /** isEditorOpen、setIsEditorOpen 分别保存编辑器打开状态状态及其更新函数。 */
   const [isEditorOpen, setIsEditorOpen] = useState(false);
-  /** editorArticleId、setEditorArticleId 保存文章标识、文章标识。 */
-  const [editorArticleId, setEditorArticleId] = useState<number | null>(null);
   /** exportingArticle、setExportingArticle 保存文章、文章。 */
   const [exportingArticle, setExportingArticle] = useState<{ articleId: number; format: ArticleExportFormat } | null>(null);
   /** exportFeedback、setExportFeedback 保存导出反馈、导出操作。 */
   const [exportFeedback, setExportFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  /** isEditing 保存编辑状态。 */
-  const isEditing = editorArticleId !== null;
   /** published 负责计算或维护发布状态。 */
   const published = filteredArticles.filter((article) => article.status === '已发布').length;
 
-  /** openNew 负责计算或维护打开状态。 */
-  const openNew = () => { if (!actions.create) return; onResetArticleForm(); setEditorArticleId(null); setIsEditorOpen(true); };
+  /** openNew 清空旧表单并进入独立的新建文章页面。 */
+  const openNew = () => {
+    if (!actions.create) return;
+    onResetArticleForm();
+    router.push('/articles/new');
+  };
   /** openEdit 负责计算或维护打开状态。 */
-  const openEdit = (article: Article) => { if (!actions.update) return; setEditorArticleId(article.id); setIsEditorOpen(true); onEditArticle(article); };
+  const openEdit = (article: Article) => { if (!actions.update) return; setIsEditorOpen(true); onEditArticle(article); };
   /** closeEditor 负责删除或清理对应业务状态。 */
-  const closeEditor = () => { onResetArticleForm(); setEditorArticleId(null); setIsEditorOpen(false); };
+  const closeEditor = () => { onResetArticleForm(); setIsEditorOpen(false); };
   /** submit 负责执行对应业务操作。 */
   const submit = async (event: FormEvent<HTMLFormElement>) => {
-    if (isEditing ? !actions.update : !actions.create) return;
+    if (!actions.update) return;
     if (await onSubmitArticle(event)) {
-      setEditorArticleId(null);
       setIsEditorOpen(false);
     }
   };
@@ -140,43 +140,77 @@ export function ArticlesPage(props: ArticlesPageProps) {
       {filteredArticles.length === 0 ? <Empty description="暂无匹配文章">{actions.create && <Button type="primary" onClick={openNew}>创建第一篇文章</Button>}</Empty> : <div className="article-card-list" aria-label="文章列表">{filteredArticles.map((article) => <ArticleCard key={article.id} article={article} actions={actions} exportingFormat={exportingArticle?.articleId === article.id ? exportingArticle.format : null} exportDisabled={Boolean(exportingArticle)} onExport={handleExport} onPreview={setPreviewArticle} onEdit={openEdit} onToggle={onToggleArticleStatus} onDelete={onDeleteArticle} />)}</div>}
     </Card>
 
-    {(actions.create || actions.update) && <Modal open={isEditorOpen} title={isEditing ? '编辑文章' : '新建文章'} footer={null} width="min(1160px, 96vw)" destroyOnHidden onCancel={closeEditor}>
-      <form className="rich-editor-form" onSubmit={(event) => void submit(event)}>
-        <div className="rich-editor-meta">
-          <label>标题<Input required size="large" value={articleForm.title} onChange={(event) => onArticleFormChange({ ...articleForm, title: event.target.value })} placeholder="请输入清晰、有辨识度的文章标题" /></label>
-          <label>分类<Input required value={articleForm.category} onChange={(event) => onArticleFormChange({ ...articleForm, category: event.target.value })} placeholder="例如：通知公告" /></label>
-          <label>作者<Input required value={articleForm.author} onChange={(event) => onArticleFormChange({ ...articleForm, author: event.target.value })} placeholder="作者姓名" /></label>
-          <label>状态<Select value={articleForm.status} options={articleStatusOptions.map((status) => ({ value: status, label: status }))} onChange={(status) => onArticleFormChange({ ...articleForm, status: status as ArticleForm['status'] })} /></label>
-        </div>
-        <label className="article-summary-field">摘要<Input.TextArea value={articleForm.summary} rows={2} onChange={(event) => onArticleFormChange({ ...articleForm, summary: event.target.value })} placeholder="一句话概括文章价值，便于列表展示" /></label>
-        <div className="privacy-switch-row">
-          <div>
-            <strong>仅自己可见</strong>
-            <small>开启后仅归属人和管理员可查看；其他登录用户不会在列表中看到此文章。</small>
-          </div>
-          <Switch checked={Boolean(articleForm.isPrivate)} onChange={(checked) => onArticleFormChange({ ...articleForm, isPrivate: checked })} checkedChildren="私密" unCheckedChildren="公开" />
-        </div>
-        <div className="privacy-switch-row">
-          <div>
-            <strong>18R 限制</strong>
-            <small>开启后仅登录且开启 18R 内容的用户可见</small>
-          </div>
-          <Switch checked={Boolean(articleForm.is18r)} onChange={(checked) => onArticleFormChange({ ...articleForm, is18r: checked })} checkedChildren="开启" unCheckedChildren="关闭" />
-        </div>
-        <div className="privacy-switch-row">
-          <div>
-            <strong>正文语言</strong>
-            <small>用于门户 SEO 的 lang 与结构化数据标注，正文内容保持录入原语言。</small>
-          </div>
-          <Select value={articleForm.contentLocale} options={[{ value: 'zh-CN', label: '简体中文' }, { value: 'en-US', label: 'English' }, { value: 'ja-JP', label: '日本語' }]} onChange={(value) => onArticleFormChange({ ...articleForm, contentLocale: value })} style={{ width: 160 }} />
-        </div>
-        <RichTextEditor value={articleForm.content} onChange={(content) => onArticleFormChange({ ...articleForm, content })} />
-        <div className="rich-editor-actions"><Button onClick={closeEditor}>取消</Button><Button htmlType="submit" type="primary" loading={isSavingArticle} icon={<SaveOutlined />}>{isEditing ? '保存修改' : '保存文章'}</Button></div>
-      </form>
+    {actions.update && <Modal open={isEditorOpen} title="编辑文章" footer={null} width="min(1160px, 96vw)" destroyOnHidden onCancel={closeEditor}>
+      <ArticleEditorForm
+        mode="edit"
+        articleForm={articleForm}
+        isSavingArticle={isSavingArticle}
+        onArticleFormChange={onArticleFormChange}
+        onSubmitArticle={submit}
+        onCancel={closeEditor}
+      />
     </Modal>}
 
     <ArticlePreview article={previewArticle} onClose={() => setPreviewArticle(null)} />
   </section>;
+}
+
+type ArticleEditorFormProps = {
+  /** mode 决定提交按钮显示创建还是编辑语义。 */
+  mode: 'create' | 'edit';
+  /** articleForm 保存当前文章的标题、正文和可见性设置。 */
+  articleForm: ArticleForm;
+  /** isSavingArticle 表示文章写请求是否正在进行。 */
+  isSavingArticle: boolean;
+  /** onArticleFormChange 在任一字段变化时同步完整表单。 */
+  onArticleFormChange: (form: ArticleForm) => void;
+  /** onSubmitArticle 提交当前文章表单，并由上层决定后续导航。 */
+  onSubmitArticle: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
+  /** onCancel 放弃当前编辑并返回上层页面。 */
+  onCancel: () => void;
+};
+
+/** ArticleEditorForm 复用新建页面与编辑弹窗的完整文章编辑能力。 */
+export function ArticleEditorForm({
+  mode,
+  articleForm,
+  isSavingArticle,
+  onArticleFormChange,
+  onSubmitArticle,
+  onCancel,
+}: ArticleEditorFormProps) {
+  return <form className="rich-editor-form" onSubmit={(event) => void onSubmitArticle(event)}>
+    <div className="rich-editor-meta">
+      <label>标题<Input required size="large" value={articleForm.title} onChange={(event) => onArticleFormChange({ ...articleForm, title: event.target.value })} placeholder="请输入清晰、有辨识度的文章标题" /></label>
+      <label>分类<Input required value={articleForm.category} onChange={(event) => onArticleFormChange({ ...articleForm, category: event.target.value })} placeholder="例如：通知公告" /></label>
+      <label>作者<Input required value={articleForm.author} onChange={(event) => onArticleFormChange({ ...articleForm, author: event.target.value })} placeholder="作者姓名" /></label>
+      <label>状态<Select value={articleForm.status} options={articleStatusOptions.map((status) => ({ value: status, label: status }))} onChange={(status) => onArticleFormChange({ ...articleForm, status: status as ArticleForm['status'] })} /></label>
+    </div>
+    <label className="article-summary-field">摘要<Input.TextArea value={articleForm.summary} rows={2} onChange={(event) => onArticleFormChange({ ...articleForm, summary: event.target.value })} placeholder="一句话概括文章价值，便于列表展示" /></label>
+    <div className="privacy-switch-row">
+      <div>
+        <strong>仅自己可见</strong>
+        <small>开启后仅归属人和管理员可查看；其他登录用户不会在列表中看到此文章。</small>
+      </div>
+      <Switch checked={Boolean(articleForm.isPrivate)} onChange={(checked) => onArticleFormChange({ ...articleForm, isPrivate: checked })} checkedChildren="私密" unCheckedChildren="公开" />
+    </div>
+    <div className="privacy-switch-row">
+      <div>
+        <strong>18R 限制</strong>
+        <small>开启后仅登录且开启 18R 内容的用户可见</small>
+      </div>
+      <Switch checked={Boolean(articleForm.is18r)} onChange={(checked) => onArticleFormChange({ ...articleForm, is18r: checked })} checkedChildren="开启" unCheckedChildren="关闭" />
+    </div>
+    <div className="privacy-switch-row">
+      <div>
+        <strong>正文语言</strong>
+        <small>用于门户 SEO 的 lang 与结构化数据标注，正文内容保持录入原语言。</small>
+      </div>
+      <Select value={articleForm.contentLocale} options={[{ value: 'zh-CN', label: '简体中文' }, { value: 'en-US', label: 'English' }, { value: 'ja-JP', label: '日本語' }]} onChange={(value) => onArticleFormChange({ ...articleForm, contentLocale: value })} style={{ width: 160 }} />
+    </div>
+    <RichTextEditor value={articleForm.content} onChange={(content) => onArticleFormChange({ ...articleForm, content })} />
+    <div className="rich-editor-actions"><Button onClick={onCancel}>取消</Button><Button htmlType="submit" type="primary" loading={isSavingArticle} icon={<SaveOutlined />}>{mode === 'edit' ? '保存修改' : '创建文章'}</Button></div>
+  </form>;
 }
 
 type ArticleCardProps = {
