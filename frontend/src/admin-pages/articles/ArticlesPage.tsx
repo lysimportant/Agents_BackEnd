@@ -1,15 +1,16 @@
 'use client';
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   AppstoreOutlined,
+  ArrowLeftOutlined,
   BoldOutlined,
   DeleteOutlined,
   DownOutlined,
   EditOutlined,
   EyeOutlined,
   ExportOutlined,
+  FileAddOutlined,
   FileTextOutlined,
   PictureOutlined,
   PlayCircleOutlined,
@@ -68,8 +69,6 @@ type ArticlesPageProps = {
 export function ArticlesPage(props: ArticlesPageProps) {
   /** message、feedbackMessage 保存消息、消息。 */
   const { message: feedbackMessage } = App.useApp();
-  /** router 负责从文章列表进入独立的新建文章路由。 */
-  const router = useRouter();
   const {
     filteredArticles, actions, articleForm, articleKeyword, articleStatus, isSavingArticle,
     onArticleFormChange, onSubmitArticle, onResetArticleForm, onArticleKeywordChange,
@@ -79,6 +78,8 @@ export function ArticlesPage(props: ArticlesPageProps) {
   const [previewArticle, setPreviewArticle] = useState<Article | null>(null);
   /** isEditorOpen、setIsEditorOpen 分别保存编辑器打开状态状态及其更新函数。 */
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  /** isCreating、setIsCreating 保存文章管理主内容区是否切换为创建视图。 */
+  const [isCreating, setIsCreating] = useState(false);
   /** exportingArticle、setExportingArticle 保存文章、文章。 */
   const [exportingArticle, setExportingArticle] = useState<{ articleId: number; format: ArticleExportFormat } | null>(null);
   /** exportFeedback、setExportFeedback 保存导出反馈、导出操作。 */
@@ -86,11 +87,11 @@ export function ArticlesPage(props: ArticlesPageProps) {
   /** published 负责计算或维护发布状态。 */
   const published = filteredArticles.filter((article) => article.status === '已发布').length;
 
-  /** openNew 清空旧表单并进入独立的新建文章页面。 */
+  /** openNew 清空旧表单并在文章管理主内容区打开创建视图。 */
   const openNew = () => {
     if (!actions.create) return;
     onResetArticleForm();
-    router.push('/articles/new');
+    setIsCreating(true);
   };
   /** openEdit 负责计算或维护打开状态。 */
   const openEdit = (article: Article) => { if (!actions.update) return; setIsEditorOpen(true); onEditArticle(article); };
@@ -101,6 +102,18 @@ export function ArticlesPage(props: ArticlesPageProps) {
     if (!actions.update) return;
     if (await onSubmitArticle(event)) {
       setIsEditorOpen(false);
+    }
+  };
+  /** cancelCreate 清空未提交内容并回到同一文章管理列表。 */
+  const cancelCreate = () => {
+    onResetArticleForm();
+    setIsCreating(false);
+  };
+  /** submitCreate 创建成功后留在当前工作台并显示更新后的文章列表。 */
+  const submitCreate = async (event: FormEvent<HTMLFormElement>) => {
+    if (!actions.create) return;
+    if (await onSubmitArticle(event)) {
+      setIsCreating(false);
     }
   };
   /** handleExport 负责处理对应的界面事件和状态变化。 */
@@ -123,22 +136,30 @@ export function ArticlesPage(props: ArticlesPageProps) {
     }
   };
 
-  return <section className="page-stack article-workspace" aria-labelledby="articles-page-title">
-    <Card className="article-hero" variant="borderless">
-      <div><p className="page-kicker">内容管理 / 写作中心</p><h1 id="articles-page-title">文章管理</h1><span>在富文本编辑器中创作、预览、保存和发布文章；所有操作均直连后端接口。</span></div>
-      <Space className="article-hero-actions" size={12} wrap>
-        {actions.create && <Button className="article-create-button" icon={<PlusOutlined />} onClick={openNew}>新建文章</Button>}
-        <Button className="article-clear-filter-button" icon={<AppstoreOutlined />} onClick={onResetFilters}>清空筛选条件</Button>
-      </Space>
-    </Card>
+  return <section className="page-stack article-workspace" aria-labelledby={isCreating ? 'article-create-title' : 'articles-page-title'}>
+    {isCreating ? <ArticleCreateView
+      articleForm={articleForm}
+      isSavingArticle={isSavingArticle}
+      onArticleFormChange={onArticleFormChange}
+      onSubmitArticle={submitCreate}
+      onCancel={cancelCreate}
+    /> : <>
+      <Card className="article-hero" variant="borderless">
+        <div><p className="page-kicker">内容管理 / 写作中心</p><h1 id="articles-page-title">文章管理</h1><span>在富文本编辑器中创作、预览、保存和发布文章；所有操作均直连后端接口。</span></div>
+        <Space className="article-hero-actions" size={12} wrap>
+          {actions.create && <Button className="article-create-button" icon={<PlusOutlined />} onClick={openNew}>新建文章</Button>}
+          <Button className="article-clear-filter-button" icon={<AppstoreOutlined />} onClick={onResetFilters}>清空筛选条件</Button>
+        </Space>
+      </Card>
 
-    {exportFeedback && <Alert className="article-export-feedback" type={exportFeedback.type} title={exportFeedback.message} showIcon closable={{ onClose: () => setExportFeedback(null) }} />}
+      {exportFeedback && <Alert className="article-export-feedback" type={exportFeedback.type} title={exportFeedback.message} showIcon closable={{ onClose: () => setExportFeedback(null) }} />}
 
-    <div className="article-stat-grid"><Card><Statistic title="当前结果" value={filteredArticles.length} prefix={<FileTextOutlined />} /></Card><Card><Statistic title="已发布" value={published} suffix="篇" prefix={<SendOutlined />} /></Card><Card><Statistic title="草稿 / 下架" value={filteredArticles.length - published} suffix="篇" prefix={<EditOutlined />} /></Card></div>
+      <div className="article-stat-grid"><Card><Statistic title="当前结果" value={filteredArticles.length} prefix={<FileTextOutlined />} /></Card><Card><Statistic title="已发布" value={published} suffix="篇" prefix={<SendOutlined />} /></Card><Card><Statistic title="草稿 / 下架" value={filteredArticles.length - published} suffix="篇" prefix={<EditOutlined />} /></Card></div>
 
-    <Card className="article-browser-card" title="文章库" extra={<Space className="article-filter-bar"><Input allowClear value={articleKeyword} onChange={(event) => onArticleKeywordChange(event.target.value)} placeholder="标题、分类、作者、摘要" prefix={<FileTextOutlined />} /><Select value={articleStatus} onChange={onArticleStatusChange} options={[{ value: '全部', label: '全部状态' }, ...articleStatusOptions.map((status) => ({ value: status, label: status }))]} /><Button onClick={onResetFilters}>重置</Button></Space>}>
-      {filteredArticles.length === 0 ? <Empty description="暂无匹配文章">{actions.create && <Button type="primary" onClick={openNew}>创建第一篇文章</Button>}</Empty> : <div className="article-card-list" aria-label="文章列表">{filteredArticles.map((article) => <ArticleCard key={article.id} article={article} actions={actions} exportingFormat={exportingArticle?.articleId === article.id ? exportingArticle.format : null} exportDisabled={Boolean(exportingArticle)} onExport={handleExport} onPreview={setPreviewArticle} onEdit={openEdit} onToggle={onToggleArticleStatus} onDelete={onDeleteArticle} />)}</div>}
-    </Card>
+      <Card className="article-browser-card" title="文章库" extra={<Space className="article-filter-bar"><Input allowClear value={articleKeyword} onChange={(event) => onArticleKeywordChange(event.target.value)} placeholder="标题、分类、作者、摘要" prefix={<FileTextOutlined />} /><Select value={articleStatus} onChange={onArticleStatusChange} options={[{ value: '全部', label: '全部状态' }, ...articleStatusOptions.map((status) => ({ value: status, label: status }))]} /><Button onClick={onResetFilters}>重置</Button></Space>}>
+        {filteredArticles.length === 0 ? <Empty description="暂无匹配文章">{actions.create && <Button type="primary" onClick={openNew}>创建第一篇文章</Button>}</Empty> : <div className="article-card-list" aria-label="文章列表">{filteredArticles.map((article) => <ArticleCard key={article.id} article={article} actions={actions} exportingFormat={exportingArticle?.articleId === article.id ? exportingArticle.format : null} exportDisabled={Boolean(exportingArticle)} onExport={handleExport} onPreview={setPreviewArticle} onEdit={openEdit} onToggle={onToggleArticleStatus} onDelete={onDeleteArticle} />)}</div>}
+      </Card>
+    </>}
 
     {actions.update && <Modal open={isEditorOpen} title="编辑文章" footer={null} width="min(1160px, 96vw)" destroyOnHidden onCancel={closeEditor}>
       <ArticleEditorForm
@@ -153,6 +174,52 @@ export function ArticlesPage(props: ArticlesPageProps) {
 
     <ArticlePreview article={previewArticle} onClose={() => setPreviewArticle(null)} />
   </section>;
+}
+
+type ArticleCreateViewProps = {
+  /** articleForm 保存待创建文章的完整表单内容。 */
+  articleForm: ArticleForm;
+  /** isSavingArticle 表示创建请求是否正在进行。 */
+  isSavingArticle: boolean;
+  /** onArticleFormChange 在字段变化时同步待创建文章。 */
+  onArticleFormChange: (form: ArticleForm) => void;
+  /** onSubmitArticle 创建文章，并在成功后回到列表视图。 */
+  onSubmitArticle: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
+  /** onCancel 放弃本次创建并回到列表视图。 */
+  onCancel: () => void;
+};
+
+/** ArticleCreateView 在文章管理主内容区承载文章创建表单，不改变工作台路由。 */
+function ArticleCreateView({
+  articleForm,
+  isSavingArticle,
+  onArticleFormChange,
+  onSubmitArticle,
+  onCancel,
+}: ArticleCreateViewProps) {
+  return <div className="article-create-page">
+    <header className="article-create-page-header">
+      <Button className="article-create-back" type="text" icon={<ArrowLeftOutlined />} onClick={onCancel}>返回文章管理</Button>
+      <div className="article-create-heading">
+        <span className="article-create-heading-icon" aria-hidden="true"><FileAddOutlined /></span>
+        <div>
+          <p className="page-kicker">内容管理 / 文章管理</p>
+          <h1 id="article-create-title">创建文章</h1>
+        </div>
+      </div>
+    </header>
+
+    <div className="article-create-surface" data-tilt-disabled="true">
+      <ArticleEditorForm
+        mode="create"
+        articleForm={articleForm}
+        isSavingArticle={isSavingArticle}
+        onArticleFormChange={onArticleFormChange}
+        onSubmitArticle={onSubmitArticle}
+        onCancel={onCancel}
+      />
+    </div>
+  </div>;
 }
 
 type ArticleEditorFormProps = {
