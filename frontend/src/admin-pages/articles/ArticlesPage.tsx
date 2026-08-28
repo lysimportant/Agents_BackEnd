@@ -237,6 +237,31 @@ type ArticleEditorFormProps = {
   onCancel: () => void;
 };
 
+type ArticleSettingKey = 'title' | 'category' | 'author' | 'summary' | 'status' | 'visibility' | 'is18r' | 'contentLocale';
+type ArticleSettingDraft = string | boolean;
+
+/** 文章设置字段名称用于按钮和 Dialog 标题，保持创建与编辑语义一致。 */
+const articleSettingLabels: Record<ArticleSettingKey, string> = {
+  title: '标题',
+  category: '分类',
+  author: '作者',
+  summary: '摘要',
+  status: '状态',
+  visibility: '可见性',
+  is18r: '18R 限制',
+  contentLocale: '正文语言',
+};
+
+/** 文章正文语言选项同时服务于设置 Dialog 和提交前的当前值展示。 */
+const articleLocaleOptions: Array<{ value: ArticleForm['contentLocale']; label: string }> = [
+  { value: 'zh-CN', label: '简体中文' },
+  { value: 'en-US', label: 'English' },
+  { value: 'ja-JP', label: '日本語' },
+];
+
+/** 文章设置按钮的固定顺序，避免正文编辑区域上方出现大量输入框。 */
+const articleSettingKeys: ArticleSettingKey[] = ['title', 'category', 'author', 'summary', 'status', 'visibility', 'is18r', 'contentLocale'];
+
 /** ArticleEditorForm 复用新建页面与编辑弹窗的完整文章编辑能力。 */
 export function ArticleEditorForm({
   mode,
@@ -246,37 +271,151 @@ export function ArticleEditorForm({
   onSubmitArticle,
   onCancel,
 }: ArticleEditorFormProps) {
-  return <form className="rich-editor-form" onSubmit={(event) => void onSubmitArticle(event)}>
-    <div className="rich-editor-meta">
-      <label>标题<Input required size="large" value={articleForm.title} onChange={(event) => onArticleFormChange({ ...articleForm, title: event.target.value })} placeholder="请输入清晰、有辨识度的文章标题" /></label>
-      <label>分类<Input required value={articleForm.category} onChange={(event) => onArticleFormChange({ ...articleForm, category: event.target.value })} placeholder="例如：通知公告" /></label>
-      <label>作者<Input required value={articleForm.author} onChange={(event) => onArticleFormChange({ ...articleForm, author: event.target.value })} placeholder="作者姓名" /></label>
-      <label>状态<Select value={articleForm.status} options={articleStatusOptions.map((status) => ({ value: status, label: status }))} onChange={(status) => onArticleFormChange({ ...articleForm, status: status as ArticleForm['status'] })} /></label>
-    </div>
-    <label className="article-summary-field">摘要<Input.TextArea value={articleForm.summary} rows={2} onChange={(event) => onArticleFormChange({ ...articleForm, summary: event.target.value })} placeholder="一句话概括文章价值，便于列表展示" /></label>
-    <div className="privacy-switch-row">
-      <div>
-        <strong>仅自己可见</strong>
-        <small>开启后仅归属人和管理员可查看；其他登录用户不会在列表中看到此文章。</small>
+  /** activeSettingKey 表示当前正在 Dialog 中编辑的文章字段。 */
+  const [activeSettingKey, setActiveSettingKey] = useState<ArticleSettingKey | null>(null);
+  /** settingDraft 保存当前 Dialog 的临时输入，取消时不会写回文章表单。 */
+  const [settingDraft, setSettingDraft] = useState<ArticleSettingDraft>('');
+  /** settingError 保存当前字段的校验反馈。 */
+  const [settingError, setSettingError] = useState('');
+  /** feedbackMessage 提供继承当前主题的表单校验反馈。 */
+  const { message: feedbackMessage } = App.useApp();
+  /** updateArticleForm 在正文或设置 Dialog 确认后同步完整文章表单。 */
+  const updateArticleForm = (changes: Partial<ArticleForm>) => onArticleFormChange({ ...articleForm, ...changes });
+
+  /** openArticleSettingDialog 打开指定字段的 Dialog，并将当前值复制到临时草稿。 */
+  const openArticleSettingDialog = (settingKey: ArticleSettingKey) => {
+    setActiveSettingKey(settingKey);
+    setSettingError('');
+    switch (settingKey) {
+      case 'title': setSettingDraft(articleForm.title); break;
+      case 'category': setSettingDraft(articleForm.category); break;
+      case 'author': setSettingDraft(articleForm.author); break;
+      case 'summary': setSettingDraft(articleForm.summary); break;
+      case 'status': setSettingDraft(articleForm.status); break;
+      case 'visibility': setSettingDraft(Boolean(articleForm.isPrivate)); break;
+      case 'is18r': setSettingDraft(Boolean(articleForm.is18r)); break;
+      case 'contentLocale': setSettingDraft(articleForm.contentLocale); break;
+    }
+  };
+
+  /** closeArticleSettingDialog 关闭字段 Dialog，并丢弃未确认的临时输入。 */
+  const closeArticleSettingDialog = () => {
+    setActiveSettingKey(null);
+    setSettingDraft('');
+    setSettingError('');
+  };
+
+  /** confirmArticleSetting 校验并将当前字段的 Dialog 草稿写回文章表单。 */
+  const confirmArticleSetting = () => {
+    if (!activeSettingKey) return;
+    if (['title', 'category', 'author'].includes(activeSettingKey)) {
+      const normalizedValue = String(settingDraft).trim();
+      if (!normalizedValue) {
+        setSettingError(`请输入${articleSettingLabels[activeSettingKey]}。`);
+        return;
+      }
+      if (activeSettingKey === 'title') updateArticleForm({ title: normalizedValue });
+      if (activeSettingKey === 'category') updateArticleForm({ category: normalizedValue });
+      if (activeSettingKey === 'author') updateArticleForm({ author: normalizedValue });
+    } else if (activeSettingKey === 'summary') {
+      updateArticleForm({ summary: String(settingDraft) });
+    } else if (activeSettingKey === 'status') {
+      updateArticleForm({ status: String(settingDraft) as ArticleForm['status'] });
+    } else if (activeSettingKey === 'visibility') {
+      updateArticleForm({ isPrivate: settingDraft === true });
+    } else if (activeSettingKey === 'is18r') {
+      updateArticleForm({ is18r: settingDraft === true });
+    } else if (activeSettingKey === 'contentLocale') {
+      updateArticleForm({ contentLocale: String(settingDraft) as ArticleForm['contentLocale'] });
+    }
+    closeArticleSettingDialog();
+  };
+
+  /** handleSubmitArticle 在调用工作台提交前校验已移入 Dialog 的必填字段。 */
+  const handleSubmitArticle = (event: FormEvent<HTMLFormElement>) => {
+    const missingField = [
+      { value: articleForm.title, key: 'title' as const },
+      { value: articleForm.category, key: 'category' as const },
+      { value: articleForm.author, key: 'author' as const },
+    ].find(({ value }) => !value.trim());
+    if (missingField) {
+      event.preventDefault();
+      openArticleSettingDialog(missingField.key);
+      void feedbackMessage.error(`请先填写${articleSettingLabels[missingField.key]}。`);
+      return;
+    }
+    void onSubmitArticle(event);
+  };
+
+  /** getArticleSettingValue 生成按钮上的当前值摘要，避免打开 Dialog 才能确认状态。 */
+  const getArticleSettingValue = (settingKey: ArticleSettingKey) => {
+    switch (settingKey) {
+      case 'title': return articleForm.title.trim() || '未填写';
+      case 'category': return articleForm.category.trim() || '未填写';
+      case 'author': return articleForm.author.trim() || '未填写';
+      case 'summary': return articleForm.summary.trim() || '未填写';
+      case 'status': return articleForm.status || '草稿';
+      case 'visibility': return articleForm.isPrivate ? '仅自己可见' : '公开可见';
+      case 'is18r': return articleForm.is18r ? '已开启' : '未开启';
+      case 'contentLocale': return articleLocaleOptions.find((option) => option.value === articleForm.contentLocale)?.label || '简体中文';
+    }
+  };
+
+  /** renderArticleSettingControl 按字段类型渲染 Dialog 内的受控输入控件。 */
+  const renderArticleSettingControl = () => {
+    if (!activeSettingKey) return null;
+    const stringDraft = typeof settingDraft === 'string' ? settingDraft : '';
+    if (activeSettingKey === 'title' || activeSettingKey === 'category' || activeSettingKey === 'author') {
+      const placeholders: Record<'title' | 'category' | 'author', string> = {
+        title: '请输入清晰、有辨识度的文章标题',
+        category: '例如：通知公告',
+        author: '作者姓名',
+      };
+      return <label className="article-dialog-field"><span>{articleSettingLabels[activeSettingKey]}</span><Input autoFocus size={activeSettingKey === 'title' ? 'large' : 'middle'} value={stringDraft} placeholder={placeholders[activeSettingKey]} onChange={(event) => setSettingDraft(event.target.value)} /></label>;
+    }
+    if (activeSettingKey === 'summary') {
+      return <label className="article-dialog-field"><span>摘要</span><Input.TextArea autoFocus value={stringDraft} rows={5} placeholder="一句话概括文章价值，便于列表展示" onChange={(event) => setSettingDraft(event.target.value)} /></label>;
+    }
+    if (activeSettingKey === 'status') {
+      return <label className="article-dialog-field"><span>状态</span><Select autoFocus value={stringDraft} options={articleStatusOptions.map((status) => ({ value: status, label: status }))} onChange={(status) => setSettingDraft(status)} /></label>;
+    }
+    if (activeSettingKey === 'contentLocale') {
+      return <label className="article-dialog-field"><span>正文语言</span><Select autoFocus value={stringDraft} options={articleLocaleOptions} onChange={(locale) => setSettingDraft(locale)} /></label>;
+    }
+    if (activeSettingKey === 'visibility') {
+      return <div className="privacy-switch-row"><div><strong>仅自己可见</strong><small>开启后仅归属人和管理员可查看，其他登录用户不会在列表中看到此文章。</small></div><Switch autoFocus checked={settingDraft === true} checkedChildren="私密" unCheckedChildren="公开" onChange={(checked) => setSettingDraft(checked)} /></div>;
+    }
+    return <div className="privacy-switch-row"><div><strong>18R 限制</strong><small>开启后仅登录且开启 18R 内容的用户可见。</small></div><Switch autoFocus checked={settingDraft === true} checkedChildren="开启" unCheckedChildren="关闭" onChange={(checked) => setSettingDraft(checked)} /></div>;
+  };
+
+  return <form className="rich-editor-form" onSubmit={handleSubmitArticle}>
+    <RichTextEditor value={articleForm.content} onChange={(content) => updateArticleForm({ content })} />
+    <section className="article-settings-section" aria-labelledby="article-settings-title">
+      <div className="article-settings-heading"><div><strong id="article-settings-title">文章设置</strong><span>点击字段按钮，在 Dialog 中编辑文章信息。</span></div><Tag color="blue">{articleSettingKeys.length} 项设置</Tag></div>
+      <div className="article-settings-actions">
+        {articleSettingKeys.map((settingKey) => {
+          const settingValue = getArticleSettingValue(settingKey);
+          return <Button key={settingKey} className="article-setting-button" htmlType="button" aria-label={`${articleSettingLabels[settingKey]}：${settingValue}`} onClick={() => openArticleSettingDialog(settingKey)}>
+            <span className="article-setting-copy"><span className="article-setting-label">{articleSettingLabels[settingKey]}</span><span className="article-setting-value" title={settingValue}>{settingValue}</span></span>
+            <EditOutlined aria-hidden="true" />
+          </Button>;
+        })}
       </div>
-      <Switch checked={Boolean(articleForm.isPrivate)} onChange={(checked) => onArticleFormChange({ ...articleForm, isPrivate: checked })} checkedChildren="私密" unCheckedChildren="公开" />
-    </div>
-    <div className="privacy-switch-row">
-      <div>
-        <strong>18R 限制</strong>
-        <small>开启后仅登录且开启 18R 内容的用户可见</small>
-      </div>
-      <Switch checked={Boolean(articleForm.is18r)} onChange={(checked) => onArticleFormChange({ ...articleForm, is18r: checked })} checkedChildren="开启" unCheckedChildren="关闭" />
-    </div>
-    <div className="privacy-switch-row">
-      <div>
-        <strong>正文语言</strong>
-        <small>用于门户 SEO 的 lang 与结构化数据标注，正文内容保持录入原语言。</small>
-      </div>
-      <Select value={articleForm.contentLocale} options={[{ value: 'zh-CN', label: '简体中文' }, { value: 'en-US', label: 'English' }, { value: 'ja-JP', label: '日本語' }]} onChange={(value) => onArticleFormChange({ ...articleForm, contentLocale: value })} style={{ width: 160 }} />
-    </div>
-    <RichTextEditor value={articleForm.content} onChange={(content) => onArticleFormChange({ ...articleForm, content })} />
-    <div className="rich-editor-actions"><Button onClick={onCancel}>取消</Button><Button htmlType="submit" type="primary" loading={isSavingArticle} icon={<SaveOutlined />}>{mode === 'edit' ? '保存修改' : '创建文章'}</Button></div>
+    </section>
+    <div className="rich-editor-actions"><Button htmlType="button" onClick={onCancel}>取消</Button><Button htmlType="submit" type="primary" loading={isSavingArticle} icon={<SaveOutlined />}>{mode === 'edit' ? '保存修改' : '创建文章'}</Button></div>
+    <Modal
+      open={Boolean(activeSettingKey)}
+      title={activeSettingKey ? articleSettingLabels[activeSettingKey] : '文章设置'}
+      okText="保存"
+      cancelText="取消"
+      width="min(560px, calc(100vw - 32px))"
+      destroyOnHidden
+      onOk={confirmArticleSetting}
+      onCancel={closeArticleSettingDialog}
+    >
+      {settingError && <Alert type="error" showIcon title={settingError} />}
+      <div className="article-setting-dialog-content">{renderArticleSettingControl()}</div>
+    </Modal>
   </form>;
 }
 

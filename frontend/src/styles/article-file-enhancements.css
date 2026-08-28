@@ -233,11 +233,23 @@ html[data-theme='dark'] .antd-files-workspace .files-hero {
 .article-workspace .article-library-actions .article-export-button.ant-btn-primary:hover { color: #fff !important; border-color: #2676dc !important; background: #2676dc !important; }
 .article-workspace .article-library-actions .article-export-button.ant-btn-primary:disabled { color: #64748b !important; border-color: #cbd5e1 !important; background: #e2e8f0 !important; }
 .rich-editor-form { display: grid; gap: 16px; }
-.rich-editor-meta { display: grid; grid-template-columns: minmax(240px, 2fr) repeat(3, minmax(130px, 1fr)); gap: 12px; }
-.rich-editor-meta label, .article-summary-field { display: grid; gap: 7px; color: #334155; font-size: 13px; font-weight: 650; }
-.article-summary-field { width: 100%; }
+.article-settings-section { display: grid; gap: 12px; padding-top: 4px; }
+.article-settings-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.article-settings-heading > div { min-width: 0; display: grid; gap: 4px; }
+.article-settings-heading strong { color: var(--text-primary); font-size: 15px; }
+.article-settings-heading span { color: var(--text-secondary); font-size: 12px; font-weight: 400; }
+.article-settings-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.article-setting-button { width: 100%; min-width: 0; min-height: 66px; height: auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; color: var(--text-primary); border-color: var(--border); background: var(--surface-elevated); text-align: left; }
+.article-setting-button:hover, .article-setting-button:focus-visible { color: var(--primary); border-color: var(--primary); background: var(--control-hover); }
+.article-setting-copy { min-width: 0; display: grid; gap: 5px; text-align: left; }
+.article-setting-label { color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+.article-setting-value { display: block; min-width: 0; overflow: hidden; color: var(--text-primary); font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.article-setting-button > .anticon { flex: 0 0 auto; color: var(--text-secondary); font-size: 14px; }
+.article-setting-dialog-content { display: grid; gap: 14px; }
+.article-setting-dialog-content .article-dialog-field { font-size: 13px; }
 .rich-editor-section { border: 1px solid #dbe6f4; border-radius: 10px; overflow: hidden; }
 .rich-editor-heading { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; padding: 11px 14px; background: #f8fbff; color: #334155; }
+.rich-editor-heading strong { flex: 0 0 auto; white-space: nowrap; }
 .rich-editor-heading span { color: #94a3b8; font-size: 12px; font-weight: 400; }
 .rich-editor-toolbar { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px 9px; border-top: 1px solid #e7eef8; border-bottom: 1px solid #e7eef8; background: #fff; }
 .rich-editor-toolbar .ant-btn { min-width: 34px; font-weight: 700; }
@@ -300,6 +312,10 @@ html[data-theme='dark'] .article-preview-title, .dark .article-preview-title { c
 html[data-theme='dark'] .rich-editor-heading, .dark .rich-editor-heading, html[data-theme='dark'] .rich-editor-toolbar, .dark .rich-editor-toolbar { background: #172033; border-color: #273650; color: #dbe7f8; }
 html[data-theme='dark'] .rich-editor-content, .dark .rich-editor-content, html[data-theme='dark'] .article-preview, .dark .article-preview { color: #d5dfef; background: #101827; }
 html[data-theme='dark'] .article-preview-content h1, html[data-theme='dark'] .article-preview-content h2, html[data-theme='dark'] .article-preview-content h3, .dark .article-preview-content h1, .dark .article-preview-content h2, .dark .article-preview-content h3 { color: #eef5ff; }
+html[data-theme='dark'] .article-settings-heading strong, .dark .article-settings-heading strong { color: #eef5ff; }
+html[data-theme='dark'] .article-setting-button, .dark .article-setting-button { color: #dbe7f8; border-color: #273650; background: #172033; }
+html[data-theme='dark'] .article-setting-button:hover, .dark .article-setting-button:hover, html[data-theme='dark'] .article-setting-button:focus-visible, .dark .article-setting-button:focus-visible { color: #8bbcff; border-color: #4f8fdc; background: #1c2a42; }
+html[data-theme='dark'] .article-setting-value, .dark .article-setting-value { color: #eef5ff; }
 
-@media (max-width: 860px) { .article-hero .ant-card-body, .article-library-card { align-items: stretch; flex-direction: column; } .article-library-actions { justify-content: flex-start; } .article-stat-grid { grid-template-columns: 1fr; } .rich-editor-meta { grid-template-columns: 1fr 1fr; } .rich-editor-meta label:first-child { grid-column: 1 / -1; } }
-@media (max-width: 560px) { .antd-file-tools, .article-filter-bar { width: 100%; flex-wrap: wrap; } .antd-file-tools .ant-input-affix-wrapper, .article-filter-bar .ant-input-affix-wrapper { width: 100%; } .article-hero .ant-card-body { padding: 4px 0; } .article-create-page-header { align-items: flex-start; flex-direction: column; gap: 10px; } .article-create-heading-icon { width: 34px; height: 34px; flex-basis: 34px; } .article-create-heading h1 { font-size: 21px; } .article-create-surface { padding: 14px; } .rich-editor-meta { grid-template-columns: 1fr; } .rich-editor-meta label:first-child { grid-column: auto; } .rich-editor-content { min-height: 270px; padding: 15px; } }
+@media (max-width: 860px) { .article-hero .ant-card-body, .article-library-card { align-items: stretch; flex-direction: column; } .article-library-actions { justify-content: flex-start; } .article-stat-grid { grid-template-columns: 1fr; } .article-settings-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .antd-file-tools, .article-filter-bar { width: 100%; flex-wrap: wrap; } .antd-file-tools .ant-input-affix-wrapper, .article-filter-bar .ant-input-affix-wrapper { width: 100%; } .article-hero .ant-card-body { padding: 4px 0; } .article-create-page-header { align-items: flex-start; flex-direction: column; gap: 10px; } .article-create-heading-icon { width: 34px; height: 34px; flex-basis: 34px; } .article-create-heading h1 { font-size: 21px; } .article-create-surface { padding: 14px; } .article-settings-heading { align-items: flex-start; flex-direction: column; } .article-settings-actions { grid-template-columns: 1fr; } .rich-editor-content { min-height: 270px; padding: 15px; } }
