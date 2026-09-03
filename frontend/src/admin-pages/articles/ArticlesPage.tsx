@@ -237,10 +237,10 @@ type ArticleEditorFormProps = {
   onCancel: () => void;
 };
 
+/** ArticleSettingKey 表示统一“其他信息”Dialog 中可编辑的字段编码。 */
 type ArticleSettingKey = 'title' | 'category' | 'author' | 'summary' | 'status' | 'visibility' | 'is18r' | 'contentLocale';
-type ArticleSettingDraft = string | boolean;
 
-/** 文章设置字段名称用于按钮和 Dialog 标题，保持创建与编辑语义一致。 */
+/** 文章信息字段名称用于统一 Dialog 的标签和校验提示，保持创建与编辑语义一致。 */
 const articleSettingLabels: Record<ArticleSettingKey, string> = {
   title: '标题',
   category: '分类',
@@ -259,7 +259,7 @@ const articleLocaleOptions: Array<{ value: ArticleForm['contentLocale']; label: 
   { value: 'ja-JP', label: '日本語' },
 ];
 
-/** 文章设置按钮的固定顺序，避免正文编辑区域上方出现大量输入框。 */
+/** 文章信息字段的固定顺序，用于显示设置项数量并保持字段契约稳定。 */
 const articleSettingKeys: ArticleSettingKey[] = ['title', 'category', 'author', 'summary', 'status', 'visibility', 'is18r', 'contentLocale'];
 
 /** ArticleEditorForm 复用新建页面与编辑弹窗的完整文章编辑能力。 */
@@ -271,67 +271,64 @@ export function ArticleEditorForm({
   onSubmitArticle,
   onCancel,
 }: ArticleEditorFormProps) {
-  /** activeSettingKey 表示当前正在 Dialog 中编辑的文章字段。 */
-  const [activeSettingKey, setActiveSettingKey] = useState<ArticleSettingKey | null>(null);
-  /** settingDraft 保存当前 Dialog 的临时输入，取消时不会写回文章表单。 */
-  const [settingDraft, setSettingDraft] = useState<ArticleSettingDraft>('');
-  /** settingError 保存当前字段的校验反馈。 */
-  const [settingError, setSettingError] = useState('');
+  /** isSettingsDialogOpen 表示统一“其他信息”Dialog 是否打开。 */
+  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
+  /** settingsDraft 保存八个文章信息字段的完整临时表单，取消时不会写回文章表单。 */
+  const [settingsDraft, setSettingsDraft] = useState<ArticleForm>(() => ({ ...articleForm }));
+  /** settingsError 保存统一 Dialog 的校验反馈。 */
+  const [settingsError, setSettingsError] = useState('');
+  /** settingsErrorField 保存当前未通过校验的必填字段，便于标记对应控件。 */
+  const [settingsErrorField, setSettingsErrorField] = useState<Extract<ArticleSettingKey, 'title' | 'category' | 'author'> | null>(null);
   /** feedbackMessage 提供继承当前主题的表单校验反馈。 */
   const { message: feedbackMessage } = App.useApp();
   /** updateArticleForm 在正文或设置 Dialog 确认后同步完整文章表单。 */
   const updateArticleForm = (changes: Partial<ArticleForm>) => onArticleFormChange({ ...articleForm, ...changes });
 
-  /** openArticleSettingDialog 打开指定字段的 Dialog，并将当前值复制到临时草稿。 */
-  const openArticleSettingDialog = (settingKey: ArticleSettingKey) => {
-    setActiveSettingKey(settingKey);
-    setSettingError('');
-    switch (settingKey) {
-      case 'title': setSettingDraft(articleForm.title); break;
-      case 'category': setSettingDraft(articleForm.category); break;
-      case 'author': setSettingDraft(articleForm.author); break;
-      case 'summary': setSettingDraft(articleForm.summary); break;
-      case 'status': setSettingDraft(articleForm.status); break;
-      case 'visibility': setSettingDraft(Boolean(articleForm.isPrivate)); break;
-      case 'is18r': setSettingDraft(Boolean(articleForm.is18r)); break;
-      case 'contentLocale': setSettingDraft(articleForm.contentLocale); break;
+  /** openArticleSettingsDialog 打开统一 Dialog，并将当前完整文章表单复制为临时草稿。 */
+  const openArticleSettingsDialog = (missingField?: Extract<ArticleSettingKey, 'title' | 'category' | 'author'>) => {
+    setSettingsDraft({ ...articleForm });
+    setSettingsErrorField(missingField ?? null);
+    setSettingsError(missingField ? `请输入${articleSettingLabels[missingField]}。` : '');
+    setIsSettingsDialogOpen(true);
+  };
+
+  /** closeArticleSettingsDialog 关闭统一 Dialog，并丢弃未确认的临时输入。 */
+  const closeArticleSettingsDialog = () => {
+    setIsSettingsDialogOpen(false);
+    setSettingsError('');
+    setSettingsErrorField(null);
+  };
+
+  /** updateSettingsDraft 修改统一 Dialog 的临时草稿，并清除已经过时的校验提示。 */
+  const updateSettingsDraft = (changes: Partial<ArticleForm>) => {
+    setSettingsDraft((currentDraft) => ({ ...currentDraft, ...changes }));
+    if (settingsError) {
+      setSettingsError('');
+      setSettingsErrorField(null);
     }
   };
 
-  /** closeArticleSettingDialog 关闭字段 Dialog，并丢弃未确认的临时输入。 */
-  const closeArticleSettingDialog = () => {
-    setActiveSettingKey(null);
-    setSettingDraft('');
-    setSettingError('');
-  };
-
-  /** confirmArticleSetting 校验并将当前字段的 Dialog 草稿写回文章表单。 */
-  const confirmArticleSetting = () => {
-    if (!activeSettingKey) return;
-    if (['title', 'category', 'author'].includes(activeSettingKey)) {
-      const normalizedValue = String(settingDraft).trim();
-      if (!normalizedValue) {
-        setSettingError(`请输入${articleSettingLabels[activeSettingKey]}。`);
-        return;
-      }
-      if (activeSettingKey === 'title') updateArticleForm({ title: normalizedValue });
-      if (activeSettingKey === 'category') updateArticleForm({ category: normalizedValue });
-      if (activeSettingKey === 'author') updateArticleForm({ author: normalizedValue });
-    } else if (activeSettingKey === 'summary') {
-      updateArticleForm({ summary: String(settingDraft) });
-    } else if (activeSettingKey === 'status') {
-      updateArticleForm({ status: String(settingDraft) as ArticleForm['status'] });
-    } else if (activeSettingKey === 'visibility') {
-      updateArticleForm({ isPrivate: settingDraft === true });
-    } else if (activeSettingKey === 'is18r') {
-      updateArticleForm({ is18r: settingDraft === true });
-    } else if (activeSettingKey === 'contentLocale') {
-      updateArticleForm({ contentLocale: String(settingDraft) as ArticleForm['contentLocale'] });
+  /** confirmArticleSettings 一次性校验并将统一 Dialog 草稿写回完整文章表单。 */
+  const confirmArticleSettings = () => {
+    /** normalizedDraft 保存去除标题、分类和作者首尾空白后的待写回表单。 */
+    const normalizedDraft: ArticleForm = {
+      ...settingsDraft,
+      title: settingsDraft.title.trim(),
+      category: settingsDraft.category.trim(),
+      author: settingsDraft.author.trim(),
+    };
+    /** missingField 保存首个未填写的必填字段，供 Dialog 显示定位反馈。 */
+    const missingField = (['title', 'category', 'author'] as const).find((field) => !normalizedDraft[field]);
+    if (missingField) {
+      setSettingsErrorField(missingField);
+      setSettingsError(`请输入${articleSettingLabels[missingField]}。`);
+      return;
     }
-    closeArticleSettingDialog();
+    onArticleFormChange(normalizedDraft);
+    closeArticleSettingsDialog();
   };
 
-  /** handleSubmitArticle 在调用工作台提交前校验已移入 Dialog 的必填字段。 */
+  /** handleSubmitArticle 在调用工作台提交前校验必填字段，缺失时打开统一信息 Dialog。 */
   const handleSubmitArticle = (event: FormEvent<HTMLFormElement>) => {
     const missingField = [
       { value: articleForm.title, key: 'title' as const },
@@ -340,81 +337,73 @@ export function ArticleEditorForm({
     ].find(({ value }) => !value.trim());
     if (missingField) {
       event.preventDefault();
-      openArticleSettingDialog(missingField.key);
+      openArticleSettingsDialog(missingField.key);
       void feedbackMessage.error(`请先填写${articleSettingLabels[missingField.key]}。`);
       return;
     }
     void onSubmitArticle(event);
   };
 
-  /** getArticleSettingValue 生成按钮上的当前值摘要，避免打开 Dialog 才能确认状态。 */
-  const getArticleSettingValue = (settingKey: ArticleSettingKey) => {
-    switch (settingKey) {
-      case 'title': return articleForm.title.trim() || '未填写';
-      case 'category': return articleForm.category.trim() || '未填写';
-      case 'author': return articleForm.author.trim() || '未填写';
-      case 'summary': return articleForm.summary.trim() || '未填写';
-      case 'status': return articleForm.status || '草稿';
-      case 'visibility': return articleForm.isPrivate ? '仅自己可见' : '公开可见';
-      case 'is18r': return articleForm.is18r ? '已开启' : '未开启';
-      case 'contentLocale': return articleLocaleOptions.find((option) => option.value === articleForm.contentLocale)?.label || '简体中文';
-    }
-  };
-
-  /** renderArticleSettingControl 按字段类型渲染 Dialog 内的受控输入控件。 */
-  const renderArticleSettingControl = () => {
-    if (!activeSettingKey) return null;
-    const stringDraft = typeof settingDraft === 'string' ? settingDraft : '';
-    if (activeSettingKey === 'title' || activeSettingKey === 'category' || activeSettingKey === 'author') {
-      const placeholders: Record<'title' | 'category' | 'author', string> = {
-        title: '请输入清晰、有辨识度的文章标题',
-        category: '例如：通知公告',
-        author: '作者姓名',
-      };
-      return <label className="article-dialog-field"><span>{articleSettingLabels[activeSettingKey]}</span><Input autoFocus size={activeSettingKey === 'title' ? 'large' : 'middle'} value={stringDraft} placeholder={placeholders[activeSettingKey]} onChange={(event) => setSettingDraft(event.target.value)} /></label>;
-    }
-    if (activeSettingKey === 'summary') {
-      return <label className="article-dialog-field"><span>摘要</span><Input.TextArea autoFocus value={stringDraft} rows={5} placeholder="一句话概括文章价值，便于列表展示" onChange={(event) => setSettingDraft(event.target.value)} /></label>;
-    }
-    if (activeSettingKey === 'status') {
-      return <label className="article-dialog-field"><span>状态</span><Select autoFocus value={stringDraft} options={articleStatusOptions.map((status) => ({ value: status, label: status }))} onChange={(status) => setSettingDraft(status)} /></label>;
-    }
-    if (activeSettingKey === 'contentLocale') {
-      return <label className="article-dialog-field"><span>正文语言</span><Select autoFocus value={stringDraft} options={articleLocaleOptions} onChange={(locale) => setSettingDraft(locale)} /></label>;
-    }
-    if (activeSettingKey === 'visibility') {
-      return <div className="privacy-switch-row"><div><strong>仅自己可见</strong><small>开启后仅归属人和管理员可查看，其他登录用户不会在列表中看到此文章。</small></div><Switch autoFocus checked={settingDraft === true} checkedChildren="私密" unCheckedChildren="公开" onChange={(checked) => setSettingDraft(checked)} /></div>;
-    }
-    return <div className="privacy-switch-row"><div><strong>18R 限制</strong><small>开启后仅登录且开启 18R 内容的用户可见。</small></div><Switch autoFocus checked={settingDraft === true} checkedChildren="开启" unCheckedChildren="关闭" onChange={(checked) => setSettingDraft(checked)} /></div>;
-  };
-
   return <form className="rich-editor-form" onSubmit={handleSubmitArticle}>
     <RichTextEditor value={articleForm.content} onChange={(content) => updateArticleForm({ content })} />
     <section className="article-settings-section" aria-labelledby="article-settings-title">
-      <div className="article-settings-heading"><div><strong id="article-settings-title">文章设置</strong><span>点击字段按钮，在 Dialog 中编辑文章信息。</span></div><Tag color="blue">{articleSettingKeys.length} 项设置</Tag></div>
+      <div className="article-settings-heading"><div><strong id="article-settings-title">其他信息</strong><span>统一编辑标题、分类、作者、摘要、状态、可见性、18R 限制和正文语言。</span></div><Tag color="blue">{articleSettingKeys.length} 项信息</Tag></div>
       <div className="article-settings-actions">
-        {articleSettingKeys.map((settingKey) => {
-          const settingValue = getArticleSettingValue(settingKey);
-          return <Button key={settingKey} className="article-setting-button" htmlType="button" aria-label={`${articleSettingLabels[settingKey]}：${settingValue}`} onClick={() => openArticleSettingDialog(settingKey)}>
-            <span className="article-setting-copy"><span className="article-setting-label">{articleSettingLabels[settingKey]}</span><span className="article-setting-value" title={settingValue}>{settingValue}</span></span>
-            <EditOutlined aria-hidden="true" />
-          </Button>;
-        })}
+        <Button className="article-setting-entry" htmlType="button" aria-label="编辑文章其他信息" aria-haspopup="dialog" onClick={() => openArticleSettingsDialog()}>
+          <span className="article-setting-copy"><span className="article-setting-label">其他信息</span><span className="article-setting-value">标题、分类、作者、摘要、状态、可见性、18R 限制、正文语言</span></span>
+          <EditOutlined aria-hidden="true" />
+        </Button>
       </div>
     </section>
     <div className="rich-editor-actions"><Button htmlType="button" onClick={onCancel}>取消</Button><Button htmlType="submit" type="primary" loading={isSavingArticle} icon={<SaveOutlined />}>{mode === 'edit' ? '保存修改' : '创建文章'}</Button></div>
     <Modal
-      open={Boolean(activeSettingKey)}
-      title={activeSettingKey ? articleSettingLabels[activeSettingKey] : '文章设置'}
-      okText="保存"
+      className="article-settings-dialog"
+      open={isSettingsDialogOpen}
+      title="其他信息"
+      okText="保存信息"
       cancelText="取消"
-      width="min(560px, calc(100vw - 32px))"
+      width="min(720px, calc(100vw - 32px))"
       destroyOnHidden
-      onOk={confirmArticleSetting}
-      onCancel={closeArticleSettingDialog}
+      onOk={confirmArticleSettings}
+      onCancel={closeArticleSettingsDialog}
     >
-      {settingError && <Alert type="error" showIcon title={settingError} />}
-      <div className="article-setting-dialog-content">{renderArticleSettingControl()}</div>
+      <div className="article-setting-dialog-content">
+        {settingsError && <Alert className="article-setting-dialog-error" type="error" showIcon title={settingsError} />}
+        <div className="article-setting-dialog-grid">
+          <label className={`article-dialog-field${settingsErrorField === 'title' ? ' article-dialog-field-error' : ''}`}>
+            <span>标题 <em>*</em></span>
+            <Input autoFocus={!settingsErrorField || settingsErrorField === 'title'} size="large" value={settingsDraft.title} placeholder="请输入清晰、有辨识度的文章标题" aria-invalid={settingsErrorField === 'title'} onChange={(event) => updateSettingsDraft({ title: event.target.value })} />
+          </label>
+          <label className={`article-dialog-field${settingsErrorField === 'category' ? ' article-dialog-field-error' : ''}`}>
+            <span>分类 <em>*</em></span>
+            <Input autoFocus={settingsErrorField === 'category'} value={settingsDraft.category} placeholder="例如：通知公告" aria-invalid={settingsErrorField === 'category'} onChange={(event) => updateSettingsDraft({ category: event.target.value })} />
+          </label>
+          <label className={`article-dialog-field${settingsErrorField === 'author' ? ' article-dialog-field-error' : ''}`}>
+            <span>作者 <em>*</em></span>
+            <Input autoFocus={settingsErrorField === 'author'} value={settingsDraft.author} placeholder="作者姓名" aria-invalid={settingsErrorField === 'author'} onChange={(event) => updateSettingsDraft({ author: event.target.value })} />
+          </label>
+          <label className="article-dialog-field article-dialog-field-wide">
+            <span>摘要</span>
+            <Input.TextArea rows={4} value={settingsDraft.summary} placeholder="一句话概括文章价值，便于列表展示" onChange={(event) => updateSettingsDraft({ summary: event.target.value })} />
+          </label>
+          <label className="article-dialog-field">
+            <span>状态</span>
+            <Select value={settingsDraft.status} options={articleStatusOptions.map((status) => ({ value: status, label: status }))} onChange={(status) => updateSettingsDraft({ status })} />
+          </label>
+          <label className="article-dialog-field">
+            <span>正文语言</span>
+            <Select value={settingsDraft.contentLocale} options={articleLocaleOptions} onChange={(contentLocale) => updateSettingsDraft({ contentLocale })} />
+          </label>
+          <div className="privacy-switch-row article-dialog-switch-field">
+            <div><strong>仅自己可见</strong><small>开启后仅归属人和管理员可查看，其他登录用户不会在列表中看到此文章。</small></div>
+            <Switch checked={settingsDraft.isPrivate} checkedChildren="私密" unCheckedChildren="公开" onChange={(isPrivate) => updateSettingsDraft({ isPrivate })} />
+          </div>
+          <div className="privacy-switch-row article-dialog-switch-field">
+            <div><strong>18R 限制</strong><small>开启后仅登录且开启 18R 内容的用户可见。</small></div>
+            <Switch checked={settingsDraft.is18r} checkedChildren="开启" unCheckedChildren="关闭" onChange={(is18r) => updateSettingsDraft({ is18r })} />
+          </div>
+        </div>
+      </div>
     </Modal>
   </form>;
 }

@@ -138,7 +138,7 @@ export function UsersPage({
   /** actorIsSuperAdmin 保存管理员。 */
   const actorIsSuperAdmin = isSuperAdminRoleCode(actorRoleCode);
   /** canEditSelectedPermissions 保存已选择。 */
-  const canEditSelectedPermissions = canConfigurePermissions && !isAdministratorTarget;
+  const canEditSelectedPermissions = canConfigurePermissions && (!isAdministratorTarget || actorIsSuperAdmin);
   /** inheritedMenuIds 缓存计算得到的菜单标识列表。 */
   const inheritedMenuIds = useMemo(() => [...new Set([...departmentMenuIds, ...roleMenuIds])], [departmentMenuIds, roleMenuIds]);
   /** inheritedActionCodes 缓存计算得到的继承结果操作权限编码。 */
@@ -223,6 +223,10 @@ export function UsersPage({
   const confirmPermissions = async () => {
     if (!canEditSelectedPermissions) return;
     if (!await onSavePermissions(draftMenuIds)) return;
+    if (isAdministratorTarget) {
+      setPermissionDialogOpen(false);
+      return;
+    }
     if (await onSaveActionPermissions(draftActionCodes)) setPermissionDialogOpen(false);
   };
 
@@ -332,7 +336,7 @@ export function UsersPage({
                           /** targetIsAdministrator 保存目标。 */
                           const targetIsAdministrator = isAdministratorRoleCode(user.roleCode);
                           /** canAuthorizeTarget 保存目标。 */
-                          const canAuthorizeTarget = canConfigurePermissions && !targetIsAdministrator;
+                          const canAuthorizeTarget = canConfigurePermissions && (!targetIsAdministrator || actorIsSuperAdmin);
                           /** canEditTarget 保存目标。 */
                           const canEditTarget = canUpdate && (!targetIsAdministrator || actorIsSuperAdmin);
                           /** canDeleteTarget 保存目标。 */
@@ -429,7 +433,7 @@ export function UsersPage({
       >
         <p className="section-subtitle">
           {isAdministratorTarget
-            ? '超级管理员和系统管理员始终拥有全部菜单和按钮权限，此处仅供查看。'
+            ? '超级管理员和系统管理员始终拥有全部菜单和按钮权限；超级管理员可维护目标账号的个人附加菜单记录，但不会减少其固定权限。'
             : '部门与角色权限自动继承且不可取消；管理员可在这里为普通用户追加个人菜单和按钮权限。'}
         </p>
         <div className="permission-section-header">
@@ -464,7 +468,7 @@ export function UsersPage({
         </Row>
         <div className="permission-inheritance-note">
           <LockKeyhole size={15} />
-          <span>{isAdministratorTarget ? '管理员全权限已锁定，不允许移除。' : `继承权限 ${inheritedMenuIds.length} 项，个人额外权限 ${draftMenuIds.length} 项，当前有效权限共 ${effectiveMenuIds.length} 项。`}</span>
+          <span>{isAdministratorTarget ? '管理员角色固定拥有全部菜单，继承权限不可移除；超级管理员可维护个人附加菜单记录。' : `继承权限 ${inheritedMenuIds.length} 项，个人额外权限 ${draftMenuIds.length} 项，当前有效权限共 ${effectiveMenuIds.length} 项。`}</span>
         </div>
         <div className="permission-tree-panel">
           {treeData.length > 0 ? (

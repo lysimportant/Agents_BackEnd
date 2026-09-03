@@ -5255,6 +5255,12 @@ tbody tr:hover,
   opacity: var(--tilt-holographic-opacity);
 }
 
+/* 卡片保留 3D 位移与层次效果，但不再显示鼠标悬停时的径向/全息光圈。 */
+.tilt-card-surface::before,
+.tilt-card-surface::after {
+  display: none;
+}
+
 .tilt-card-surface[data-tilt-active='true'] {
   z-index: 2;
   will-change: transform;

@@ -1268,6 +1268,122 @@ func TestSuperAdministratorsCanPersistentlyUpdateEachOther(t *testing.T) {
 	}
 }
 
+// TestCreatedSuperAdministratorCanUpdateUserMenus 验证通过用户管理页面创建的超级管理员
+// 登录后仍拥有与初始化账号相同的用户菜单配置权限，且不依赖用户名判断。
+func TestCreatedSuperAdministratorCanUpdateUserMenus(t *testing.T) {
+	// router、store 保存隔离路由与 SQLite 存储。
+	router, store, _ := setupTestRouter(t)
+	// superRole、viewerRole 保存超级管理员和普通用户角色。
+	var superRole, viewerRole models.Role
+	for _, role := range store.ListRoles() {
+		switch role.Code {
+		case permissions.SuperAdminRoleCode:
+			superRole = role
+		case "viewer":
+			viewerRole = role
+		}
+	}
+	if superRole.ID == 0 || viewerRole.ID == 0 {
+		t.Fatal("required role seeds missing")
+	}
+	// rootDepartment 保存新建超级管理员所属的根部门。
+	var rootDepartment models.Department
+	for _, department := range store.ListDepartments() {
+		if department.Code == "huajian" {
+			rootDepartment = department
+			break
+		}
+	}
+	if rootDepartment.ID == 0 {
+		t.Fatal("root department seed missing")
+	}
+	// canLogin 保存测试用户的登录开关。
+	canLogin := true
+	// creatorCookie 保存初始化超级管理员创建新账号时的会话。
+	creatorCookie := loginCookie(t, router, "MH", "123")
+	// createBody 保存通过 HTTP 用户接口创建第二个超级管理员的请求正文。
+	createBody, _ := json.Marshal(models.UserRequest{
+		Username: "created-super-admin", Name: "创建的超级管理员", RoleID: &superRole.ID,
+		DepartmentID: &rootDepartment.ID, Status: "在岗", CanLogin: &canLogin, Password: "pass1234",
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(createBody))
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(&http.Cookie{Name: "sessionId", Value: creatorCookie})
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create second super administrator: status=%d body=%s", response.Code, response.Body.String())
+	}
+	// secondSuperAdmin 保存刚创建的超级管理员记录。
+	secondSuperAdmin, found := store.FindUserByUsername("created-super-admin")
+	if !found || secondSuperAdmin.RoleCode != permissions.SuperAdminRoleCode {
+		t.Fatalf("created account did not retain super-admin role: %+v", secondSuperAdmin)
+	}
+	// ordinaryUser 保存等待配置个人菜单权限的普通用户。
+	ordinaryUser, message := store.CreateUser(models.UserRequest{
+		Username: "menu-target-user", Name: "菜单权限目标", RoleID: &viewerRole.ID,
+		DepartmentID: &rootDepartment.ID, Status: "在岗", CanLogin: &canLogin,
+	}, auth.MustHashPassword("pass1234"))
+	if message != "" {
+		t.Fatalf("create menu target user: %s", message)
+	}
+	// secondSuperCookie 保存新建超级管理员登录后的会话。
+	secondSuperCookie := loginCookie(t, router, secondSuperAdmin.Username, "pass1234")
+	// sessionRequest、sessionResponse 验证新建账号登录投影使用稳定角色编码和全量动作。
+	sessionRequest := httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
+	sessionRequest.AddCookie(&http.Cookie{Name: "sessionId", Value: secondSuperCookie})
+	sessionResponse := httptest.NewRecorder()
+	router.ServeHTTP(sessionResponse, sessionRequest)
+	if sessionResponse.Code != http.StatusOK || !strings.Contains(sessionResponse.Body.String(), `"roleCode":"super-admin"`) || !strings.Contains(sessionResponse.Body.String(), `"users.permissions.update"`) {
+		t.Fatalf("created super administrator session lacks full permissions: status=%d body=%s", sessionResponse.Code, sessionResponse.Body.String())
+	}
+	// targetMenuID 保存用于验证个人菜单权限持久化的菜单标识。
+	var targetMenuID int
+	for _, menu := range store.ListMenus() {
+		if menu.Code == "articles" {
+			targetMenuID = menu.ID
+			break
+		}
+	}
+	if targetMenuID == 0 {
+		t.Fatal("articles menu seed missing")
+	}
+	// menuBody 保存新建超级管理员配置普通用户菜单的请求正文。
+	menuBody, _ := json.Marshal(models.UserMenusRequest{MenuIDs: []int{targetMenuID}})
+	request = httptest.NewRequest(http.MethodPut, "/api/users/"+strconv.Itoa(ordinaryUser.ID)+"/menus", bytes.NewReader(menuBody))
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(&http.Cookie{Name: "sessionId", Value: secondSuperCookie})
+	response = httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("created super administrator could not update user menus: status=%d body=%s", response.Code, response.Body.String())
+	}
+	// persistedMenus 保存从数据库读取的个人菜单权限，确认请求已真正写入。
+	persistedMenus, message := store.ListUserExtraMenus(ordinaryUser.ID)
+	if message != "" || len(persistedMenus) != 1 || persistedMenus[0].ID != targetMenuID {
+		t.Fatalf("created super administrator menu update was not persisted: message=%s menus=%+v", message, persistedMenus)
+	}
+	// seedAdministrator 保存初始化超级管理员，验证新建账号也能维护同级账号的个人菜单记录。
+	seedAdministrator, found := store.FindUserByUsername("MH")
+	if !found {
+		t.Fatal("seed super administrator missing")
+	}
+	peerMenuBody, _ := json.Marshal(models.UserMenusRequest{MenuIDs: []int{targetMenuID}})
+	request = httptest.NewRequest(http.MethodPut, "/api/users/"+strconv.Itoa(seedAdministrator.ID)+"/menus", bytes.NewReader(peerMenuBody))
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(&http.Cookie{Name: "sessionId", Value: secondSuperCookie})
+	response = httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("created super administrator could not update peer administrator menus: status=%d body=%s", response.Code, response.Body.String())
+	}
+	// persistedPeerMenus 保存同级超级管理员的个人菜单记录，确认初始化账号没有特殊拒绝逻辑。
+	persistedPeerMenus, message := store.ListUserExtraMenus(seedAdministrator.ID)
+	if message != "" || len(persistedPeerMenus) != 1 || persistedPeerMenus[0].ID != targetMenuID {
+		t.Fatalf("peer administrator menu update was not persisted: message=%s menus=%+v", message, persistedPeerMenus)
+	}
+}
+
 func TestSystemAdministratorCannotUpdateSuperAdministratorProfile(t *testing.T) {
 	// router、store 保存隔离测试路由与 SQLite 存储。
 	router, store, _ := setupTestRouter(t)
