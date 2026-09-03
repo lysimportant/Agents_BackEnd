@@ -46,6 +46,12 @@ export function SshTerminalModal({ open, canUseHostAgent, onClose }: SshTerminal
   const [rememberedConnection, setRememberedConnection] = useState<SSHConnectionCredentials | null>(null);
   /** nextSessionIDRef 生成不会因删除标签而重复的会话标识。 */
   const nextSessionIDRef = useRef(1);
+  /** sessionsRef 保存最新标签数组，避免连续关闭事件读取旧渲染闭包。 */
+  const sessionsRef = useRef(sessions);
+  /** activeSessionIDRef 保存最新活动标签，避免连续关闭事件选择错误标签。 */
+  const activeSessionIDRef = useRef(activeSessionID);
+  sessionsRef.current = sessions;
+  activeSessionIDRef.current = activeSessionID;
 
   useEffect(() => {
     if (!open || sessions.length > 0) return;
@@ -66,24 +72,30 @@ export function SshTerminalModal({ open, canUseHostAgent, onClose }: SshTerminal
 
   /** closeSession 关闭指定终端并选中相邻标签，关闭最后一个时创建空白终端。 */
   const closeSession = (sessionID: number) => {
-    setSessions((currentSessions) => {
-      /** closingIndex 表示目标标签在当前数组中的位置。 */
-      const closingIndex = currentSessions.findIndex((session) => session.id === sessionID);
-      /** remainingSessions 表示移除目标连接后的标签列表。 */
-      const remainingSessions = currentSessions.filter((session) => session.id !== sessionID);
-      if (remainingSessions.length === 0 && open) {
-        /** replacementSession 保证弹窗内始终有一个可连接终端。 */
-        const replacementSession = createSessionDefinition(nextSessionIDRef.current++, null, false);
-        setActiveSessionID(replacementSession.id);
-        return [replacementSession];
-      }
-      if (activeSessionID === sessionID) {
-        /** nextActiveSession 表示优先选中的右侧或左侧相邻标签。 */
-        const nextActiveSession = remainingSessions[Math.min(Math.max(0, closingIndex), remainingSessions.length - 1)];
-        setActiveSessionID(nextActiveSession?.id ?? null);
-      }
-      return remainingSessions;
-    });
+    /** currentSessions 表示处理本次关闭事件时最新的标签快照。 */
+    const currentSessions = sessionsRef.current;
+    /** closingIndex 表示目标标签在当前渲染中的位置。 */
+    const closingIndex = currentSessions.findIndex((session) => session.id === sessionID);
+    if (closingIndex < 0) return;
+    /** remainingSessions 表示移除目标连接后的标签列表。 */
+    const remainingSessions = currentSessions.filter((session) => session.id !== sessionID);
+    if (remainingSessions.length === 0 && open) {
+      /** replacementSession 保证弹窗内始终有一个可连接终端。 */
+      const replacementSession = createSessionDefinition(nextSessionIDRef.current++, null, false);
+      sessionsRef.current = [replacementSession];
+      activeSessionIDRef.current = replacementSession.id;
+      setSessions([replacementSession]);
+      setActiveSessionID(replacementSession.id);
+      return;
+    }
+    sessionsRef.current = remainingSessions;
+    setSessions(remainingSessions);
+    if (activeSessionIDRef.current === sessionID) {
+      /** nextActiveSession 表示优先选中的右侧或左侧相邻标签。 */
+      const nextActiveSession = remainingSessions[Math.min(Math.max(0, closingIndex), remainingSessions.length - 1)];
+      activeSessionIDRef.current = nextActiveSession?.id ?? null;
+      setActiveSessionID(nextActiveSession?.id ?? null);
+    }
   };
 
   /** updateSessionStatus 同步子会话的连接状态与标签标题。 */
@@ -113,6 +125,7 @@ export function SshTerminalModal({ open, canUseHostAgent, onClose }: SshTerminal
       footer={null}
       width={1480}
       mask={{ closable: false }}
+      destroyOnHidden={false}
       className="ssh-terminal-modal"
     >
       <div className="ssh-terminal-tabs" role="tablist" aria-label="服务器终端会话">

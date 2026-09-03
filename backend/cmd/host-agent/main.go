@@ -28,6 +28,13 @@ const (
 	defaultReconnectDelaySeconds = 5
 	// maxAgentSessions 限制单个宿主机代理同时维护的 PTY 数量。
 	maxAgentSessions = 32
+	// agentHeartbeatInterval 控制代理注册通道的 Ping 发送频率。
+	agentHeartbeatInterval = 25 * time.Second
+	// agentHeartbeatTimeout 限制代理等待后端 Pong 的最长时间。
+	agentHeartbeatTimeout = 75 * time.Second
+	// agentHeartbeatWriteTimeout 允许 Ping 控制帧等待当前业务大帧完成写入。
+	// 代理业务信封写入使用十秒截止时间，控制帧多留出五秒缓冲，避免误断线。
+	agentHeartbeatWriteTimeout = 15 * time.Second
 )
 
 // agentConfig 保存宿主机代理启动所需的非持久化环境变量配置。
@@ -161,6 +168,12 @@ func runAgentConnection(processContext context.Context, config agentConfig) erro
 	// client 保存本次 WebSocket 上的全部浏览器终端状态。
 	client := &agentClient{connection: connection, config: config, sessions: make(map[string]*localTerminalSession)}
 	defer client.closeAllSessions()
+	// refreshReadDeadline 在收到后端 Pong 时延长代理注册通道的失效检测窗口。
+	refreshReadDeadline := func(string) error {
+		return connection.SetReadDeadline(time.Now().Add(agentHeartbeatTimeout))
+	}
+	connection.SetPongHandler(refreshReadDeadline)
+	_ = connection.SetReadDeadline(time.Now().Add(agentHeartbeatTimeout))
 	// heartbeatDone 控制代理空闲时的 WebSocket Ping，避免反向代理误判长连接无流量。
 	heartbeatDone := make(chan struct{})
 	go client.runHeartbeat(heartbeatDone)
@@ -229,18 +242,38 @@ func (c *agentClient) send(envelope terminalprotocol.AgentEnvelope) error {
 // runHeartbeat 定期发送 WebSocket Ping，保持没有活跃终端时的代理注册连接。
 func (c *agentClient) runHeartbeat(done <-chan struct{}) {
 	// heartbeatTicker 每二十五秒产生一次代理保活信号。
-	heartbeatTicker := time.NewTicker(25 * time.Second)
+	heartbeatTicker := time.NewTicker(agentHeartbeatInterval)
 	defer heartbeatTicker.Stop()
 	for {
 		select {
 		case <-heartbeatTicker.C:
-			c.writeMutex.Lock()
-			_ = c.connection.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second))
-			c.writeMutex.Unlock()
+			// writeErr 表示代理心跳控制帧是否成功写入后端连接。
+			// WriteControl 可与 WriteJSON 并发执行，不等待可能被终端输出占用的写锁。
+			writeErr := c.connection.WriteControl(websocket.PingMessage, nil, time.Now().Add(agentHeartbeatWriteTimeout))
+			if writeErr != nil && shouldCloseAfterHeartbeatWrite(writeErr) {
+				// 非临时写入失败说明连接不可用，主动关闭以唤醒主读取循环并触发代理重连。
+				_ = c.connection.Close()
+				return
+			}
+			// 单次控制帧超时可能只表示业务大帧暂时占用写锁；保留连接并等待下一次 Ping。
 		case <-done:
 			return
 		}
 	}
+}
+
+// shouldCloseAfterHeartbeatWrite 判断代理 Ping 写入错误是否足以关闭连接。
+// 临时超时可能只表示业务大帧暂时占用写锁，不能据此断开健康连接。
+func shouldCloseAfterHeartbeatWrite(writeErr error) bool {
+	if writeErr == nil {
+		return false
+	}
+	// Gorilla WebSocket 在控制帧等待业务写锁超时时返回这个固定错误；
+	// 底层网络写入超时通常是 net.OpError，必须立即视为连接失效。
+	if strings.TrimSpace(writeErr.Error()) == "websocket: write timeout" {
+		return false
+	}
+	return true
 }
 
 // sendServerMessage 将单个终端结果封装到目标浏览器会话信封中。
@@ -284,13 +317,13 @@ func (c *agentClient) handleSessionMessage(sessionID string, payload []byte) {
 	}
 	if request.Type == "connect" {
 		if session != nil {
-			_ = c.sendServerMessage(sessionID, terminalprotocol.ServerMessage{Type: "error", Error: "当前部署机终端已经连接"})
+			_ = c.sendServerMessage(sessionID, terminalprotocol.ServerMessage{Type: "error", RequestID: request.RequestID, Error: "当前部署机终端已经连接"})
 			return
 		}
 		// openedSession、openErr 表示为该浏览器启动的本地 PTY 及错误状态。
 		openedSession, openErr := startLocalTerminalSession(c, sessionID, request)
 		if openErr != nil {
-			_ = c.sendServerMessage(sessionID, terminalprotocol.ServerMessage{Type: "error", Error: openErr.Error()})
+			_ = c.sendServerMessage(sessionID, terminalprotocol.ServerMessage{Type: "error", RequestID: request.RequestID, Error: openErr.Error()})
 			return
 		}
 		// activated 表示会话仍被浏览器持有，可以在登记完成后启动输出转发。
@@ -309,7 +342,7 @@ func (c *agentClient) handleSessionMessage(sessionID string, payload []byte) {
 		return
 	}
 	if session == nil {
-		_ = c.sendServerMessage(sessionID, terminalprotocol.ServerMessage{Type: "error", Operation: request.Type, Error: "部署机终端尚未连接"})
+		_ = c.sendServerMessage(sessionID, terminalprotocol.ServerMessage{Type: "error", RequestID: request.RequestID, Operation: request.Type, Error: "部署机终端尚未连接"})
 		return
 	}
 	session.handle(request)
@@ -336,8 +369,9 @@ func (c *agentClient) sessionExited(sessionID string, session *localTerminalSess
 	}
 	delete(c.sessions, sessionID)
 	c.sessionsMutex.Unlock()
-	_ = c.sendServerMessage(sessionID, terminalprotocol.ServerMessage{Type: "exit", Error: reason})
-	_ = c.send(terminalprotocol.AgentEnvelope{Type: "close", SessionID: sessionID, Error: reason})
+	// PTY 自然结束属于会话自身状态，不应因为页面仍打开而自动创建新的 shell。
+	_ = c.sendServerMessage(sessionID, terminalprotocol.ServerMessage{Type: "exit", Error: reason, Retryable: false})
+	_ = c.send(terminalprotocol.AgentEnvelope{Type: "close", SessionID: sessionID, Error: reason, Retryable: false})
 }
 
 // closeAllSessions 在代理连接结束时释放全部 PTY，且不向已断开的后端写消息。

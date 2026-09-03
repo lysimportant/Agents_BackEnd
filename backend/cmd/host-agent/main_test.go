@@ -1,9 +1,22 @@
 package main
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
+
+// simulatedAgentHeartbeatWriteTimeoutError 模拟 Ping 控制帧等待代理业务大帧时产生的临时超时。
+type simulatedAgentHeartbeatWriteTimeoutError struct{}
+
+// Error 返回测试用控制帧超时文案。
+func (simulatedAgentHeartbeatWriteTimeoutError) Error() string { return "websocket: write timeout" }
+
+// Timeout 标识该错误属于可等待下一次心跳的临时超时。
+func (simulatedAgentHeartbeatWriteTimeoutError) Timeout() bool { return true }
+
+// Temporary 标识该错误属于可恢复的临时网络状态。
+func (simulatedAgentHeartbeatWriteTimeoutError) Temporary() bool { return true }
 
 // TestLoadAgentConfig 验证代理必须使用 WebSocket 地址、非空令牌和绝对 shell 路径。
 func TestLoadAgentConfig(t *testing.T) {
@@ -71,5 +84,18 @@ func TestLocalTerminalValidation(t *testing.T) {
 		if strings.HasPrefix(environmentEntry, "HOST_AGENT_TOKEN=") || strings.HasPrefix(environmentEntry, "HOST_AGENT_SERVER_URL=") {
 			t.Fatalf("host agent credential leaked to shell environment: %q", environmentEntry)
 		}
+	}
+}
+
+// TestAgentHeartbeatWriteErrorPolicy 验证代理不会因单次临时 Ping 写超时主动断线。
+func TestAgentHeartbeatWriteErrorPolicy(t *testing.T) {
+	if shouldCloseAfterHeartbeatWrite(nil) {
+		t.Fatal("nil heartbeat write error should not close connection")
+	}
+	if shouldCloseAfterHeartbeatWrite(simulatedAgentHeartbeatWriteTimeoutError{}) {
+		t.Fatal("temporary heartbeat write timeout should not close connection")
+	}
+	if !shouldCloseAfterHeartbeatWrite(errors.New("websocket: connection reset by peer")) {
+		t.Fatal("non-temporary heartbeat write error should close connection")
 	}
 }

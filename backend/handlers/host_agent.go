@@ -105,6 +105,9 @@ func (h *hostAgentHub) serveAgent(connection *websocket.Conn) {
 		return
 	}
 	defer h.detachAgent(agent, "部署机代理连接已断开")
+	// stopHeartbeat 检测代理网络半开状态，避免后端长期保留不可用的旧代理。
+	stopHeartbeat := agent.startHeartbeat()
+	defer stopHeartbeat()
 	if writeErr := agent.write(terminalprotocol.AgentEnvelope{Type: "registered", Agent: &agent.info}); writeErr != nil {
 		return
 	}
@@ -119,10 +122,18 @@ func (h *hostAgentHub) serveAgent(connection *websocket.Conn) {
 	}
 }
 
+// startHeartbeat 保持宿主机代理注册通道，并在 Pong 超时后唤醒 serveAgent 清理代理状态。
+func (a *hostAgentSocket) startHeartbeat() func() {
+	return startSocketHeartbeat(a.connection, terminalHeartbeatInterval)
+}
+
 // serveBrowser 为一个超级管理员浏览器分配代理会话并转发其终端协议。
 func (h *hostAgentHub) serveBrowser(connection *websocket.Conn) {
 	// socketWriter 保证代理信息、终端输出和断开消息依次写入浏览器。
 	socketWriter := &terminalSocketWriter{connection: connection}
+	// stopHeartbeat 保证部署机直连在页面后台且没有终端输入时仍保持浏览器通道。
+	stopHeartbeat := socketWriter.startHeartbeat()
+	defer stopHeartbeat()
 	// sessionID 表示本浏览器终端在代理通道中的随机临时标识。
 	sessionID, sessionIDErr := newHostAgentSessionID()
 	if sessionIDErr != nil {
@@ -140,7 +151,9 @@ func (h *hostAgentHub) serveBrowser(connection *websocket.Conn) {
 	targetLabel := agent.info.Username + "@" + agent.info.Hostname
 	_ = socketWriter.write(terminalServerMessage{Type: "agent_info", TargetLabel: targetLabel})
 	if writeErr := agent.write(terminalprotocol.AgentEnvelope{Type: "open", SessionID: sessionID}); writeErr != nil {
-		_ = socketWriter.write(terminalServerMessage{Type: "error", Error: "部署机代理当前不可用"})
+		// 首次 open 写入已经确认代理通道失效时，立即清理旧代理并唤醒全部浏览器重连，
+		// 避免它们在心跳超时前反复绑定到同一条僵死连接。
+		h.detachAgent(agent, "部署机代理连接已断开")
 		return
 	}
 
@@ -161,7 +174,8 @@ func (h *hostAgentHub) serveBrowser(connection *websocket.Conn) {
 			continue
 		}
 		if writeErr := agent.write(terminalprotocol.AgentEnvelope{Type: "message", SessionID: sessionID, Payload: payload}); writeErr != nil {
-			_ = socketWriter.write(terminalServerMessage{Type: "error", Error: "部署机代理连接已中断"})
+			// 业务消息写入失败与注册通道心跳超时等价，应立即释放僵死代理和全部关联 PTY。
+			h.detachAgent(agent, "部署机代理连接已断开")
 			return
 		}
 		if request.Type == "disconnect" {
@@ -189,6 +203,9 @@ func (h *hostAgentHub) detachAgent(agent *hostAgentSocket, reason string) {
 		return
 	}
 	h.agent = nil
+	// agentConnection 在锁内快照，解锁后立即关闭底层代理通道，唤醒仍阻塞在 ReadJSON 的 serveAgent
+	// 并让代理侧及时释放所有已登记的 PTY；身份检查保证不会误关新代理的连接。
+	agentConnection := agent.connection
 	// browsers 保存需要在锁外通知的浏览器，避免网络写入阻塞代理状态更新。
 	browsers := make([]*terminalSocketWriter, 0, len(h.browsers))
 	for sessionID, browser := range h.browsers {
@@ -196,8 +213,12 @@ func (h *hostAgentHub) detachAgent(agent *hostAgentSocket, reason string) {
 		delete(h.browsers, sessionID)
 	}
 	h.mutex.Unlock()
+	if agentConnection != nil {
+		_ = agentConnection.Close()
+	}
 	for _, browser := range browsers {
-		_ = browser.write(terminalServerMessage{Type: "exit", Error: reason})
+		// 代理注册通道断开属于传输故障，浏览器仍保留页面时可以重新建立 PTY。
+		_ = browser.write(terminalServerMessage{Type: "exit", Error: reason, Retryable: true})
 		_ = browser.connection.Close()
 	}
 }
@@ -221,7 +242,11 @@ func (h *hostAgentHub) unregisterBrowser(sessionID string, agent *hostAgentSocke
 	h.mutex.Lock()
 	delete(h.browsers, sessionID)
 	h.mutex.Unlock()
-	_ = agent.write(terminalprotocol.AgentEnvelope{Type: "close", SessionID: sessionID})
+	if writeErr := agent.write(terminalprotocol.AgentEnvelope{Type: "close", SessionID: sessionID}); writeErr != nil {
+		// 浏览器主动离开时若 close 无法送达，代理连接已经不再可信；立即清理，
+		// 防止其他浏览器继续复用僵死通道并在代理侧遗留不可达会话。
+		h.detachAgent(agent, "部署机代理连接已断开")
+	}
 }
 
 // routeAgentEnvelope 将代理返回的原始终端消息发送给对应浏览器。
@@ -252,7 +277,7 @@ func (h *hostAgentHub) routeAgentEnvelope(agent *hostAgentSocket, envelope termi
 	if exitReason == "" {
 		exitReason = "部署机终端会话已结束"
 	}
-	_ = browser.write(terminalServerMessage{Type: "exit", Error: exitReason})
+	_ = browser.write(terminalServerMessage{Type: "exit", Error: exitReason, Retryable: envelope.Retryable})
 	_ = browser.connection.Close()
 }
 

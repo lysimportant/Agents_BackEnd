@@ -10,6 +10,8 @@ import (
 type ClientMessage struct {
 	// Type 表示 connect、input、resize、文件操作或 disconnect。
 	Type string `json:"type"`
+	// RequestID 表示目录、搜索和文件操作的客户端请求标识，服务端应在对应响应中原样回显。
+	RequestID string `json:"requestId,omitempty"`
 	// Host 表示 SSH 服务器主机名或 IP 地址。
 	Host string `json:"host"`
 	// Port 表示 SSH 服务端口。
@@ -42,10 +44,14 @@ type ClientMessage struct {
 type ServerMessage struct {
 	// Type 表示 ready、output、host_key、error、exit 或文件操作结果。
 	Type string `json:"type"`
+	// RequestID 表示对应客户端文件操作请求的标识，用于丢弃过期或跨通道响应。
+	RequestID string `json:"requestId,omitempty"`
 	// Data 表示交互终端输出。
 	Data string `json:"data,omitempty"`
 	// Error 表示连接、会话或文件操作错误文案。
 	Error string `json:"error,omitempty"`
+	// Retryable 表示 exit 是否由网络或传输故障触发，前端可在页面仍打开时自动重连。
+	Retryable bool `json:"retryable,omitempty"`
 	// Operation 表示错误对应的连接或文件操作。
 	Operation string `json:"operation,omitempty"`
 	// HostKeyFingerprint 表示待当前用户核验的 SSH 主机指纹。
@@ -117,4 +123,6 @@ type AgentEnvelope struct {
 	Agent *AgentInfo `json:"agent,omitempty"`
 	// Error 表示代理注册或会话转发失败原因。
 	Error string `json:"error,omitempty"`
+	// Retryable 表示 close 对应的会话是否因代理传输故障而可恢复。
+	Retryable bool `json:"retryable,omitempty"`
 }

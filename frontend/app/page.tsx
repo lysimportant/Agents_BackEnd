@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { ArticlesPage } from '@/src/admin-pages/articles/ArticlesPage';
 import type { ResourceActionAccess } from '@/src/utils/actionPermissions';
 import { isAdministratorRoleCode } from '@/src/utils/roleAccess';
@@ -21,6 +22,14 @@ import { VisitorAnalyticsPage } from '@/src/admin-pages/visitor-analytics/Visito
 export default function Home() {
   /** workspace 保存工作台。 */
   const workspace = useAdminWorkspace();
+  /** terminalResetKey 在退出开始时强制卸载全部终端，立即清理敏感连接状态。 */
+  const [terminalResetKey, setTerminalResetKey] = useState(0);
+
+  /** handleLogout 在任意退出路径开始前销毁终端，再交给工作台清理认证状态。 */
+  const handleLogout = () => {
+    setTerminalResetKey((currentKey) => currentKey + 1);
+    return workspace.handleLogout();
+  };
 
   if (!workspace.authUser) {
     return (
@@ -87,7 +96,8 @@ export default function Home() {
       onOpenMobileSidebar={() => workspace.setMobileSidebarOpen(true)}
       onCloseMobileSidebar={() => workspace.setMobileSidebarOpen(false)}
       onNavigate={workspace.handleNavigate}
-      onLogout={workspace.handleLogout}
+      onLogout={handleLogout}
+      terminalResetKey={terminalResetKey}
     >
       {workspace.activePage === 'dashboard' && (
         <DashboardPage
@@ -271,7 +281,7 @@ export default function Home() {
         <ProfilePage
           authUser={authUser}
           onUpdated={workspace.handleAuthUserUpdate}
-          onPasswordChanged={workspace.handleLogout}
+          onPasswordChanged={handleLogout}
         />
       )}
     </MainLayout>

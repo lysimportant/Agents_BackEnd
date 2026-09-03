@@ -43,6 +43,23 @@ type ServerHandler struct {
 	hostAgentHub *hostAgentHub
 }
 
+const (
+	// terminalHeartbeatInterval 控制浏览器终端 WebSocket 的服务端保活频率。
+	terminalHeartbeatInterval = 25 * time.Second
+	// terminalHeartbeatTimeout 允许浏览器在后台调度受限时完成 Ping/Pong 往返。
+	terminalHeartbeatTimeout = 75 * time.Second
+	// terminalHeartbeatWriteTimeout 允许 Ping 控制帧等待当前业务大帧完成写入。
+	// 终端业务写入使用十秒截止时间，控制帧多留出五秒缓冲，避免健康连接被误关。
+	terminalHeartbeatWriteTimeout = 15 * time.Second
+	// sshKeepaliveInterval 控制普通 SSH 连接向远端发送应用层保活请求的频率。
+	sshKeepaliveInterval = 25 * time.Second
+	// sshKeepaliveTimeout 限制单次 SSH 保活请求等待远端响应的最长时间。
+	sshKeepaliveTimeout = 10 * time.Second
+	// sshTransportResultGracePeriod 给底层 SSH 连接监视器一个短暂窗口，
+	// 以便区分没有退出状态的正常 shell 结束与整个传输通道异常关闭。
+	sshTransportResultGracePeriod = 250 * time.Millisecond
+)
+
 // NewServerHandler 使用部署允许来源创建服务器管理 handler。
 func NewServerHandler(allowedOrigins []string, hostAgentToken string) *ServerHandler {
 	// originAllowed 校验 WebSocket Origin 是否符合当前 CORS 部署配置。
@@ -97,6 +114,9 @@ func (h *ServerHandler) Terminal(c *gin.Context) {
 
 	// socketWriter 串行发送终端状态和输出，避免并发写入 WebSocket。
 	socketWriter := &terminalSocketWriter{connection: connection}
+	// stopHeartbeat 保证后台标签页没有终端输入时，代理也不会按空闲连接回收通道。
+	stopHeartbeat := socketWriter.startHeartbeat()
+	defer stopHeartbeat()
 	// terminalConnection 保存当前 WebSocket 建立的唯一 SSH 会话。
 	var terminalConnection *sshTerminalConnection
 	defer func() {
@@ -141,7 +161,9 @@ func (h *ServerHandler) Terminal(c *gin.Context) {
 				if waitErr != nil {
 					exitMessage = fmt.Sprintf("SSH 会话已结束：%v", waitErr)
 				}
-				_ = socketWriter.write(terminalServerMessage{Type: "exit", Error: exitMessage})
+				// retryable 表示保活主动发现传输故障时，即使 session.Wait 返回 nil，也必须让前端重建连接。
+				retryable := activeConnection.finalizeAfterExit(waitErr)
+				_ = socketWriter.write(terminalServerMessage{Type: "exit", Error: exitMessage, Retryable: retryable})
 				activeConnection.close()
 				_ = connection.Close()
 			}(terminalConnection)
@@ -161,56 +183,66 @@ func (h *ServerHandler) Terminal(c *gin.Context) {
 			_ = terminalConnection.session.WindowChange(rows, columns)
 		case "list_dir":
 			if terminalConnection == nil {
-				_ = socketWriter.write(terminalServerMessage{Type: "error", Operation: request.Type, Error: "SSH 尚未连接"})
+				_ = socketWriter.write(terminalServerMessage{Type: "error", Operation: request.Type, RequestID: request.RequestID, Error: "SSH 尚未连接"})
 				continue
 			}
-			// directoryResponse、directoryErr 表示远端目录读取结果及错误状态。
-			directoryResponse, directoryErr := terminalConnection.listDirectory(request.Path)
-			if directoryErr != nil {
-				_ = socketWriter.write(terminalServerMessage{Type: "error", Operation: request.Type, Error: directoryErr.Error()})
-				continue
-			}
-			_ = socketWriter.write(directoryResponse)
+			// 目录读取放到后台，避免远端 SFTP 延迟期间阻塞 WebSocket Pong 和终端输入读取。
+			go func(activeConnection *sshTerminalConnection, requestPath, requestID string) {
+				// directoryResponse、directoryErr 表示远端目录读取结果及错误状态。
+				directoryResponse, directoryErr := activeConnection.listDirectory(requestPath)
+				if directoryErr != nil {
+					_ = socketWriter.write(terminalServerMessage{Type: "error", Operation: "list_dir", RequestID: requestID, Path: normalizeRemotePath(requestPath), Error: directoryErr.Error()})
+					return
+				}
+				directoryResponse.RequestID = requestID
+				_ = socketWriter.write(directoryResponse)
+			}(terminalConnection, request.Path, request.RequestID)
 		case "read_file":
 			if terminalConnection == nil {
-				_ = socketWriter.write(terminalServerMessage{Type: "error", Operation: request.Type, Error: "SSH 尚未连接"})
+				_ = socketWriter.write(terminalServerMessage{Type: "error", Operation: request.Type, RequestID: request.RequestID, Error: "SSH 尚未连接"})
 				continue
 			}
-			// fileResponse、fileErr 表示远端文件读取结果及错误状态。
-			fileResponse, fileErr := terminalConnection.readFile(request.Path)
-			if fileErr != nil {
-				_ = socketWriter.write(terminalServerMessage{Type: "error", Operation: request.Type, Error: fileErr.Error()})
-				continue
-			}
-			_ = socketWriter.write(fileResponse)
+			// 文件读取放到后台，确保长时间读取时仍能处理 Ping/Pong 和其他控制消息。
+			go func(activeConnection *sshTerminalConnection, requestPath, requestID string) {
+				// fileResponse、fileErr 表示远端文件读取结果及错误状态。
+				fileResponse, fileErr := activeConnection.readFile(requestPath)
+				if fileErr != nil {
+					_ = socketWriter.write(terminalServerMessage{Type: "error", Operation: "read_file", RequestID: requestID, Path: normalizeRemotePath(requestPath), Error: fileErr.Error()})
+					return
+				}
+				fileResponse.RequestID = requestID
+				_ = socketWriter.write(fileResponse)
+			}(terminalConnection, request.Path, request.RequestID)
 		case "search":
 			if terminalConnection == nil {
-				_ = socketWriter.write(terminalServerMessage{Type: "error", Operation: request.Type, Error: "SSH 尚未连接"})
+				_ = socketWriter.write(terminalServerMessage{Type: "error", Operation: request.Type, RequestID: request.RequestID, Error: "SSH 尚未连接"})
 				continue
 			}
 			// 远端根目录搜索可能遍历较多节点，后台执行以保持终端输入响应。
-			go func(activeConnection *sshTerminalConnection, query string) {
+			go func(activeConnection *sshTerminalConnection, query, requestID string) {
 				searchResponse, searchErr := activeConnection.searchFiles(query)
 				if searchErr != nil {
-					_ = socketWriter.write(terminalServerMessage{Type: "error", Operation: "search", Query: strings.TrimSpace(query), Error: searchErr.Error()})
+					_ = socketWriter.write(terminalServerMessage{Type: "error", Operation: "search", RequestID: requestID, Query: strings.TrimSpace(query), Error: searchErr.Error()})
 					return
 				}
+				searchResponse.RequestID = requestID
 				_ = socketWriter.write(searchResponse)
-			}(terminalConnection, request.Query)
+			}(terminalConnection, request.Query, request.RequestID)
 		case "write_file":
 			if terminalConnection == nil {
-				_ = socketWriter.write(terminalServerMessage{Type: "error", Operation: request.Type, Error: "SSH 尚未连接"})
+				_ = socketWriter.write(terminalServerMessage{Type: "error", Operation: request.Type, RequestID: request.RequestID, Error: "SSH 尚未连接"})
 				continue
 			}
 			// 文件写入在后台完成，避免远端磁盘延迟阻塞交互终端。
-			go func(activeConnection *sshTerminalConnection, requestPath, content string) {
+			go func(activeConnection *sshTerminalConnection, requestPath, content, requestID string) {
 				writeResponse, writeErr := activeConnection.writeFile(requestPath, content)
 				if writeErr != nil {
-					_ = socketWriter.write(terminalServerMessage{Type: "error", Operation: "write_file", Path: normalizeRemotePath(requestPath), Error: writeErr.Error()})
+					_ = socketWriter.write(terminalServerMessage{Type: "error", Operation: "write_file", RequestID: requestID, Path: normalizeRemotePath(requestPath), Error: writeErr.Error()})
 					return
 				}
+				writeResponse.RequestID = requestID
 				_ = socketWriter.write(writeResponse)
-			}(terminalConnection, request.Path, request.Content)
+			}(terminalConnection, request.Path, request.Content, request.RequestID)
 		case "disconnect":
 			return
 		default:
@@ -223,6 +255,8 @@ func (h *ServerHandler) Terminal(c *gin.Context) {
 type terminalClientMessage struct {
 	// Type 表示 connect、input、resize 或 disconnect 操作。
 	Type string `json:"type"`
+	// RequestID 表示目录、搜索和文件操作的客户端请求标识，服务端应在对应响应中原样回显。
+	RequestID string `json:"requestId,omitempty"`
 	// Host 表示 SSH 服务器主机名或 IP 地址。
 	Host string `json:"host"`
 	// Port 表示 SSH 服务端口。
@@ -255,10 +289,14 @@ type terminalClientMessage struct {
 type terminalServerMessage struct {
 	// Type 表示 ready、output、host_key、error 或 exit 状态。
 	Type string `json:"type"`
+	// RequestID 表示对应客户端文件操作请求的标识，用于丢弃过期或跨通道响应。
+	RequestID string `json:"requestId,omitempty"`
 	// Data 表示远端终端输出。
 	Data string `json:"data,omitempty"`
 	// Error 表示连接或会话错误文案。
 	Error string `json:"error,omitempty"`
+	// Retryable 表示 exit 是否由网络或传输故障触发，前端可在页面仍打开时自动重连。
+	Retryable bool `json:"retryable,omitempty"`
 	// Operation 表示错误对应的 connect、list_dir 或 read_file 操作。
 	Operation string `json:"operation,omitempty"`
 	// HostKeyFingerprint 表示待当前用户核验的 SSH 主机指纹。
@@ -287,6 +325,35 @@ type terminalServerMessage struct {
 	TargetLabel string `json:"targetLabel,omitempty"`
 }
 
+// isRetryableSSHExit 判断 SSH 会话结束是否明确属于传输故障。
+//
+// 正常 shell 退出通常返回 nil；远端明确报告退出状态的 ExitError 代表命令或 shell
+// 自身结束，不自动重建会话。ExitMissingError 也不能单独视为网络异常，因为 SSH
+// 服务器可能在正常关闭 shell 时省略 exit-status；只有独立的 Conn.Wait 或保活故障
+// 证据才会让 finalizeAfterExit 允许页面自动重连。
+func isRetryableSSHExit(waitErr error) bool {
+	if waitErr == nil {
+		return false
+	}
+	// exitError 表示远端明确发送了非零退出状态或退出信号，属于会话自身结束。
+	var exitError *ssh.ExitError
+	if errors.As(waitErr, &exitError) {
+		return false
+	}
+	// exitMissingError 表示服务器未发送退出状态，不能单独证明底层网络已经断开。
+	var exitMissingError *ssh.ExitMissingError
+	if errors.As(waitErr, &exitMissingError) {
+		return false
+	}
+	return true
+}
+
+// isSSHExitMissing 判断退出错误是否缺少服务器发送的退出状态。
+func isSSHExitMissing(waitErr error) bool {
+	var exitMissingError *ssh.ExitMissingError
+	return errors.As(waitErr, &exitMissingError)
+}
+
 // terminalFileEntry 表示远端目录中的一个只读文件系统节点。
 type terminalFileEntry struct {
 	// Name 表示节点基础名称。
@@ -311,6 +378,93 @@ type terminalSocketWriter struct {
 	connection *websocket.Conn
 	// mutex 保护并发终端输出写入。
 	mutex sync.Mutex
+}
+
+// startHeartbeat 在浏览器未产生业务消息时发送 WebSocket Ping，并在 Pong 超时后关闭失效连接。
+func (w *terminalSocketWriter) startHeartbeat() func() {
+	return w.startHeartbeatAt(terminalHeartbeatInterval)
+}
+
+// startHeartbeatAt 使用指定周期启动终端 WebSocket 保活；测试可传入短周期验证协议行为。
+func (w *terminalSocketWriter) startHeartbeatAt(interval time.Duration) func() {
+	return startSocketHeartbeat(w.connection, interval)
+}
+
+// startSocketHeartbeat 为任意后端 WebSocket 连接发送 Ping，并在控制帧失效时关闭连接。
+func startSocketHeartbeat(connection *websocket.Conn, interval time.Duration) func() {
+	return startSocketHeartbeatWithTimeout(connection, interval, terminalHeartbeatTimeout)
+}
+
+// startSocketHeartbeatWithTimeout 使用可测试的读超时启动 WebSocket Ping/Pong 保活。
+func startSocketHeartbeatWithTimeout(connection *websocket.Conn, interval, timeout time.Duration) func() {
+	return startSocketHeartbeatWithControl(connection, interval, timeout, func(deadline time.Time) error {
+		return connection.WriteControl(websocket.PingMessage, nil, deadline)
+	})
+}
+
+// startSocketHeartbeatWithControl 使用注入的控制帧写入函数启动 WebSocket 保活。
+// 生产路径传入真实连接写入；测试可模拟业务大帧占用写锁后的临时超时。
+func startSocketHeartbeatWithControl(connection *websocket.Conn, interval, timeout time.Duration, writeControl func(time.Time) error) func() {
+	if interval <= 0 {
+		interval = terminalHeartbeatInterval
+	}
+	if timeout <= 0 {
+		timeout = terminalHeartbeatTimeout
+	}
+	if writeControl == nil {
+		writeControl = func(deadline time.Time) error {
+			return connection.WriteControl(websocket.PingMessage, nil, deadline)
+		}
+	}
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	var stopOnce sync.Once
+	// refreshReadDeadline 在每次收到浏览器 Pong 时延长失效检测窗口。
+	refreshReadDeadline := func(string) error {
+		return connection.SetReadDeadline(time.Now().Add(timeout))
+	}
+	connection.SetPongHandler(refreshReadDeadline)
+	_ = connection.SetReadDeadline(time.Now().Add(timeout))
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				// Gorilla WebSocket 明确允许 WriteControl 与其他写方法并发；不再等待
+				// 可能被大块终端输出占用的业务写锁，避免连续输出饿死 Ping。
+				writeErr := writeControl(time.Now().Add(terminalHeartbeatWriteTimeout))
+				if writeErr != nil && shouldCloseAfterHeartbeatWrite(writeErr) {
+					// 非临时写入失败说明连接不可用，主动关闭以唤醒 handler 的读取循环。
+					_ = connection.Close()
+					return
+				}
+				// 控制帧等待业务大帧时可能只返回临时超时；保留连接并等待下一次 Ping，
+				// 由 Pong 读期限而不是单次写锁竞争决定连接是否真正失效。
+			case <-stop:
+				return
+			}
+		}
+	}()
+	return func() {
+		stopOnce.Do(func() { close(stop) })
+		<-done
+	}
+}
+
+// shouldCloseAfterHeartbeatWrite 判断 Ping 写入错误是否足以关闭连接。
+// 临时超时可能只表示业务大帧暂时占用写锁，不能据此断开健康连接。
+func shouldCloseAfterHeartbeatWrite(writeErr error) bool {
+	if writeErr == nil {
+		return false
+	}
+	// Gorilla WebSocket 在控制帧等待业务写锁超时时返回这个固定错误；
+	// 底层网络写入超时通常是 net.OpError，必须立即视为连接失效。
+	if strings.TrimSpace(writeErr.Error()) == "websocket: write timeout" {
+		return false
+	}
+	return true
 }
 
 // write 向浏览器发送一条终端状态消息。
@@ -355,6 +509,136 @@ type sshTerminalConnection struct {
 	resourceMutex sync.Mutex
 	// closed 表示当前 SSH 连接是否已经开始释放。
 	closed bool
+	// transportFailure 表示后台保活已确认底层传输失效；它独立于 session.Wait 的退出状态保存。
+	transportFailure bool
+	// keepaliveStop 通知 SSH 保活协程停止发送请求。
+	keepaliveStop chan struct{}
+	// keepaliveStopOnce 保证 SSH 保活停止信号只关闭一次。
+	keepaliveStopOnce sync.Once
+	// transportDone 在底层 SSH 连接监视器收到最终关闭结果时关闭。
+	transportDone chan struct{}
+}
+
+// startTransportMonitor 监听 SSH 多路复用连接的最终关闭结果。
+//
+// Session.Wait 在远端未发送 exit-status 时只能返回 ExitMissingError，
+// 无法单独区分正常 shell 结束和整条 SSH 连接断开。监听 Conn.Wait 可以
+// 在后者发生时记录独立的传输故障证据，供退出判定使用。
+func (c *sshTerminalConnection) startTransportMonitor() {
+	if c.client == nil || c.transportDone == nil {
+		return
+	}
+	go func() {
+		// transportErr 表示 SSH 多路复用层导致连接终止的底层错误。
+		transportErr := c.client.Conn.Wait()
+		if transportErr != nil {
+			c.markTransportFailure()
+		}
+		close(c.transportDone)
+	}()
+}
+
+// startKeepalive 定期向远端发送 SSH 全局保活请求，避免页面后台时 SSH 空闲连接被回收。
+func (c *sshTerminalConnection) startKeepalive() {
+	if c.client == nil || c.keepaliveStop == nil {
+		return
+	}
+	go func() {
+		// keepaliveTicker 表示普通 SSH 连接的应用层保活计时器。
+		keepaliveTicker := time.NewTicker(sshKeepaliveInterval)
+		defer keepaliveTicker.Stop()
+		for {
+			select {
+			case <-keepaliveTicker.C:
+				// response 表示本次全局保活请求的异步结果，避免远端半开时永久阻塞调度协程。
+				response := make(chan error, 1)
+				go func() {
+					_, _, requestErr := c.client.SendRequest("keepalive@openssh.com", true, nil)
+					response <- requestErr
+				}()
+				select {
+				case requestErr := <-response:
+					if requestErr != nil {
+						// 保活请求失败说明底层 SSH 已不可用，主动关闭以唤醒终端清理和前端重连。
+						c.closeAfterTransportFailure()
+						return
+					}
+				case <-time.After(sshKeepaliveTimeout):
+					// 超时连接可能处于半开状态，关闭客户端让上层收到明确断开事件。
+					c.closeAfterTransportFailure()
+					return
+				case <-c.keepaliveStop:
+					return
+				}
+			case <-c.keepaliveStop:
+				return
+			}
+		}
+	}()
+}
+
+// closeAfterTransportFailure 记录已确认的传输故障，再释放 SSH 会话资源。
+func (c *sshTerminalConnection) closeAfterTransportFailure() {
+	// 传输故障标记与关闭状态在同一临界区内更新，避免退出协程在两者之间读取到不一致状态。
+	c.resourceMutex.Lock()
+	if !c.closed {
+		c.transportFailure = true
+	}
+	c.resourceMutex.Unlock()
+	c.close()
+}
+
+// markTransportFailure 记录后台保活确认的传输故障，但不改变会话资源生命周期。
+func (c *sshTerminalConnection) markTransportFailure() {
+	c.resourceMutex.Lock()
+	if c.closed {
+		c.resourceMutex.Unlock()
+		return
+	}
+	c.transportFailure = true
+	c.resourceMutex.Unlock()
+}
+
+// shouldRetryAfterExit 合并 SSH 会话退出状态与保活故障标记，避免故障被误判为正常退出。
+func (c *sshTerminalConnection) shouldRetryAfterExit(waitErr error) bool {
+	if isRetryableSSHExit(waitErr) {
+		return true
+	}
+	c.resourceMutex.Lock()
+	transportFailure := c.transportFailure
+	c.resourceMutex.Unlock()
+	return transportFailure
+}
+
+// finalizeAfterExit 原子确定退出是否可重连并预先标记会话已关闭。
+//
+// shell.Wait 与 SSH 保活可能同时完成；先锁定 closed 状态可保证二者只有一个
+// 结果决定最终重连语义。主动关闭已经先取得该锁时，迟到的保活错误不会重新
+// 把用户主动关闭误报为可重连故障。
+func (c *sshTerminalConnection) finalizeAfterExit(waitErr error) bool {
+	if isSSHExitMissing(waitErr) && c.transportDone != nil {
+		// mux 会先关闭会话请求流，再广播 Conn.Wait 结果；等待一个很短窗口可
+		// 让真实传输错误先写入 transportFailure，同时不会让正常 shell 结束长期阻塞。
+		transportTimer := time.NewTimer(sshTransportResultGracePeriod)
+		select {
+		case <-c.transportDone:
+			if !transportTimer.Stop() {
+				select {
+				case <-transportTimer.C:
+				default:
+				}
+			}
+		case <-transportTimer.C:
+		}
+	}
+	c.resourceMutex.Lock()
+	defer c.resourceMutex.Unlock()
+	retryable := isRetryableSSHExit(waitErr) || c.transportFailure
+	if c.closed && !c.transportFailure {
+		retryable = false
+	}
+	c.closed = true
+	return retryable
 }
 
 // enableDirectoryReporting 为 Bash 或 Zsh 注入标准 OSC 7 工作目录报告钩子。
@@ -390,12 +674,24 @@ func (c *sshTerminalConnection) close() {
 		sftpClient := c.sftpClient
 		c.sftpClient = nil
 		c.resourceMutex.Unlock()
-		_ = c.stdin.Close()
-		_ = c.session.Close()
+		c.keepaliveStopOnce.Do(func() {
+			if c.keepaliveStop != nil {
+				close(c.keepaliveStop)
+			}
+		})
+		// 先关闭底层 TCP，确保半开连接不会让后续 SSH channel close 长时间等待。
+		if c.client != nil {
+			_ = c.client.Close()
+		}
+		if c.stdin != nil {
+			_ = c.stdin.Close()
+		}
+		if c.session != nil {
+			_ = c.session.Close()
+		}
 		if sftpClient != nil {
 			_ = sftpClient.Close()
 		}
-		_ = c.client.Close()
 	})
 }
 
@@ -760,7 +1056,14 @@ func openSSHConnection(request terminalClientMessage, socketWriter *terminalSock
 		_ = client.Close()
 		return nil, "", errors.New("启动远端 shell 失败")
 	}
-	return &sshTerminalConnection{client: client, session: session, stdin: stdin, shellName: shellName}, "", nil
+	// terminalConnection 保存已启动交互 shell 及其后台保活所需资源。
+	terminalConnection := &sshTerminalConnection{
+		client: client, session: session, stdin: stdin, shellName: shellName,
+		keepaliveStop: make(chan struct{}), transportDone: make(chan struct{}),
+	}
+	terminalConnection.startKeepalive()
+	terminalConnection.startTransportMonitor()
+	return terminalConnection, "", nil
 }
 
 // detectRemoteShell 通过独立 SSH 会话读取远端账号的 SHELL 环境变量。

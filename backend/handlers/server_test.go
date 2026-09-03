@@ -3,6 +3,8 @@ package handlers
 import (
 	"collector-backend/models"
 	"collector-backend/terminalprotocol"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,7 +12,51 @@ import (
 
 	"github.com/gin-gonic/gin"
 	gonet "github.com/shirou/gopsutil/v4/net"
+	"golang.org/x/crypto/ssh"
 )
+
+// TestTerminalRequestIDRoundTrip 验证终端请求标识能在共享 JSON 契约中往返传递。
+func TestTerminalRequestIDRoundTrip(t *testing.T) {
+	requestPayload, marshalErr := json.Marshal(terminalClientMessage{Type: "read_file", RequestID: "7-42-read_file"})
+	if marshalErr != nil {
+		t.Fatalf("marshal terminal request: %v", marshalErr)
+	}
+	var decodedRequest terminalClientMessage
+	if unmarshalErr := json.Unmarshal(requestPayload, &decodedRequest); unmarshalErr != nil {
+		t.Fatalf("unmarshal terminal request: %v", unmarshalErr)
+	}
+	if decodedRequest.RequestID != "7-42-read_file" {
+		t.Fatalf("request id was not preserved: %+v", decodedRequest)
+	}
+	responsePayload, marshalErr := json.Marshal(terminalServerMessage{Type: "file", RequestID: decodedRequest.RequestID})
+	if marshalErr != nil {
+		t.Fatalf("marshal terminal response: %v", marshalErr)
+	}
+	var decodedResponse terminalServerMessage
+	if unmarshalErr := json.Unmarshal(responsePayload, &decodedResponse); unmarshalErr != nil {
+		t.Fatalf("unmarshal terminal response: %v", unmarshalErr)
+	}
+	if decodedResponse.RequestID != decodedRequest.RequestID {
+		t.Fatalf("response request id was not preserved: %+v", decodedResponse)
+	}
+}
+
+// TestMarkTransportFailureIgnoresClosedConnection 验证主动关闭后迟到的保活错误不会触发自动重连。
+func TestMarkTransportFailureIgnoresClosedConnection(t *testing.T) {
+	// activeConnection 表示仍可被保活标记为传输故障的 SSH 连接。
+	activeConnection := &sshTerminalConnection{}
+	activeConnection.markTransportFailure()
+	if !activeConnection.transportFailure {
+		t.Fatal("active connection transport failure was not recorded")
+	}
+
+	// closedConnection 表示已经进入资源释放流程的 SSH 连接。
+	closedConnection := &sshTerminalConnection{closed: true}
+	closedConnection.markTransportFailure()
+	if closedConnection.transportFailure {
+		t.Fatal("closed connection transport failure was incorrectly recorded")
+	}
+}
 
 // TestCreateTerminalOriginChecker 验证 SSH WebSocket 只接受部署白名单或显式通配来源。
 func TestCreateTerminalOriginChecker(t *testing.T) {
@@ -201,6 +247,76 @@ func TestSSHRequestValidation(t *testing.T) {
 	authMethods, err := buildSSHAuthMethods(terminalClientMessage{})
 	if err == nil || len(authMethods) != 0 {
 		t.Fatalf("empty SSH credentials were accepted: methods=%d err=%v", len(authMethods), err)
+	}
+}
+
+// TestIsRetryableSSHExit 验证只有传输层异常允许前端自动重建 SSH 会话。
+func TestIsRetryableSSHExit(t *testing.T) {
+	if isRetryableSSHExit(nil) {
+		t.Fatal("正常 shell 退出不应被标记为可重连")
+	}
+	if isRetryableSSHExit(&ssh.ExitMissingError{}) {
+		t.Fatal("缺少远端退出状态不能单独证明传输故障")
+	}
+	if isRetryableSSHExit(&ssh.ExitError{}) {
+		t.Fatal("远端明确退出状态不应被标记为可重连")
+	}
+	if !isRetryableSSHExit(errors.New("网络读取失败")) {
+		t.Fatal("未分类的 SSH I/O 异常应允许重连")
+	}
+}
+
+// TestSSHTransportFailureOverridesCleanWait 验证保活确认的传输故障不会因 session.Wait 返回 nil 而丢失重连意图。
+func TestSSHTransportFailureOverridesCleanWait(t *testing.T) {
+	// connection 表示尚未绑定真实网络资源的最小会话状态，用于验证退出判定逻辑。
+	connection := &sshTerminalConnection{}
+	if connection.shouldRetryAfterExit(nil) {
+		t.Fatal("未发生传输故障的正常 shell 退出不应重连")
+	}
+	connection.markTransportFailure()
+	if !connection.shouldRetryAfterExit(nil) {
+		t.Fatal("保活确认的传输故障即使 Wait 返回 nil 也必须重连")
+	}
+}
+
+// TestFinalizeAfterExitSerializesCloseAndRetry 验证退出判定会原子屏蔽迟到的保活错误。
+func TestFinalizeAfterExitSerializesCloseAndRetry(t *testing.T) {
+	// cleanConnection 表示尚未发生传输故障的正常 shell 会话。
+	cleanConnection := &sshTerminalConnection{}
+	if cleanConnection.finalizeAfterExit(nil) {
+		t.Fatal("正常 shell 退出不应被标记为可重连")
+	}
+	cleanConnection.markTransportFailure()
+	if cleanConnection.transportFailure {
+		t.Fatal("退出已锁定后迟到的保活错误不应重新写入故障标记")
+	}
+
+	// missingStatusConnection 表示服务器未发送退出状态但底层通道仍保持正常。
+	missingStatusConnection := &sshTerminalConnection{}
+	if missingStatusConnection.finalizeAfterExit(&ssh.ExitMissingError{}) {
+		t.Fatal("缺少退出状态且没有传输故障证据时不应自动重连")
+	}
+
+	// failedConnection 表示保活先确认了传输故障、随后由 shell.Wait 收尾的会话。
+	failedConnection := &sshTerminalConnection{transportDone: make(chan struct{})}
+	failedConnection.markTransportFailure()
+	close(failedConnection.transportDone)
+	if !failedConnection.finalizeAfterExit(nil) {
+		t.Fatal("保活确认的传输故障必须允许自动重连")
+	}
+
+	// missingTransportConnection 表示底层连接先报告异常、会话随后缺少退出状态。
+	missingTransportConnection := &sshTerminalConnection{transportDone: make(chan struct{})}
+	missingTransportConnection.markTransportFailure()
+	close(missingTransportConnection.transportDone)
+	if !missingTransportConnection.finalizeAfterExit(&ssh.ExitMissingError{}) {
+		t.Fatal("底层传输故障应覆盖缺少退出状态并允许自动重连")
+	}
+
+	// closedConnection 表示用户主动关闭后才收到 shell 退出错误的会话。
+	closedConnection := &sshTerminalConnection{closed: true}
+	if closedConnection.finalizeAfterExit(errors.New("用户主动关闭")) {
+		t.Fatal("主动关闭后的迟到退出错误不应触发自动重连")
 	}
 }
 

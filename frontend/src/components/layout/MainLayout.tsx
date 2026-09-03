@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import {
   ApartmentOutlined,
   AppstoreOutlined,
@@ -83,6 +83,8 @@ type MainLayoutProps = {
   onNavigate: (page: PageKey) => void;
   /** onLogout 表示变量 onLogout。 */
   onLogout: () => void;
+  /** terminalResetKey 表示退出开始时用于卸载旧终端实例的递增信号。 */
+  terminalResetKey: number;
   /** children 表示子节点。 */
   children: ReactNode;
 };
@@ -176,6 +178,7 @@ export function MainLayout({
   onCloseMobileSidebar,
   onNavigate,
   onLogout,
+  terminalResetKey,
   children,
 }: MainLayoutProps) {
   /** themeId、setThemeId 保存主题标识、主题标识。 */
@@ -186,12 +189,23 @@ export function MainLayout({
   const [isMobile, setIsMobile] = useState(false);
   /** terminalOpen、setTerminalOpen 表示全局登录用户 SSH 终端是否展开。 */
   const [terminalOpen, setTerminalOpen] = useState(false);
+  /** terminalResetObservedRef 记录已经处理的退出信号，避免密码修改路径重新打开终端。 */
+  const terminalResetObservedRef = useRef(terminalResetKey);
   /** headerConversations、setHeaderConversations 保存请求头、请求头。 */
   const [headerConversations, setHeaderConversations] = useState<SocketConversation[]>([]);
   /** internalUnreadCount、setInternalUnreadCount 分别保存数量状态及其更新函数。 */
   const [internalUnreadCount, setInternalUnreadCount] = useState(() => getInternalChatUnreadTotal(authUser.id));
   /** notificationApi、notificationContextHolder 保存通知、通知上下文。 */
   const [notificationApi, notificationContextHolder] = notification.useNotification();
+
+  /** terminalResetPending 表示本次渲染刚收到退出信号，首帧直接隐藏并卸载旧终端。 */
+  const terminalResetPending = terminalResetObservedRef.current !== terminalResetKey;
+
+  useEffect(() => {
+    if (terminalResetObservedRef.current === terminalResetKey) return;
+    terminalResetObservedRef.current = terminalResetKey;
+    setTerminalOpen(false);
+  }, [terminalResetKey]);
 
   useEffect(() => {
     /** nextTheme 保存主题。 */
@@ -638,7 +652,7 @@ export function MainLayout({
           </Content>
         </Layout>
       </Layout>
-      <SshTerminalModal open={terminalOpen} canUseHostAgent={isSuperAdminRoleCode(authUser.roleCode)} onClose={() => setTerminalOpen(false)} />
+      <SshTerminalModal key={terminalResetKey} open={terminalOpen && !terminalResetPending} canUseHostAgent={isSuperAdminRoleCode(authUser.roleCode)} onClose={() => setTerminalOpen(false)} />
     </ConfigProvider>
   );
 }

@@ -90,24 +90,24 @@ func (s *localTerminalSession) handle(request terminalprotocol.ClientMessage) {
 	switch request.Type {
 	case "input":
 		if _, writeErr := io.WriteString(s.pseudoTerminal, request.Data); writeErr != nil {
-			_ = s.client.sendServerMessage(s.sessionID, terminalprotocol.ServerMessage{Type: "error", Error: "向部署机终端写入失败"})
+			_ = s.client.sendServerMessage(s.sessionID, terminalprotocol.ServerMessage{Type: "error", RequestID: request.RequestID, Error: "向部署机终端写入失败"})
 		}
 	case "resize":
 		// rows、columns 表示经过边界限制后的终端行列数。
 		rows, columns := clampLocalTerminalSize(request.Rows, request.Columns)
 		_ = pty.Setsize(s.pseudoTerminal, &pty.Winsize{Rows: uint16(rows), Cols: uint16(columns)})
 	case "list_dir":
-		go s.respondWithFileOperation(request.Type, request.Path, "", "", listLocalDirectory)
+		go s.respondWithFileOperation(request.Type, request.RequestID, request.Path, "", "", listLocalDirectory)
 	case "read_file":
-		go s.respondWithFileOperation(request.Type, request.Path, "", "", readLocalFile)
+		go s.respondWithFileOperation(request.Type, request.RequestID, request.Path, "", "", readLocalFile)
 	case "search":
-		go s.respondWithFileOperation(request.Type, "", request.Query, "", searchLocalFiles)
+		go s.respondWithFileOperation(request.Type, request.RequestID, "", request.Query, "", searchLocalFiles)
 	case "write_file":
-		go s.respondWithFileOperation(request.Type, request.Path, "", request.Content, writeLocalFile)
+		go s.respondWithFileOperation(request.Type, request.RequestID, request.Path, "", request.Content, writeLocalFile)
 	case "disconnect":
 		s.client.closeSession(s.sessionID, false)
 	default:
-		_ = s.client.sendServerMessage(s.sessionID, terminalprotocol.ServerMessage{Type: "error", Error: "不支持的部署机终端消息类型"})
+		_ = s.client.sendServerMessage(s.sessionID, terminalprotocol.ServerMessage{Type: "error", RequestID: request.RequestID, Error: "不支持的部署机终端消息类型"})
 	}
 }
 
@@ -115,16 +115,17 @@ func (s *localTerminalSession) handle(request terminalprotocol.ClientMessage) {
 type localFileOperation func(path string, query string, content string) (terminalprotocol.ServerMessage, error)
 
 // respondWithFileOperation 执行一个文件操作并把稳定结果或错误发回浏览器。
-func (s *localTerminalSession) respondWithFileOperation(operation, requestPath, query, content string, operationFunction localFileOperation) {
+func (s *localTerminalSession) respondWithFileOperation(operation, requestID, requestPath, query, content string, operationFunction localFileOperation) {
 	// response、operationErr 表示本地文件操作结果及其错误状态。
 	response, operationErr := operationFunction(requestPath, query, content)
 	if operationErr != nil {
 		_ = s.client.sendServerMessage(s.sessionID, terminalprotocol.ServerMessage{
-			Type: "error", Operation: operation, Path: normalizeLocalPath(requestPath),
+			Type: "error", RequestID: requestID, Operation: operation, Path: normalizeLocalPath(requestPath),
 			Query: strings.TrimSpace(query), Error: operationErr.Error(),
 		})
 		return
 	}
+	response.RequestID = requestID
 	_ = s.client.sendServerMessage(s.sessionID, response)
 }
 
