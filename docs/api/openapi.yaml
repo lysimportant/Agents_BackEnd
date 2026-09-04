@@ -977,7 +977,7 @@ paths:
       summary: 永久删除文件元数据和物理文件
       security: [{ cookieSession: [] }]
       parameters: [{ $ref: '#/components/parameters/NumericID' }]
-      responses: { '200': { description: 明确确认后文件已永久删除。 } }
+      responses: { '204': { description: 明确确认后文件已永久删除，无响应体。 } }
   /api/socket/customer:
     get:
       tags: [客服聊天]

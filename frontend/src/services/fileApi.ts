@@ -76,12 +76,19 @@ export async function updateTextFileContent(fileId: number, content: string) {
   return response.json() as Promise<ManagedFile>;
 }
 
-/** 在界面明确确认后永久删除已经软删除的文件。 */
-export async function permanentlyDeleteFile(fileId: number) {
+/**
+ * 在界面明确确认后永久删除已经软删除的文件。
+ *
+ * @param fileId 回收站内文件的唯一标识。
+ * @returns 服务端以 204 No Content 确认删除完成后结束，不读取响应体。
+ * @throws 请求失败或服务端返回非成功状态时抛出用户可见错误。
+ */
+export async function permanentlyDeleteFile(fileId: number): Promise<void> {
   /** response 保存接口响应及其关联状态。 */
   const response = await requestWithSession(`${API_BASE_URL}/api/files/${fileId}/permanent`, { method: 'DELETE' });
   if (!response.ok) {
     throw new Error(await parseApiError(response, '永久删除文件失败'));
   }
-  return response.json() as Promise<{ message: string; file: ManagedFile }>;
+  // 永久删除成功时后端返回 204 No Content，解析 JSON 会把成功结果误判为异常。
+  return;
 }

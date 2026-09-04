@@ -100,3 +100,49 @@ func TestManagedFileUploadWithoutApplicationLimitAndContentDeduplication(t *test
 		t.Fatalf("reupload after recycle status=%d body=%s", reuploadResponse.Code, reuploadResponse.Body.String())
 	}
 }
+
+// TestPermanentlyDeleteManagedFileReturnsNoContent 验证永久删除成功时仅以 204 空响应确认完成。
+func TestPermanentlyDeleteManagedFileReturnsNoContent(t *testing.T) {
+	// router、store 分别保存隔离 HTTP 路由与临时 SQLite 数据访问对象。
+	router, store, _ := setupTestRouter(t)
+	// sessionCookie 保存默认超级管理员的隔离测试会话。
+	sessionCookie := loginCookie(t, router, "MH", "123")
+	// uploadResponse 保存待删除文件的创建响应。
+	uploadResponse := uploadManagedFile(t, router, sessionCookie, "permanent-delete.txt", []byte("permanent delete content"))
+	if uploadResponse.Code != http.StatusCreated {
+		t.Fatalf("upload status=%d body=%s", uploadResponse.Code, uploadResponse.Body.String())
+	}
+	// managedFile 保存用于回收站与永久删除请求的文件标识。
+	var managedFile models.ManagedFile
+	if err := json.Unmarshal(uploadResponse.Body.Bytes(), &managedFile); err != nil {
+		t.Fatalf("decode uploaded file: %v", err)
+	}
+
+	// softDeleteRequest 将测试文件移入回收站，使其满足永久删除前置条件。
+	softDeleteRequest := httptest.NewRequest(http.MethodDelete, "/api/files/"+strconv.Itoa(managedFile.ID), nil)
+	softDeleteRequest.AddCookie(&http.Cookie{Name: "sessionId", Value: sessionCookie})
+	// softDeleteResponse 保存软删除接口响应。
+	softDeleteResponse := httptest.NewRecorder()
+	router.ServeHTTP(softDeleteResponse, softDeleteRequest)
+	if softDeleteResponse.Code != http.StatusNoContent {
+		t.Fatalf("soft delete status=%d body=%s", softDeleteResponse.Code, softDeleteResponse.Body.String())
+	}
+
+	// permanentDeleteRequest 请求彻底删除回收站中的测试文件。
+	permanentDeleteRequest := httptest.NewRequest(http.MethodDelete, "/api/files/"+strconv.Itoa(managedFile.ID)+"/permanent", nil)
+	permanentDeleteRequest.AddCookie(&http.Cookie{Name: "sessionId", Value: sessionCookie})
+	// permanentDeleteResponse 保存永久删除接口响应。
+	permanentDeleteResponse := httptest.NewRecorder()
+	router.ServeHTTP(permanentDeleteResponse, permanentDeleteRequest)
+	if permanentDeleteResponse.Code != http.StatusNoContent {
+		t.Fatalf("permanent delete status=%d body=%s", permanentDeleteResponse.Code, permanentDeleteResponse.Body.String())
+	}
+	if permanentDeleteResponse.Body.Len() != 0 {
+		t.Fatalf("permanent delete must not return a response body: %s", permanentDeleteResponse.Body.String())
+	}
+	// deletedFile、found 保存永久删除后回收站查询的记录与存在状态。
+	deletedFile, found := store.FindDeletedFileByID(managedFile.ID)
+	if found {
+		t.Fatalf("permanently deleted file remains in recycle bin: %+v", deletedFile)
+	}
+}
