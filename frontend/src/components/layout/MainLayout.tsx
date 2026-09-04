@@ -7,6 +7,7 @@ import {
   BgColorsOutlined,
   BellOutlined,
   DashboardOutlined,
+  DownOutlined,
   FileTextOutlined,
   FolderOpenOutlined,
   FullscreenExitOutlined,
@@ -29,6 +30,7 @@ import {
   Breadcrumb,
   Button,
   ConfigProvider,
+  Dropdown,
   Drawer,
   Layout,
   Menu,
@@ -373,6 +375,22 @@ export function MainLayout({
     onLogout();
   };
 
+  /** userMenuItems 保存右上角账号入口可执行的个人资料和退出登录操作。 */
+  const userMenuItems: MenuProps['items'] = [
+    { key: 'profile', icon: <UserOutlined />, label: '个人资料' },
+    { type: 'divider' },
+    { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', danger: true },
+  ];
+
+  /** onUserMenuClick 根据账号菜单选择执行页面跳转或清理当前登录会话。 */
+  const onUserMenuClick: MenuProps['onClick'] = ({ key }) => {
+    if (key === 'profile') {
+      navigate('profile');
+      return;
+    }
+    if (key === 'logout') logout();
+  };
+
   /** currentTheme 缓存计算得到的当前主题。 */
   const currentTheme = useMemo(() => getAdminTheme(themeId), [themeId]);
   /** palette 保存配色。 */
@@ -636,12 +654,13 @@ export function MainLayout({
               <Tooltip title={isFullscreen ? '退出全屏' : '全屏'}>
                 <Button type="text" icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />} onClick={toggleFullscreen} />
               </Tooltip>
-              <Tooltip title="个人资料">
-                <Button type="text" className="antd-user-entry" onClick={() => navigate('profile')}>
+              <Dropdown menu={{ items: userMenuItems, onClick: onUserMenuClick }} trigger={['click']} placement="bottomRight">
+                <Button type="text" className="antd-user-entry" aria-label="打开账号菜单">
                   <Avatar size="small" src={authUser.avatarUrl || undefined}>{getAvatarFallback(authUser)}</Avatar>
                   <Typography.Text>{authUser.name}</Typography.Text>
+                  <DownOutlined aria-hidden="true" />
                 </Button>
-              </Tooltip>
+              </Dropdown>
             </Space>
           </Header>
           {error ? <div className="banner error">{error}</div> : null}

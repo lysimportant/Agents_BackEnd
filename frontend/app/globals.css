@@ -1722,6 +1722,38 @@ html[data-theme="dark"] .theme-toggle {
   white-space: nowrap;
 }
 
+.file-card-public-link {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  border: 0;
+  padding: 0;
+  color: #0f172a;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  line-height: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: copy;
+}
+
+.file-card-public-link:hover,
+.file-card-public-link:focus-visible {
+  color: #1677ff;
+  text-decoration: underline;
+}
+
+html[data-theme="dark"] .file-card-public-link {
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .file-card-public-link:hover,
+html[data-theme="dark"] .file-card-public-link:focus-visible {
+  color: var(--theme-primary);
+}
+
 .file-card-tags {
   display: flex;
   flex-wrap: wrap;
@@ -2178,6 +2210,16 @@ html[data-theme="dark"] .file-card-actions {
 .antd-admin-header .antd-header-actions .ant-btn-icon > svg,
 .antd-admin-header .antd-header-actions .anticon > svg {
   display: block;
+}
+
+.antd-admin-header .antd-user-entry {
+  gap: 7px;
+  padding-inline: 8px;
+}
+
+.antd-admin-header .antd-user-entry > .anticon:last-child {
+  color: var(--text-secondary);
+  font-size: 10px;
 }
 
 .antd-content-breadcrumb {
@@ -3329,6 +3371,7 @@ tbody tr:hover,
 .menu-summary-card strong,
 .file-kind-card strong,
 .file-card-title strong,
+.file-card-public-link,
 .file-empty-state strong,
 .privacy-switch-row strong {
   color: var(--text-primary);
@@ -4959,6 +5002,10 @@ tbody tr:hover,
 
 @media (max-width: 680px) {
   .antd-user-entry .ant-typography {
+    display: none;
+  }
+
+  .antd-user-entry > .anticon:last-child {
     display: none;
   }
 

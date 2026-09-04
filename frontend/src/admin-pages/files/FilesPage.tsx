@@ -21,7 +21,6 @@ import {
   DownloadOutlined,
   EditOutlined,
   EyeOutlined,
-  FileImageOutlined,
   FilePdfOutlined,
   FileTextOutlined,
   InboxOutlined,
@@ -379,6 +378,21 @@ export function FilesPage(props: FilesPageProps) {
     clearStoredLoginBackground();
     void message.success('已恢复默认登录背景');
   };
+  /** copyPublicFilePreviewURL 将可匿名访问的公开文件预览绝对地址写入浏览器剪贴板。 */
+  const copyPublicFilePreviewURL = async (file: ManagedFile) => {
+    if (!canCopyPublicFilePreviewURL(file)) {
+      void message.warning('私密、18R 或聊天文件不能生成匿名访问链接');
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(resolvePublicFilePreviewURL(file));
+      void message.success('公开访问链接已复制');
+    /** error 保存浏览器剪贴板写入失败时的错误上下文。 */
+    } catch (error) {
+      void message.error(error instanceof Error ? error.message : '复制公开访问链接失败，请检查浏览器剪贴板权限');
+    }
+  };
   /** onPreviewWheel 负责处理对应的界面事件和状态变化。 */
   const onPreviewWheel = (event: WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -463,7 +477,7 @@ export function FilesPage(props: FilesPageProps) {
       <Card data-tilt-disabled="true" className="file-browser-panel" title={<h1 id="files-page-title" className="file-page-heading">文件管理</h1>} extra={<div className="antd-file-tools"><Input value={fileKeyword} allowClear onChange={(event) => onFileKeywordChange(event.target.value)} placeholder="名称、分类、标签或说明" prefix={<FileTextOutlined />} /><Button onClick={() => onFileKeywordChange('')}>重置</Button><Button icon={<ReloadOutlined />} loading={isRefreshingFiles} onClick={() => void refreshFiles()}>刷新</Button>{actions.create && <Button type="primary" icon={<InboxOutlined />} onClick={() => { onResetFileForm(); setIsUploadOpen(true); }}>上传文件</Button>}{(actions.restore || actions.permanentDelete) && <Button icon={<DeleteOutlined />} onClick={() => void openRecycleBin()}>回收站{recycleFiles.length ? ` (${recycleFiles.length})` : ''}</Button>}</div>}>
         <div className="file-type-tabs" role="tablist" aria-label="按文件类型筛选">{FILE_KIND_OPTIONS.map((item) => <button className={activeKind === item.key ? 'active' : ''} type="button" role="tab" aria-selected={activeKind === item.key} key={item.key} onClick={() => changeActiveKind(item.key)}><span aria-hidden="true">{item.icon}</span>{item.label}<strong>{kindCounts[item.key]}</strong></button>)}</div>
         <div className="file-login-background-toolbar"><span>图片可保存为当前浏览器的登录背景，不依赖外部 URL。</span><Button icon={<PictureOutlined />} onClick={resetLoginBackground}>恢复默认背景</Button></div>
-        {kindFilteredFiles.length === 0 ? <Empty description="暂无匹配文件" /> : <><div className="file-card-grid">{visibleFiles.map((file) => <FileCard key={getFileIdentity(file)} file={file} actions={actions} onOpenImage={openImage} onEditFile={openEditDialog} onDownloadFile={onDownloadFile} onDeleteFile={onDeleteFile} onSetLoginBackground={setAsLoginBackground} settingLoginBackgroundKey={settingLoginBackgroundKey} />)}</div>{hasMoreFiles && <div className="file-load-status" role="status" aria-live="polite" aria-busy={isExpandingFiles}><LoadingOutlined spin /><span>{isExpandingFiles ? '正在加载更多文件…' : '滑动到底部将自动加载下一批文件'}</span><small>已显示 {visibleFiles.length} / {kindFilteredFiles.length}</small></div>}</>}
+        {kindFilteredFiles.length === 0 ? <Empty description="暂无匹配文件" /> : <><div className="file-card-grid">{visibleFiles.map((file) => <FileCard key={getFileIdentity(file)} file={file} actions={actions} onOpenImage={openImage} onEditFile={openEditDialog} onDownloadFile={onDownloadFile} onDeleteFile={onDeleteFile} onSetLoginBackground={setAsLoginBackground} onCopyPublicFilePreviewURL={copyPublicFilePreviewURL} settingLoginBackgroundKey={settingLoginBackgroundKey} />)}</div>{hasMoreFiles && <div className="file-load-status" role="status" aria-live="polite" aria-busy={isExpandingFiles}><LoadingOutlined spin /><span>{isExpandingFiles ? '正在加载更多文件…' : '滑动到底部将自动加载下一批文件'}</span><small>已显示 {visibleFiles.length} / {kindFilteredFiles.length}</small></div>}</>}
       </Card>
 
       <Modal open={isUploadOpen} title="上传文件" okText={selectedUploadFiles.length > 1 ? `上传 ${selectedUploadFiles.length} 个文件` : '上传'} cancelText="取消" confirmLoading={isSavingFile} cancelButtonProps={{ disabled: isSavingFile }} closable={!isSavingFile} keyboard={!isSavingFile} mask={{ closable: !isSavingFile }} onOk={() => document.getElementById('file-upload-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))} onCancel={closeUploadDialog} destroyOnHidden>
@@ -516,15 +530,17 @@ type FileCardProps = {
   onDeleteFile: (fileId: number) => void;
   /** onSetLoginBackground 表示登录。 */
   onSetLoginBackground: (file: ManagedFile) => void;
+  /** onCopyPublicFilePreviewURL 复制符合公开边界的匿名访问地址。 */
+  onCopyPublicFilePreviewURL: (file: ManagedFile) => Promise<void>;
   /** settingLoginBackgroundKey 表示登录存储键。 */
   settingLoginBackgroundKey: string | null;
 };
 
 /** FileCard 保存模块使用的固定配置或共享状态。 */
-function FileCard({ file, actions, onOpenImage, onEditFile, onDownloadFile, onDeleteFile, onSetLoginBackground, settingLoginBackgroundKey }: FileCardProps) {
+function FileCard({ file, actions, onOpenImage, onEditFile, onDownloadFile, onDeleteFile, onSetLoginBackground, onCopyPublicFilePreviewURL, settingLoginBackgroundKey }: FileCardProps) {
   /** meta 保存元数据。 */
   const meta = getFileKind(file);
-  /** previewUrl 保存预览地址。 */
+  /** previewUrl 保存当前用户可访问的文件预览地址。 */
   const previewUrl = resolveFilePreviewUrl(file);
   /** thumbnailUrl 让普通文件直接复用后端生成的缩略图，聊天附件保留其专用鉴权预览地址。 */
   const thumbnailUrl = file.source ? previewUrl : `${API_BASE_URL}/api/files/${file.id}/thumbnail`;
@@ -540,13 +556,15 @@ function FileCard({ file, actions, onOpenImage, onEditFile, onDownloadFile, onDe
   const titleId = `file-title-${file.source || 'managed'}-${file.id}`;
   /** imageText 保存图片。 */
   const imageText = getImageAccessibleText(file);
+  /** canCopyPublicURL 表示当前文件是否能提供无需登录的公开访问链接。 */
+  const canCopyPublicURL = canCopyPublicFilePreviewURL(file);
   return <article className={`file-card tone-${meta.tone}`} data-tilt-disabled="true" aria-labelledby={titleId} itemScope={isIndexableImage} itemType={isIndexableImage ? 'https://schema.org/ImageObject' : undefined}>
     {isIndexableImage && <meta itemProp="contentUrl" content={previewUrl} />}
     <figure className="file-preview-frame">
-      {isImage ? <button className="thumbnail-button" type="button" onClick={() => onOpenImage(file)} aria-label={`预览原图：${imageText}`}><img src={thumbnailUrl} alt={imageText} title={file.description || file.displayName} itemProp={isIndexableImage ? 'thumbnailUrl' : undefined} loading="lazy" decoding="async" /><span><EyeOutlined /> 查看原图</span></button> : isPDF ? <a className="file-preview-icon pdf-preview" href={previewUrl} target="_blank" rel="noopener"><FilePdfOutlined /><strong>PDF</strong><small>点击浏览</small></a> : <div className="file-preview-icon">{isImage ? <PictureOutlined /> : <FileImageOutlined />}<span aria-hidden="true">{meta.icon}</span><strong>{meta.label}</strong><small>{getFileExtension(file.originalName).toUpperCase() || meta.description}</small></div>}
+      {isImage ? <button className="thumbnail-button" type="button" onClick={() => onOpenImage(file)} aria-label={`预览原图：${imageText}`}><img src={thumbnailUrl} alt={imageText} title={file.description || file.displayName} itemProp={isIndexableImage ? 'thumbnailUrl' : undefined} loading="lazy" decoding="async" /><span><EyeOutlined /> 查看原图</span></button> : isPDF ? <a className="file-preview-icon pdf-preview" href={previewUrl} target="_blank" rel="noopener"><FilePdfOutlined /><strong>PDF</strong><small>点击浏览</small></a> : <div className="file-preview-icon"><span aria-hidden="true">{meta.icon}</span><strong>{meta.label}</strong><small>{getFileExtension(file.originalName).toUpperCase() || meta.description}</small></div>}
       <figcaption className="file-seo-caption" itemProp={isIndexableImage ? 'caption' : undefined}>{isImage ? imageText : `${file.displayName}，${meta.label} 文件`}</figcaption>
     </figure>
-    <div className="file-card-body"><div className="file-card-title"><strong id={titleId} title={file.displayName} itemProp={isIndexableImage ? 'name' : undefined}>{file.displayName}</strong><div className="file-card-tags"><Tag>{file.category || '未分类'}</Tag>{(file.tags ?? []).map((tag) => <Tag color="cyan" key={tag}>#{tag}</Tag>)}{file.readOnly ? <><Tag color="gold">只读</Tag><Tag color="purple">{file.source === 'internal-chat' ? '内部聊天' : '客服聊天'}</Tag></> : <Tag color={file.isPrivate ? 'warning' : 'blue'}>{file.isPrivate ? '私密' : '公开'}</Tag>}</div></div><p title={file.originalName}>{file.originalName}</p><small itemProp={isIndexableImage ? 'description' : undefined}>{file.description || '暂无说明'}</small><div className="file-meta-row"><span>归属：{file.ownerName || '未知'}</span><span>{formatFileSize(file.size)}</span><time itemProp={isIndexableImage ? 'dateModified' : undefined} dateTime={file.updatedAt}>{new Date(file.updatedAt).toLocaleString()}</time></div></div>
+    <div className="file-card-body"><div className="file-card-title">{canCopyPublicURL ? <button id={titleId} className="file-card-public-link" type="button" title="点击复制无需登录的公开访问链接" aria-label={`复制公开访问链接：${file.displayName}`} itemProp={isIndexableImage ? 'name' : undefined} onClick={() => void onCopyPublicFilePreviewURL(file)}>{file.displayName}</button> : <strong id={titleId} title={file.displayName} itemProp={isIndexableImage ? 'name' : undefined}>{file.displayName}</strong>}<div className="file-card-tags"><Tag>{file.category || '未分类'}</Tag>{(file.tags ?? []).map((tag) => <Tag color="cyan" key={tag}>#{tag}</Tag>)}{file.readOnly ? <><Tag color="gold">只读</Tag><Tag color="purple">{file.source === 'internal-chat' ? '内部聊天' : '客服聊天'}</Tag></> : <Tag color={file.isPrivate ? 'warning' : 'blue'}>{file.isPrivate ? '私密' : '公开'}</Tag>}</div></div><p title={file.originalName}>{file.originalName}</p><small itemProp={isIndexableImage ? 'description' : undefined}>{file.description || '暂无说明'}</small><div className="file-meta-row"><span>归属：{file.ownerName || '未知'}</span><span>{formatFileSize(file.size)}</span><time itemProp={isIndexableImage ? 'dateModified' : undefined} dateTime={file.updatedAt}>{new Date(file.updatedAt).toLocaleString()}</time></div></div>
     <div className="file-card-actions">
       {isImage && <Tooltip title="点击后才加载原始图片"><Button type="link" icon={<EyeOutlined />} onClick={() => onOpenImage(file)}>预览</Button></Tooltip>}
       {isImage && <Button type="link" icon={<PictureOutlined />} loading={isSettingLoginBackground} onClick={() => onSetLoginBackground(file)}>设为登录背景</Button>}
@@ -562,8 +580,46 @@ function getFileKind(file: ManagedFile) { return getFileKindFromName(file.origin
 /** getFileIdentity 获取对应业务记录。 */
 function getFileIdentity(file: ManagedFile) { return `${file.source || 'managed'}:${file.id}`; }
 
-/** resolveFilePreviewUrl 转换并生成对应业务结果。 */
-function resolveFilePreviewUrl(file: ManagedFile) { return `${API_BASE_URL}${file.previewUrl || `/api/files/${file.id}/preview`}`; }
+/** resolveFilePreviewUrl 根据文件公开边界返回匿名预览地址或当前会话的受保护预览地址。 */
+function resolveFilePreviewUrl(file: ManagedFile) {
+  if (canCopyPublicFilePreviewURL(file)) {
+    return resolvePublicFilePreviewURL(file);
+  }
+  return `${API_BASE_URL}${file.previewUrl || `/api/files/${file.id}/preview`}`;
+}
+
+/** canCopyPublicFilePreviewURL 判断受管文件是否满足无需登录访问的公开文件边界。 */
+function canCopyPublicFilePreviewURL(file: ManagedFile) {
+  return !file.source && !file.isPrivate && !file.is18r && !file.deletedAt;
+}
+
+/** resolvePublicFilePreviewURL 生成供外部访客直接观看或下载公开文件的绝对地址。 */
+function resolvePublicFilePreviewURL(file: ManagedFile) {
+  return `${API_BASE_URL.replace(/\/+$/, '')}/api/public/files/${file.id}/preview`;
+}
+
+/** copyTextToClipboard 优先使用现代剪贴板 API，并兼容不支持该 API 的 HTTP 或旧浏览器。 */
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  /** temporaryInput 保存仅用于触发旧版复制命令的临时输入框。 */
+  const temporaryInput = document.createElement('textarea');
+  temporaryInput.value = text;
+  temporaryInput.setAttribute('readonly', '');
+  temporaryInput.style.position = 'fixed';
+  temporaryInput.style.opacity = '0';
+  document.body.appendChild(temporaryInput);
+  temporaryInput.select();
+  /** copied 保存旧浏览器复制命令是否实际写入剪贴板。 */
+  const copied = document.execCommand('copy');
+  temporaryInput.remove();
+  if (!copied) {
+    throw new Error('当前浏览器无法复制链接，请手动复制');
+  }
+}
 
 /** getFileKindFromName 获取对应业务记录。 */
 function getFileKindFromName(filename: string, contentType = ''): FileKindMeta {

@@ -35,8 +35,10 @@ import { fetchServerMetrics } from '@/src/services/serverApi';
 async function parseError(response: Response, fallback: string) {
   try {
     /** payload 保存请求载荷。 */
-    const payload = await response.json();
-    return payload.error ?? fallback;
+    const payload = await response.json() as { error?: unknown };
+    /** errorMessage 保存响应中可展示的错误文案。 */
+    const errorMessage = typeof payload.error === 'string' ? payload.error.trim() : '';
+    return errorMessage || fallback;
   } catch {
     return fallback;
   }
@@ -188,8 +190,15 @@ export function useAdminWorkspace() {
   const [isSavingRole, setIsSavingRole] = useState(false);
   /** isSavingRolePermission、setIsSavingRolePermission 分别保存角色权限状态及其更新函数。 */
   const [isSavingRolePermission, setIsSavingRolePermission] = useState(false);
-  /** error、setError 分别保存错误状态状态及其更新函数。 */
-  const [error, setError] = useState('');
+  /** error、setErrorState 保存当前页面顶部展示的错误文本及其底层状态更新函数。 */
+  const [error, setErrorState] = useState('');
+  /** errorRevision 为每次错误事件递增，确保相同文案也能再次触发全局 message。 */
+  const [errorRevision, setErrorRevision] = useState(0);
+  /** setError 更新错误文本并发布一次可重复消费的错误事件。 */
+  const setError = (message: string) => {
+    setErrorState(message);
+    if (message) setErrorRevision((currentRevision) => currentRevision + 1);
+  };
   /** sidebarCollapsed、setSidebarCollapsed 分别保存侧栏状态及其更新函数。 */
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   /** mobileSidebarOpen、setMobileSidebarOpen 分别保存移动端侧栏状态及其更新函数。 */
@@ -364,6 +373,26 @@ export function useAdminWorkspace() {
     }
   };
 
+  /** refreshAuthSession 重新读取当前会话，避免用户角色或动作权限修改后继续使用旧快照。 */
+  const refreshAuthSession = async () => {
+    /** response 保存会话接口响应及其状态。 */
+    const response = await requestWithSession(`${API_BASE_URL}/api/auth/session`, {
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      if (response.status === 401) setAuthUser(null);
+      throw new Error(await parseError(response, '刷新登录会话失败'));
+    }
+    /** payload 保存刷新后的认证用户数据。 */
+    const payload = await response.json() as { user?: AuthUser };
+    if (!payload.user) {
+      setAuthUser(null);
+      throw new Error('刷新登录会话失败');
+    }
+    setAuthUser(payload.user);
+    return payload.user;
+  };
+
   /** loadServerMetrics 读取并更新后端运行环境资源快照。 */
   const loadServerMetrics = async () => {
     setIsLoadingServerMetrics(true);
@@ -490,7 +519,7 @@ export function useAdminWorkspace() {
 
   useEffect(() => {
     if (error) void globalMessage.error(error);
-  }, [error, globalMessage]);
+  }, [error, errorRevision, globalMessage]);
 
   /** handleLogin 负责处理对应的界面事件和状态变化。 */
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
@@ -584,6 +613,10 @@ export function useAdminWorkspace() {
   /** handleSubmitUser 负责处理对应的界面事件和状态变化。 */
   const handleSubmitUser = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    /** isEditingCurrentUser 表示本次保存是否会改变当前登录会话对应的用户。 */
+    const isEditingCurrentUser = editingUserId !== null && editingUserId === authUser?.id;
+    /** isEditingUser 表示本次操作是否为编辑已有用户。 */
+    const isEditingUser = editingUserId !== null;
     setIsSavingUser(true);
     setError('');
     try {
@@ -600,8 +633,11 @@ export function useAdminWorkspace() {
         throw new Error(await parseError(response, '保存用户失败'));
       }
       resetUserForm();
+      if (isEditingCurrentUser) {
+        await refreshAuthSession();
+      }
       await loadData();
-      void globalMessage.success(editingUserId ? '用户修改完成' : '用户创建完成');
+      void globalMessage.success(isEditingUser ? '用户修改完成' : '用户创建完成');
     /** saveError 保存保存状态错误状态。 */
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : '保存用户失败');
@@ -631,24 +667,29 @@ export function useAdminWorkspace() {
 
   /** handleDeleteUser 负责处理对应的界面事件和状态变化。 */
   const handleDeleteUser = async (userId: number) => {
-    /** response 保存接口响应及其关联状态。 */
-    const response = await requestWithSession(`${API_BASE_URL}/api/users/${userId}`, { method: 'DELETE' });
-    if (!response.ok) {
-      setError(await parseError(response, '删除用户失败'));
-      return;
+    setError('');
+    try {
+      /** response 保存接口响应及其状态。 */
+      const response = await requestWithSession(`${API_BASE_URL}/api/users/${userId}`, { method: 'DELETE' });
+      if (!response.ok) {
+        throw new Error(await parseError(response, '删除用户失败'));
+      }
+      if (selectedUserId === userId) {
+        setSelectedUserId(null);
+        setSelectedMenuIds([]);
+        setDepartmentMenuIds([]);
+        setRoleMenuIds([]);
+        setEffectiveMenuIds([]);
+        setRoleActionCodes([]);
+        setUserActionCodes([]);
+        setEffectiveActionCodes([]);
+      }
+      if (!await loadData()) return;
+      void globalMessage.success('用户删除完成');
+    /** deleteError 保存删除用户或刷新列表时的错误状态。 */
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : '删除用户失败');
     }
-    if (selectedUserId === userId) {
-      setSelectedUserId(null);
-      setSelectedMenuIds([]);
-      setDepartmentMenuIds([]);
-      setRoleMenuIds([]);
-      setEffectiveMenuIds([]);
-      setRoleActionCodes([]);
-      setUserActionCodes([]);
-      setEffectiveActionCodes([]);
-    }
-    await loadData();
-    void globalMessage.success('用户删除完成');
   };
 
   /** handleSelectUser 负责处理对应的界面事件和状态变化。 */
